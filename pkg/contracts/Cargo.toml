@@ -1,0 +1,33 @@
+[package]
+name = "contracts"
+version = "1.1.12"
+edition = "2021"
+
+[dependencies]
+zk-primitives = { workspace = true }
+testutil = { workspace = true }
+
+color-eyre = { workspace = true }
+ethereum-types = { workspace = true }
+eyre = { workspace = true }
+hex = { workspace = true }
+parking_lot = { workspace = true }
+rand = { workspace = true }
+rustc-hex = { workspace = true }
+secp256k1 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha3 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+web3 = { workspace = true }
+clap = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+
+expect-test = { workspace = true }
+secp256k1 = { workspace = true }
+smirk = { workspace = true }
+zk-circuits = { workspace = true }
+serial_test = { workspace = true }

@@ -1,0 +1,12 @@
+[package]
+name = "wire-message-macro"
+version = "1.1.12"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = "1"
+proc-macro2 = "1"
+syn = { version = "2", features = ["full"] }

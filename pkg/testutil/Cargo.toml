@@ -1,0 +1,9 @@
+[package]
+name = "testutil"
+version = "1.1.12"
+edition = "2021"
+
+[dependencies]
+once_cell = { workspace = true }
+reqwest = { workspace = true }
+tokio = { workspace = true }

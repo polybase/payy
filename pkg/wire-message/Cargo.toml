@@ -1,0 +1,16 @@
+[package]
+name = "wire-message"
+version = "1.1.12"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+borsh = { workspace = true }
+wire-message-macro = { path = "../wire-message-macro" }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+static_assertions = { workspace = true }
+
+[features]
+test-api = []

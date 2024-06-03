@@ -1,0 +1,27 @@
+[package]
+name = "zk-primitives"
+version = "1.1.12"
+edition = "2021"
+
+[dependencies]
+bitvec = { workspace = true }
+ethnum = { workspace = true }
+ff = { workspace = true }
+hex = { workspace = true }
+poseidon-circuit = { workspace = true }
+proptest = { workspace = true, optional = true }
+rand = { workspace = true, optional = true }
+serde = { workspace = true, optional = true, features = ["derive"] }
+borsh = { workspace = true, optional = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+test-strategy = { workspace = true }
+serde_json = { workspace = true }
+insta = { workspace = true }
+rand_chacha = { workspace = true }
+rand_xorshift = { workspace = true }
+
+[features]
+default = ["serde", "rand", "borsh"]
+test-api = []

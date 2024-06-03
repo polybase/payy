@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc d992a5917e98f7676fb95bb13dbe65350634057e28f7c372589f297e5b56f77e # shrinks to input = _InsertChangesRootHashArgs { tree: Tree { tree: Empty { depth: 64 }, entries: {}, cache: NoopHashCache }, entries: {0: 0} }

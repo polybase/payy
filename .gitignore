@@ -1,0 +1,12 @@
+target/
+.DS_Store
+/.direnv/
+node_modules
+pkg/zk-circuits/params
+
+pkg/**/params
+dist
+
+*.service-account.json
+
+.env.local

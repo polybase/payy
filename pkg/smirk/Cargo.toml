@@ -1,0 +1,49 @@
+[package]
+name = "smirk"
+version = "1.1.12"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+zk-primitives = { workspace = true }
+
+bitvec = { workspace = true }
+ethnum = { workspace = true }
+ff = { workspace = true }
+halo2_gadgets = { workspace = true }
+halo2_proofs = { workspace = true }
+halo2curves = { workspace = true }
+poseidon-circuit = { workspace = true }
+proptest = { workspace = true, optional = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+rocksdb = { workspace = true, optional = true }
+serde = { workspace = true, optional = true, features = ["derive"] }
+thiserror = { workspace = true }
+borsh = { workspace = true }
+wire-message = { workspace = true }
+strum = { workspace = true }
+rayon = { workspace = true }
+dashmap = { workspace = true }
+tracing = { workspace = true }
+
+
+[dev-dependencies]
+proptest = { workspace = true }
+serde_json = { workspace = true }
+test-strategy = { workspace = true }
+tempdir = { workspace = true }
+benchy = { workspace = true }
+zk-primitives = { workspace = true, features = ["test-api"] }
+
+[features]
+default = ["serde", "storage"]
+
+storage = ["dep:rocksdb"]
+serde = ["dep:serde", "zk-primitives/serde", "zk-primitives/proptest"]
+slow-storage-tests = []
+
+[[bench]]
+name = "storage_load"
+harness = false
