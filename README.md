@@ -34,7 +34,9 @@ Note: these tests can take a while to run on your laptop (e.g. more than 20 minu
 
 ## Audit
 
-The ZK-Circuits and Ethereum Contracts have been audited by KALOS.
+The ZK-Circuits and Ethereum Contracts have been audited by KALOS. All report findings have been fixed and resolved.
+
+[KALOS Audit Report 2024-02-23](audits/kalos_2024_02_23.pdf)
 
 
 ## Git LFS
