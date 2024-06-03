@@ -1,6 +1,14 @@
+<img src="./payy.png" alt="Payy Logo" width="200" height="200">
+
 # Payy - ZK Rollup
 
 An Ethereum L2 ZK rollup for privacy preserving and regulatory compliant transactions. 
+
+Here are some highlights:
+
+ - 🚀 Fast - runs in under 3 seconds on an iPhone
+ - 🪄 Tiny - UTXO proofs are under 2.8KB
+ - ✅ EVM - proofs are compatible with Ethereum 
 
 For a detailed description of our architecture, please [download our whitepaper](https://polybase.github.io/zk-rollup/whitepaper.pdf) or visit our [docs](https://payy.network/docs).
 
@@ -11,7 +19,7 @@ For a detailed description of our architecture, please [download our whitepaper]
 | Contracts          | [pkg/prover](/pkg/prover)               | Rust interface to Ethereum smart contracts                      |
 | RPC                | [pkg/rpc](/pkg/rpc-server)              | RPC common utilities shared across all RPC services             |
 | Smirk              | [pkg/smirk](/pkg/smirk)                 | Sparse merkle tree                                              |
-| ZK-Circuits        | [pkg/zk-circuits](/pkg/zk-circuits)     | ZK circuits for proving UTXO, merkle and state transitions      |
+| ZK-Circuits        | [pkg/zk-circuits](/pkg/zk-circuits)     | Halo2 + KZG ZK circuits for proving UTXO, merkle and state transitions      |
 | ZK-Primitives      | [pkg/zk-primitives](/pkg/zk-primitives) | ZK primitives used across multiple modules                      |
 
 
@@ -26,7 +34,7 @@ Note: these tests can take a while to run on your laptop (e.g. more than 20 minu
 
 ## Audit
 
-The ZK-Circuits and Ethereum Contracts have been audited by KALOS, based on commit.
+The ZK-Circuits and Ethereum Contracts have been audited by KALOS.
 
 
 ## Git LFS
