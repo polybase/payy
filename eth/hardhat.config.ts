@@ -4,7 +4,7 @@ import '@nomicfoundation/hardhat-ethers'
 
 const config: HardhatUserConfig = {
   solidity: {
-    version: '0.8.20',
+    version: '0.8.27',
     settings: {
       viaIR: true,
       optimizer: {
