@@ -47,12 +47,12 @@ testutil = { path = "./pkg/testutil" }
 actix-cors = "0.6.4"
 actix-server = "2.3.0"
 actix-web = "4.4.0"
-acvm = { git = "https://github.com/noir-lang/noir", tag = "v1.0.0-beta.7" }
-noirc_abi = { git = "https://github.com/noir-lang/noir", tag = "v1.0.0-beta.7" }
-noirc_driver = { git = "https://github.com/noir-lang/noir", tag = "v1.0.0-beta.7" }
-noirc_artifacts = { git = "https://github.com/noir-lang/noir", tag = "v1.0.0-beta.7" }
-bn254_blackbox_solver = { git = "https://github.com/noir-lang/noir", tag = "v1.0.0-beta.7" }
-nargo = { git = "https://github.com/noir-lang/noir", tag = "v1.0.0-beta.7" }
+acvm = { git = "https://github.com/noir-lang/noir", tag = "v1.0.0-beta.2" }
+noirc_abi = { git = "https://github.com/noir-lang/noir", tag = "v1.0.0-beta.2" }
+noirc_driver = { git = "https://github.com/noir-lang/noir", tag = "v1.0.0-beta.2" }
+noirc_artifacts = { git = "https://github.com/noir-lang/noir", tag = "v1.0.0-beta.2" }
+bn254_blackbox_solver = { git = "https://github.com/noir-lang/noir", tag = "v1.0.0-beta.2" }
+nargo = { git = "https://github.com/noir-lang/noir", tag = "v1.0.0-beta.2" }
 actix-multipart = "0.5.0"
 aes-gcm = "0.10.3"
 async-stripe = { version = "0.31", features = ["runtime-tokio-hyper"] }
@@ -156,7 +156,7 @@ tracing-stackdriver = { version = "0.7.2", features = ["valuable"] }
 static_assertions = "1"
 tabular = "0.2.0"
 tempdir = "0.3"
-tempfile = "3.20.0"
+tempfile = "3.16.0"
 test-strategy = "0.3.1"
 thiserror = "1"
 tiny-keccak = { version = "2.0.2", features = ["keccak"] }

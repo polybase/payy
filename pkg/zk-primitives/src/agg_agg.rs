@@ -136,6 +136,17 @@ impl ToBytes for AggAggProof {
             .flat_map(|e| e.to_be_bytes())
             .collect::<Vec<u8>>();
         let proof = &self.proof.0;
-        [pi.as_slice(), kzg.as_slice(), proof.as_slice()].concat()
+        let total_len = pi.len() + kzg.len() + proof.len();
+        let total_len_fields = total_len / 32;
+        [
+            u32::try_from(total_len_fields)
+                .unwrap()
+                .to_be_bytes()
+                .as_slice(),
+            pi.as_slice(),
+            kzg.as_slice(),
+            proof.as_slice(),
+        ]
+        .concat()
     }
 }

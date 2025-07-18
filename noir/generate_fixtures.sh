@@ -92,7 +92,7 @@ for NAME in "${PROGRAMS[@]}"; do
   else
     SOLC=$REPO_ROOT/fixtures/binaries/solc-v0.8.29-linux
   fi
-  $SOLC --combined-json bin --optimize --optimize-runs 1 $REPO_ROOT/eth/noir/$NAME.sol | jq -r ".contracts[\"$REPO_ROOT/eth/noir/$NAME.sol:HonkVerifier\"].bin" > $REPO_ROOT/eth/contracts/noir/${NAME}_HonkVerifier.bin
+  $SOLC --combined-json bin --optimize --optimize-runs 4294967295 $REPO_ROOT/eth/noir/$NAME.sol | jq -r ".contracts[\"$REPO_ROOT/eth/noir/$NAME.sol:HonkVerifier\"].bin" > $REPO_ROOT/eth/contracts/noir/${NAME}_HonkVerifier.bin
 done
 
 echo "Successfully copied compiled programs to fixtures/keys/programs"

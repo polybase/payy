@@ -2,7 +2,7 @@ use dep::std;
 use std::hash::poseidon2;
 
 struct AggUtxoProofInput {
-    proof: [Field; 507],
+    proof: [Field; 456],
     input_merkle_paths: [[Field; 160]; 2],
     output_merkle_paths: [[Field; 160]; 2],
     input_commitments: [Field; 2],
@@ -10,7 +10,7 @@ struct AggUtxoProofInput {
 }
 
 fn main(
-    verification_key: [Field; 112],
+    verification_key: [Field; 128],
     verification_key_hash: Field,
     proofs: [AggUtxoProofInput; 3],
     messages: pub [Field; 18],
@@ -19,7 +19,7 @@ fn main(
     commit_hash: pub Field
 ) {
     // Hardcode verification_key_hash for utxo proof
-    assert(verification_key_hash == 4180082733336422412042586419047349326944586166886980312516770758826360875574, "only utxo proof allowed");
+    assert(verification_key_hash == 6266514486265361775229966232065171160965103375136380958210310093105182950319, "only utxo proof allowed");
 
     let mut root = old_root;
     let mut utxo_hashes: [Field; 3] = [0,0,0];
@@ -52,7 +52,7 @@ fn main(
                 proof.proof,
                 public_inputs,
                 verification_key_hash,
-                7,
+                1,
             );
 
             // Input commitments
@@ -127,26 +127,26 @@ fn empty_tree() {
 
 #[test(should_fail_with = "only utxo proof allowed")]
 fn test_invalid_verification_key_hash() {
-    let verification_key = [0; 112];
+    let verification_key = [0; 128];
     let invalid_hash = 1234567890; // Wrong hash
 
     let proofs = [
         AggUtxoProofInput {
-            proof: [0; 507],
+            proof: [0; 456],
             input_merkle_paths: [[0; 160]; 2],
             output_merkle_paths: [[0; 160]; 2],
             input_commitments: [0; 2],
             output_commitments: [0; 2],
         },
         AggUtxoProofInput {
-            proof: [0; 507],
+            proof: [0; 456],
             input_merkle_paths: [[0; 160]; 2],
             output_merkle_paths: [[0; 160]; 2],
             input_commitments: [0; 2],
             output_commitments: [0; 2],
         },
         AggUtxoProofInput {
-            proof: [0; 507],
+            proof: [0; 456],
             input_merkle_paths: [[0; 160]; 2],
             output_merkle_paths: [[0; 160]; 2],
             input_commitments: [0; 2],

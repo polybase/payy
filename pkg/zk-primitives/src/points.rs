@@ -103,6 +103,16 @@ impl ToBytes for PointsProof {
         // TODO: move to impl detail of proving backend
         let pi = self.public_inputs.to_bytes();
         let proof = self.proof.0.clone();
-        [pi.as_slice(), proof.as_slice()].concat()
+        let total_len = pi.len() + proof.len();
+        let total_len_fields = total_len / 32;
+        [
+            u32::try_from(total_len_fields)
+                .unwrap()
+                .to_be_bytes()
+                .as_slice(),
+            pi.as_slice(),
+            proof.as_slice(),
+        ]
+        .concat()
     }
 }

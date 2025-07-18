@@ -3,6 +3,7 @@ use acvm::FieldElement;
 use bn254_blackbox_solver::Bn254BlackBoxSolver;
 use nargo::errors::try_to_diagnose_runtime_error;
 use nargo::foreign_calls::DefaultForeignCallBuilder;
+use nargo::PrintOutput;
 use noirc_abi::input_parser::InputValue;
 use noirc_abi::InputMap;
 use noirc_artifacts::debug::DebugArtifact;
@@ -47,7 +48,7 @@ pub fn execute_program(
         initial_witness,
         &Bn254BlackBoxSolver(pedantic_solving),
         &mut DefaultForeignCallBuilder {
-            output: std::io::stdout(),
+            output: PrintOutput::Stdout,
             enable_mocks: false,
             // resolver_url: foreign_call_resolver_url.map(|s| s.to_string()),
             // root_path,

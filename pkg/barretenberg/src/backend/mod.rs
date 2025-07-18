@@ -8,7 +8,6 @@ pub trait Backend {
     fn prove(
         program: &[u8],
         bytecode: &[u8],
-        key: &[u8],
         witness: &[u8],
         recursive: bool,
         oracle_hash_keccak: bool,

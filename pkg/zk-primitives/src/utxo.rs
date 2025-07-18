@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 /// Number of public input fields for utxo proof
 pub const UTXO_PUBLIC_INPUTS_COUNT: usize = 10;
 /// Number of fields in the proof
-pub const UTXO_PROOF_SIZE: usize = 507;
+pub const UTXO_PROOF_SIZE: usize = 456;
 
 /// Utxo is the data required to prove a utxo transaction
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -457,7 +457,17 @@ impl ToBytes for UtxoProof {
         // TODO: move to impl detail of proving backend
         let pi = self.public_inputs.to_bytes();
         let proof = self.proof.0.clone();
-        [pi.as_slice(), proof.as_slice()].concat()
+        let total_len = pi.len() + proof.len();
+        let total_len_fields = total_len / 32;
+        [
+            u32::try_from(total_len_fields)
+                .unwrap()
+                .to_be_bytes()
+                .as_slice(),
+            pi.as_slice(),
+            proof.as_slice(),
+        ]
+        .concat()
     }
 }
 

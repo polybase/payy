@@ -6,7 +6,6 @@ pub fn prove<B: Backend>(
     compiled_program: &CompiledProgram,
     program: &[u8],
     bytecode: &[u8],
-    key: &[u8],
     inputs_map: &InputMap,
     recursive: bool,
     oracle_hash_keccak: bool,
@@ -15,14 +14,7 @@ pub fn prove<B: Backend>(
 
     let witness = bincode::serialize(&results.witness_stack)?;
 
-    B::prove(
-        program,
-        bytecode,
-        key,
-        &witness,
-        recursive,
-        oracle_hash_keccak,
-    )
+    B::prove(program, bytecode, &witness, recursive, oracle_hash_keccak)
     // Ok(proof)
 }
 

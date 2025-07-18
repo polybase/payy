@@ -53,7 +53,6 @@ impl Prove for AggUtxo {
             &PROGRAM_COMPILED,
             PROGRAM.as_bytes(),
             &BYTECODE,
-            KEY,
             &inputs,
             true,
             false,
@@ -73,7 +72,7 @@ impl Prove for AggUtxo {
 
         assert_eq!(
             raw_proof.len(),
-            507 * 32,
+            456 * 32,
             "Proof must be 93 elements of 32 bytes"
         );
 
@@ -188,7 +187,7 @@ impl From<AggUtxoInput> for InputMap {
 
 #[derive(Debug, Clone)]
 pub struct AggUtxoProofInput {
-    pub proof: [Base; 507],
+    pub proof: [Base; 456],
     pub input_merkle_paths: [[Base; 160]; 2],
     pub output_merkle_paths: [[Base; 160]; 2],
     pub input_commitments: [Base; 2],

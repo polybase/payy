@@ -30,7 +30,7 @@ lazy_static! {
 }
 
 const POINTS_PUBLIC_INPUTS_COUNT: usize = 13;
-const POINTS_PROOF_SIZE: usize = 507;
+const POINTS_PROOF_SIZE: usize = 440;
 
 impl Prove for Points {
     type Proof = PointsProof;
@@ -43,7 +43,6 @@ impl Prove for Points {
             &PROGRAM_COMPILED,
             PROGRAM.as_bytes(),
             &BYTECODE,
-            KEY,
             &inputs,
             false,
             false,

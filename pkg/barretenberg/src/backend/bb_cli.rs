@@ -16,7 +16,6 @@ impl Backend for CliBackend {
     fn prove(
         program: &[u8],
         _bytecode: &[u8],
-        key: &[u8],
         witness: &[u8],
         recursive: bool,
         oracle_hash_keccak: bool,
@@ -34,10 +33,6 @@ impl Backend for CliBackend {
         witness_file.write_all(&witness_gz)?;
         witness_file.flush()?;
 
-        let mut key_file = NamedTempFile::new()?;
-        key_file.write_all(key)?;
-        key_file.flush()?;
-
         let output_dir = TempDir::new()?;
 
         let mut cmd = Command::new(PathBuf::from("bb"));
@@ -49,8 +44,6 @@ impl Backend for CliBackend {
             .arg(program_file.path())
             .arg("-w")
             .arg(witness_file.path())
-            .arg("-k")
-            .arg(key_file.path())
             .arg("-o")
             .arg(output_dir.path());
 
@@ -64,8 +57,6 @@ impl Backend for CliBackend {
             cmd.arg("--oracle_hash").arg("keccak");
         }
 
-        println!("Running command: {:?}", cmd);
-
         let output = cmd.output()?;
         if !output.status.success() {
             let stderr = String::from_utf8(output.stderr)?;
@@ -75,10 +66,8 @@ impl Backend for CliBackend {
         let proof_path = output_dir.path().join("proof");
         let mut proof = std::fs::read(&proof_path)?;
 
-        let public_inputs_path = output_dir.path().join("public_inputs");
-        let public_inputs = std::fs::read(&public_inputs_path)?;
-
-        proof.splice(0..0, public_inputs);
+        // Remove first 4 bytes
+        proof.drain(..4);
 
         Ok(proof)
     }
@@ -88,16 +77,9 @@ impl Backend for CliBackend {
         key_file.write_all(key)?;
         key_file.flush()?;
 
-        let public_inputs_len = proof.len() - 507 * 32;
         let mut proof_file = NamedTempFile::new()?;
-        proof_file.write_all(&proof[public_inputs_len..])?;
+        proof_file.write_all(proof)?;
         proof_file.flush()?;
-
-        let mut public_inputs_file = NamedTempFile::new()?;
-        public_inputs_file.write_all(&proof[..public_inputs_len])?;
-        public_inputs_file.flush()?;
-
-        println!("public_inputs_len {:?}", public_inputs_len / 32);
 
         let mut cmd = Command::new(PathBuf::from("bb"));
         cmd.arg("verify")
@@ -107,15 +89,11 @@ impl Backend for CliBackend {
             .arg("-k")
             .arg(key_file.path())
             .arg("-p")
-            .arg(proof_file.path())
-            .arg("-i")
-            .arg(public_inputs_file.path());
+            .arg(proof_file.path());
 
         if oracle_hash_keccak {
             cmd.arg("--oracle_hash").arg("keccak");
         }
-
-        println!("Running command: {:?}", cmd);
 
         let output = cmd.output()?;
         info!("output {:?}", output);
@@ -124,7 +102,6 @@ impl Backend for CliBackend {
             // TODO: return false instead? maybe pass -v and parse out verified: {0/1}
             let stderr = String::from_utf8(output.stderr)?;
             error!("proof error: {}", stderr);
-
             return Err(stderr.into());
         }
 

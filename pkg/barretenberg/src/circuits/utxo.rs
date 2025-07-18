@@ -28,10 +28,8 @@ lazy_static! {
     static ref PROGRAM_COMPILED: CompiledProgram = CompiledProgram::from(PROGRAM_ARTIFACT.clone());
     static ref PROGRAM_PATH: PathBuf = write_to_temp_file(PROGRAM.as_bytes(), ".json");
     static ref BYTECODE: Vec<u8> = get_bytecode_from_program(PROGRAM);
-    pub static ref UTXO_VERIFICATION_KEY: VerificationKey = {
-        let mut fields = serde_json::from_slice::<Vec<Base>>(KEY_FIELDS).unwrap();
-        VerificationKey(fields)
-    };
+    pub static ref UTXO_VERIFICATION_KEY: VerificationKey =
+        VerificationKey(serde_json::from_slice(KEY_FIELDS).unwrap());
     pub static ref UTXO_VERIFICATION_KEY_HASH: VerificationKeyHash = VerificationKeyHash(
         bn254_blackbox_solver::poseidon_hash(&UTXO_VERIFICATION_KEY.0, false).unwrap()
     );
@@ -53,7 +51,6 @@ impl Prove for Utxo {
             &PROGRAM_COMPILED,
             PROGRAM.as_bytes(),
             &BYTECODE,
-            KEY,
             &inputs,
             true,
             false,

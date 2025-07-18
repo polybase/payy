@@ -57,7 +57,6 @@ impl Prove for AggAgg {
             &PROGRAM_COMPILED,
             PROGRAM.as_bytes(),
             &BYTECODE,
-            KEY,
             &inputs,
             false,
             true,
