@@ -14,7 +14,7 @@ fn main(
         verification_key,
         proof,
         public_inputs,
-        0x100,
+        0x101,
         7,
     );
 }

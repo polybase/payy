@@ -1,9 +1,11 @@
 set -e
 
 rm -rf target
+rm -rf ./utxo/target
+rm -rf ./agg_test/target
+
 nargo compile
 bb write_vk --oracle_hash keccak -b ./target/utxo.json -o ./utxo/target
-
 bb write_vk --oracle_hash keccak -b ./target/agg_test.json -o ./agg_test/target
 
 echo "Generating utxo proof"
@@ -30,6 +32,5 @@ nargo execute --package agg_test
 bb write_vk -b ./target/agg_test.json -o ./target --output_format bytes_and_fields
 bb prove -b ./target/agg_test.json -w ./target/agg_test.gz -k ./target/vk  --output_format bytes_and_fields  -o ./target
 bb verify -k ./target/vk -p ./target/proof -i ./target/public_inputs
-cd ..
 
 echo "Done"
