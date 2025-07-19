@@ -13,6 +13,7 @@ use lazy_static::lazy_static;
 use noirc_abi::{input_parser::InputValue, InputMap};
 use noirc_artifacts::program::ProgramArtifact;
 use noirc_driver::CompiledProgram;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use zk_primitives::{
     bytes_to_elements, ToBytes, Utxo, UtxoProof, UtxoProofBytes, UtxoPublicInput, UTXO_PROOF_SIZE,
@@ -42,7 +43,12 @@ impl Prove for Utxo {
     type Result<Proof> = Result<Proof>;
 
     fn prove(&self) -> Self::Result<Self::Proof> {
-        let inputs = InputMap::from(UtxoInput::from(self));
+        let utxo_input = UtxoInput::from(self);
+        // println!(
+        //     "inputs {}",
+        //     serde_json::to_string_pretty(&utxo_input).unwrap()
+        // );
+        let inputs = InputMap::from(utxo_input);
 
         // println!(
         //     "UTXO_VERIFICATION_KEY_HASH: {}",
@@ -98,7 +104,7 @@ impl Verify for UtxoProof {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct UtxoInput {
     input_notes: [BInputNote; 2],
     output_notes: [BNote; 2],

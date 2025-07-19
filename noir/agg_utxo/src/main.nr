@@ -51,7 +51,7 @@ fn main(
                 verification_key,
                 proof.proof,
                 public_inputs,
-                verification_key_hash,
+                0x0,
                 7,
             );
 

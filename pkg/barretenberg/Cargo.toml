@@ -26,6 +26,7 @@ base64 = { workspace = true }
 flate2 = { workspace = true }
 bb_rs = { workspace = true, optional = true }
 tracing = { workspace = true }
+toml = "0.9.2"
 
 [dev-dependencies]
 smirk = { workspace = true }

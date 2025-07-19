@@ -1,9 +1,10 @@
 use element::Base;
 use noirc_abi::input_parser::InputValue;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use zk_primitives::{InputNote, Note};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BInputNote {
     pub note: BNote,
     pub secret_key: Base,
@@ -26,7 +27,7 @@ impl From<BInputNote> for InputValue {
         ]))
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BNote {
     pub kind: Base,
     pub value: Base,

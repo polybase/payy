@@ -40,6 +40,10 @@ impl Backend for CliBackend {
 
         let output_dir = TempDir::new()?;
 
+        // Write files to current directory for debugging
+        std::fs::write("program.json", program)?;
+        std::fs::write("witness.gz", &witness_gz)?;
+
         let mut cmd = Command::new(PathBuf::from("bb"));
         cmd.arg("prove")
             .arg("-v")
