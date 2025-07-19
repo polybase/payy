@@ -1,5 +1,5 @@
 use common::{check_commitment, check_input_note_ownership, get_address, InputNote, Note};
-use std::hash::poseidon2;
+use poseidon::poseidon2;
 
 fn main(
     notes: [Note; 10],

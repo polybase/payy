@@ -1,5 +1,5 @@
 use common::get_address;
-use std::hash::poseidon2;
+use poseidon::poseidon2;
 
 fn main(owner_pk: Field, message_hash: Field, address: pub Field, message: pub Field) {
     let owner_address = get_address(owner_pk);

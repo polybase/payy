@@ -1,2 +1,2 @@
 [workspace]
-members = ["utxo", "agg_utxo", "agg_agg", "signature", "points"]
+members = ["utxo", "agg_utxo", "agg_agg", "signature", "points", "agg_test"]
