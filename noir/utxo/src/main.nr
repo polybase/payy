@@ -1,7 +1,7 @@
 use common::{
     check_commitment, check_input_note_ownership, get_address, get_note_commitment, InputNote, Note,
 };
-use std::hash::poseidon2;
+use poseidon::poseidon2;
 
 mod test;
 

@@ -1,5 +1,5 @@
 use dep::std;
-use std::hash::poseidon2;
+use poseidon::poseidon2;
 
 struct UtxoAggProof {
     proof: [Field; 456],

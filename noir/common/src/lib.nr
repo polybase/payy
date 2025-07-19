@@ -1,4 +1,4 @@
-use std::hash::poseidon2;
+use poseidon::poseidon2;
 
 pub struct Note {
     pub kind: Field,
