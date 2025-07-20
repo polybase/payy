@@ -43,6 +43,7 @@ impl Backend for CliBackend {
         // Write files to current directory for debugging
         std::fs::write("program.json", program)?;
         std::fs::write("witness.gz", &witness_gz)?;
+        std::fs::write("key", key)?;
 
         let mut cmd = Command::new(PathBuf::from("bb"));
         cmd.arg("prove")
@@ -79,8 +80,12 @@ impl Backend for CliBackend {
         let proof_path = output_dir.path().join("proof");
         let mut proof = std::fs::read(&proof_path)?;
 
+        std::fs::write("proof", &proof)?;
+
         let public_inputs_path = output_dir.path().join("public_inputs");
         let public_inputs = std::fs::read(&public_inputs_path)?;
+
+        std::fs::write("public_inputs", &proof)?;
 
         proof.splice(0..0, public_inputs);
 

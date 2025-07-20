@@ -1,4 +1,5 @@
 mod agg_agg;
+mod agg_test;
 mod agg_utxo;
 mod note;
 mod points;

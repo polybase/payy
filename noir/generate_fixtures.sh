@@ -33,7 +33,7 @@ for file in $REPO_ROOT/fixtures/programs/*.json; do
 done
 
 # Define which programs should use the recursive flag
-RECURSIVE_PROGRAMS=("agg_utxo" "utxo")
+RECURSIVE_PROGRAMS=("agg_utxo" "agg_test" "utxo")
 
 # Function to check if a program should use recursive flag
 is_recursive() {

@@ -34,12 +34,13 @@ fn main(
         utxo_hashes[i] = poseidon2::Poseidon2::hash([input_commitments[0], input_commitments[1], output_commitments[0], output_commitments[1]], 4);
 
         // Verify non-padding proofs
-        if (kind != 0) {
+        if (kind != 0) { // this DOES NOT work
+        // if (i == 0) { // this DOES work (but not the logic we need)
             let public_inputs = [
                 input_commitments[0],
                 input_commitments[1],
-                proof.output_commitments[0],
-                proof.output_commitments[1],
+                output_commitments[0],
+                output_commitments[1],
                 messages[j],
                 messages[j + 1],
                 messages[j + 2],

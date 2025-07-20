@@ -6,7 +6,7 @@ use zk_primitives::{
     UtxoKind, UtxoProof, UtxoProofBundleWithMerkleProofs,
 };
 
-use crate::{Prove, Result, Verify};
+use crate::{circuits::agg_test::AggTestInput, Prove, Result, Verify};
 
 use super::AGG_UTXO_VERIFICATION_KEY_HASH;
 
@@ -96,6 +96,54 @@ fn test_utxo() {
     };
 
     prove_and_verify(&utxo).unwrap();
+}
+
+#[test]
+fn test_agg_test() {
+    let (secret_key, address) = get_keypair(101);
+
+    let input_note1 = InputNote {
+        note: send_note(50, address, 1),
+        secret_key,
+    };
+
+    let input_note2 = InputNote {
+        note: send_note(30, address, 2),
+        secret_key,
+    };
+
+    let output_note1 = send_note(40, address, 3);
+    let output_note2 = send_note(40, address, 4);
+
+    let utxo = Utxo {
+        input_notes: [input_note1, input_note2],
+        output_notes: [output_note1, output_note2],
+        kind: UtxoKind::Send,
+        burn_address: None,
+    };
+
+    let utxo_proof = utxo.prove().unwrap();
+
+    let agg_input = AggTestInput {
+        proof: utxo_proof
+            .proof
+            .to_fields()
+            .iter()
+            .map(|e| e.to_base())
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap(),
+        public_inputs: utxo_proof
+            .public_inputs
+            .fields()
+            .iter()
+            .map(|e| e.to_base())
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap(),
+    };
+
+    prove_and_verify(&agg_input).unwrap();
 }
 
 fn process_utxo_for_agg(

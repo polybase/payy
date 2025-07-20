@@ -43,17 +43,16 @@ impl Prove for Utxo {
     type Result<Proof> = Result<Proof>;
 
     fn prove(&self) -> Self::Result<Self::Proof> {
-        let utxo_input = UtxoInput::from(self);
-        // println!(
-        //     "inputs {}",
-        //     serde_json::to_string_pretty(&utxo_input).unwrap()
-        // );
-        let inputs = InputMap::from(utxo_input);
+        println!("=====================");
+        println!("Proving UTXO...");
+        println!("=====================");
 
-        // println!(
-        //     "UTXO_VERIFICATION_KEY_HASH: {}",
-        //     element::Element::from_base(UTXO_VERIFICATION_KEY_HASH.0).to_u256()
-        // );
+        let utxo_input = UtxoInput::from(self);
+        println!(
+            "inputs {}",
+            serde_json::to_string_pretty(&utxo_input).unwrap()
+        );
+        let inputs = InputMap::from(utxo_input);
 
         let proof_bytes = prove::<DefaultBackend>(
             &PROGRAM_COMPILED,
@@ -68,6 +67,7 @@ impl Prove for Utxo {
         // Slice the first 6, 32 byte chunks as the public inputs
         let public_inputs = proof_bytes[..UTXO_PUBLIC_INPUTS_COUNT * 32].to_vec();
         let public_inputs = bytes_to_elements(&public_inputs);
+
         let raw_proof = proof_bytes[UTXO_PUBLIC_INPUTS_COUNT * 32..].to_vec();
 
         assert_eq!(

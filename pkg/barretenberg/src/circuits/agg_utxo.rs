@@ -42,7 +42,18 @@ impl Prove for AggUtxo {
     type Result<Proof> = Result<Proof>;
 
     fn prove(&self) -> Self::Result<Self::Proof> {
-        let inputs = InputMap::from(AggUtxoInput::from(self));
+        println!("=====================");
+        println!("Proving AGG_UTXO...");
+        println!("=====================");
+
+        let agg_input = AggUtxoInput::from(self);
+        println!(
+            "public inputs: {:?}",
+            &self.proofs[0].utxo_proof.public_inputs
+        );
+        let inputs = InputMap::from(agg_input);
+
+        println!("inputs: {:?}", inputs);
 
         // println!(
         //     "AGG_UTXO_VERIFICATION_KEY_HASH: {}",

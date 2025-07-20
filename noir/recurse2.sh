@@ -12,8 +12,8 @@ echo "Generating utxo proof"
 
 nargo execute --package utxo
 bb write_vk -b ./target/utxo.json -o ./utxo/target --output_format bytes_and_fields
-bb prove -b ./target/utxo.json -w ./target/utxo.gz -k ./utxo/target/vk  --output_format bytes_and_fields  -o ./utxo/target
-bb verify -k ./utxo/target/vk -p ./utxo/target/proof -i ./utxo/target/public_inputs
+bb prove --scheme ultra_honk  -b ./target/utxo.json -w ./target/utxo.gz -k ./utxo/target/vk  --output_format bytes_and_fields  -o ./utxo/target
+bb verify --scheme ultra_honk  -k ./utxo/target/vk -p ./utxo/target/proof -i ./utxo/target/public_inputs
 
 
 # Populate agg_test/Prover.toml with proof vk and public inputs
@@ -29,8 +29,8 @@ echo "$TOML_CONTENT" > ./agg_test/Prover.toml
 
 
 nargo execute --package agg_test
-bb write_vk -b ./target/agg_test.json -o ./target --output_format bytes_and_fields
-bb prove -b ./target/agg_test.json -w ./target/agg_test.gz -k ./target/vk  --output_format bytes_and_fields  -o ./target
-bb verify -k ./target/vk -p ./target/proof -i ./target/public_inputs
+bb write_vk -b ./target/agg_test.json -o ./agg_test/target --output_format bytes_and_fields
+bb prove --scheme ultra_honk  -b ./target/agg_test.json -w ./target/agg_test.gz -k ./agg_test/target/vk  --output_format bytes_and_fields  -o ./agg_test/target
+bb verify --scheme ultra_honk  -k ./agg_test/target/vk -p ./agg_test/target/proof -i ./agg_test/target/public_inputs
 
 echo "Done"
