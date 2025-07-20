@@ -47,13 +47,14 @@ impl Prove for AggUtxo {
         println!("=====================");
 
         let agg_input = AggUtxoInput::from(self);
-        println!(
-            "public inputs: {:?}",
-            &self.proofs[0].utxo_proof.public_inputs
-        );
+        // println!(
+        //     "public inputs: {:?}",
+        //     &self.proofs[0].utxo_proof.public_inputs
+        // );
+
         let inputs = InputMap::from(agg_input);
 
-        println!("inputs: {:?}", inputs);
+        // println!("inputs: {:?}", inputs);
 
         // println!(
         //     "AGG_UTXO_VERIFICATION_KEY_HASH: {}",

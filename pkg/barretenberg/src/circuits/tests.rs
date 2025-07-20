@@ -225,6 +225,32 @@ fn test_agg_utxo() {
 
     let (utxo1_proof, p1, p2, p3, p4, utxo1_new_root) =
         process_utxo_for_agg(&mut tree, &utxo1).unwrap();
+
+    println!("input_1 {}", utxo1_input_note1.note.commitment().to_hex());
+    println!("input_2 {}", utxo1_input_note2.note.commitment().to_hex());
+    println!("output_1 {}", utxo1_output_note1.commitment().to_hex());
+    println!("output_2 {}", utxo1_output_note2.commitment().to_hex());
+
+    // println!("utxo1_proof: {:?}", utxo1_proof);
+    println!("p1");
+    p1.siblings
+        .iter()
+        .for_each(|e| println!("0x{},", e.to_hex()));
+    println!("p2");
+    p2.siblings
+        .iter()
+        .for_each(|e| println!("0x{},", e.to_hex()));
+    println!("p3");
+    p3.siblings
+        .iter()
+        .for_each(|e| println!("0x{},", e.to_hex()));
+    println!("p4");
+    p4.siblings
+        .iter()
+        .for_each(|e| println!("0x{},", e.to_hex()));
+    println!("utxo1_new_root: {:?}", utxo1_new_root);
+    println!("utxo1_old_root: {:?}", utxo1_old_root);
+
     verify_proof(&utxo1_proof);
 
     let agg_utxo1 = AggUtxo::new(

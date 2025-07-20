@@ -1,6 +1,9 @@
 use dep::std;
 use poseidon::poseidon2;
 
+mod test;
+pub mod test_fixtures;
+
 struct AggUtxoProofInput {
     proof: [Field; 507],
     input_merkle_paths: [[Field; 160]; 2],
@@ -33,6 +36,8 @@ fn main(
 
         utxo_hashes[i] = poseidon2::Poseidon2::hash([input_commitments[0], input_commitments[1], output_commitments[0], output_commitments[1]], 4);
 
+        println(kind);
+
         // Verify non-padding proofs
         if (kind != 0) { // this DOES NOT work
         // if (i == 0) { // this DOES work (but not the logic we need)
@@ -57,12 +62,12 @@ fn main(
             );
 
             // Input commitments
-            for j in 0..2 {
-                let commitment = input_commitments[j];
+            for k in 0..2 {
+                let commitment = input_commitments[k];
 
                 if commitment != 0 {
                     let bits: [u1; 254] = commitment.to_le_bits();
-                    let merkle_path = proof.input_merkle_paths[j];
+                    let merkle_path = proof.input_merkle_paths[k];
 
                     // Check it exists in the old tree
                     validate_inclusion(commitment, bits, merkle_path, root);
@@ -73,12 +78,12 @@ fn main(
             }
 
             // Output commitments
-            for j in 0..2 {
-                let commitment = output_commitments[j];
+            for k in 0..2 {
+                let commitment = output_commitments[k];
 
                 if commitment != 0 {
                     let bits: [u1; 254] = commitment.to_le_bits();
-                    let merkle_path = proof.output_merkle_paths[j];
+                    let merkle_path = proof.output_merkle_paths[k];
 
                     // Calculate new root with added output commitments
                     root = get_merkle_root(commitment, bits, merkle_path);
@@ -112,78 +117,4 @@ fn get_merkle_root(leaf: Field, bits: [u1; 254], merkle_path: [Field; 160]) -> F
         }
     }
     hash
-}
-
-#[test]
-fn empty_tree() {
-    let mut hash = 0;
-    for _ in 0..160 {
-        hash = poseidon2::Poseidon2::hash([hash, hash], 2);
-    }
-    println("empty root hash:");
-    println(hash);
-    assert(hash == 2473073130432999597457871252851154814051443713747864452328961082127445883391);
-}
-
-
-#[test(should_fail_with = "only utxo proof allowed")]
-fn test_invalid_verification_key_hash() {
-    let verification_key = [0; 112];
-    let invalid_hash = 1234567890; // Wrong hash
-
-    let proofs = [
-        AggUtxoProofInput {
-            proof: [0; 507],
-            input_merkle_paths: [[0; 160]; 2],
-            output_merkle_paths: [[0; 160]; 2],
-            input_commitments: [0; 2],
-            output_commitments: [0; 2],
-        },
-        AggUtxoProofInput {
-            proof: [0; 507],
-            input_merkle_paths: [[0; 160]; 2],
-            output_merkle_paths: [[0; 160]; 2],
-            input_commitments: [0; 2],
-            output_commitments: [0; 2],
-        },
-        AggUtxoProofInput {
-            proof: [0; 507],
-            input_merkle_paths: [[0; 160]; 2],
-            output_merkle_paths: [[0; 160]; 2],
-            input_commitments: [0; 2],
-            output_commitments: [0; 2],
-        }
-    ];
-
-    // First proof has kind = 1 (non-padding), so it should verify the hash
-    let messages = [
-        1, 0, 0, 0, 0, 0,  // First proof: kind = 1 (send)
-        0, 0, 0, 0, 0, 0,  // Second proof: kind = 0 (padding)
-        0, 0, 0, 0, 0, 0   // Third proof: kind = 0 (padding)
-    ];
-    let old_root = 2473073130432999597457871252851154814051443713747864452328961082127445883391;
-    let new_root = 2473073130432999597457871252851154814051443713747864452328961082127445883391;
-    let commit_hash = poseidon2::Poseidon2::hash([0, 0, 0, 0], 4);
-
-    // This should fail because the verification key hash is incorrect
-    main(verification_key, invalid_hash, proofs, messages, old_root, new_root, commit_hash);
-}
-
-#[test]
-fn test_merkle_path_operations() {
-    // Test basic merkle path operations
-    let leaf: Field = 12345;
-    let bits: [u1; 254] = leaf.to_le_bits();
-    let merkle_path = [0; 160];
-
-    // Test get_merkle_root
-    let root = get_merkle_root(leaf, bits, merkle_path);
-    assert(root != 0);
-
-    // Test get_null_root (should be different from leaf root)
-    let null_root = get_null_root(bits, merkle_path);
-    assert(null_root != root);
-
-    // Test validate_inclusion
-    validate_inclusion(leaf, bits, merkle_path, root);
 }

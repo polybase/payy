@@ -1,5 +1,4 @@
 use dep::std;
-use poseidon::poseidon2;
 
 fn main(
     verification_key: [Field; 112],
