@@ -1,6 +1,8 @@
 use dep::std;
 use std::hash::poseidon2;
 
+mod dummy_proof;
+
 struct AggUtxoProofInput {
     proof: [Field; 507],
     input_merkle_paths: [[Field; 160]; 2],
@@ -34,27 +36,27 @@ fn main(
         utxo_hashes[i] = poseidon2::Poseidon2::hash([input_commitments[0], input_commitments[1], output_commitments[0], output_commitments[1]], 4);
 
         // Verify non-padding proofs
-        if (kind != 0) {
-            let public_inputs = [
-                input_commitments[0],
-                input_commitments[1],
-                proof.output_commitments[0],
-                proof.output_commitments[1],
-                messages[j],
-                messages[j + 1],
-                messages[j + 2],
-                messages[j + 3],
-                messages[j + 4],
-                messages[j + 5],
-            ];
-            std::verify_proof_with_type(
-                verification_key,
-                proof.proof,
-                public_inputs,
-                verification_key_hash,
-                7,
-            );
+        let public_inputs = [
+            input_commitments[0],
+            input_commitments[1],
+            proof.output_commitments[0],
+            proof.output_commitments[1],
+            messages[j],
+            messages[j + 1],
+            messages[j + 2],
+            messages[j + 3],
+            messages[j + 4],
+            messages[j + 5],
+        ];
+        std::verify_proof_with_type(
+            if kind != 0 { verification_key } else { dummy_proof::dummy_vk },
+            if kind != 0 { proof.proof } else { dummy_proof::dummy_proof },
+            if kind != 0 { public_inputs } else { dummy_proof::dummy_public_inputs },
+            verification_key_hash,
+            7,
+        );
 
+        if (kind != 0) {
             // Input commitments
             for j in 0..2 {
                 let commitment = input_commitments[j];
