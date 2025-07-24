@@ -1,3 +1,9 @@
+/* Dummy proof and VK for the following Noir program
+  fn main(x: Field, y: pub [Field; 10]) {
+      assert(x != y[0]);
+  }
+*/
+
 global dummy_proof: [Field; 507] = [
     0000000000000000000000000000000000000000000076864578410909288143,
     0000000000000000000000000000000000000000000211399002352548043384,

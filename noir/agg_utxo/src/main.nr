@@ -48,6 +48,12 @@ fn main(
             messages[j + 4],
             messages[j + 5],
         ];
+
+        // Noir has a bug where predicates are not applied to verify_proof calls
+        // https://github.com/noir-lang/noir/issues/8998 
+        // To work around this, we use a dummy (but valid) VK and proof if `kind` is 0
+        // This can removed and the below code can be moved to the if (kind != 0) block, once
+        // the above issue is resolved.
         std::verify_proof_with_type(
             if kind != 0 { verification_key } else { dummy_proof::dummy_vk },
             if kind != 0 { proof.proof } else { dummy_proof::dummy_proof },
