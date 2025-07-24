@@ -58,7 +58,7 @@ fn main(
             if kind != 0 { verification_key } else { dummy_proof::dummy_vk },
             if kind != 0 { proof.proof } else { dummy_proof::dummy_proof },
             if kind != 0 { public_inputs } else { dummy_proof::dummy_public_inputs },
-            verification_key_hash,
+            if kind != 0 { verification_key_hash } else { dummy_proof::dummy_verification_key_hash },
             7,
         );
 

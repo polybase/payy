@@ -5,7 +5,7 @@ import { encodeFunctionData } from "viem";
 import { deployBin } from "./shared";
 
 // Auto-updated by generate_fixtures.sh - do not modify manually
-const AGG_UTXO_VERIFICATION_KEY_HASH = "0x1970936764715b9d95ffe7837f51a97832ef71821b8a042391ddf4f28b3246ca";
+const AGG_UTXO_VERIFICATION_KEY_HASH = "0x0132b6f5f3eed78539d702ca2a4faba09925d8ae8e29354fa37d46d7d2b51271";
 
 const USDC_ADDRESSES: Record<string, string> = {
   // Ethereum Mainnet
