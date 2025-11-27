@@ -25,11 +25,11 @@ cp -r $REPO_ROOT/noir/target/* $REPO_ROOT/fixtures/programs/
 mkdir -p $REPO_ROOT/fixtures/keys
 
 # Get all program names from the workspace - the ordering of these is important,
-# as the hash from utxo is used in agg_utxo, and agg_utxo used in agg_agg
-PROGRAMS=("utxo" "agg_utxo" "agg_agg" "signature" "points" "migrate")
+# as the hash from utxo is used in agg_utxo, agg_utxo used in agg_agg, and agg_agg used in agg_final
+PROGRAMS=("signature" "points" "migrate" "utxo" "agg_utxo" "agg_agg" "agg_final")
 
 # Define which programs should use the recursive flag
-RECURSIVE_PROGRAMS=("agg_utxo" "utxo")
+RECURSIVE_PROGRAMS=("agg_agg" "agg_utxo" "utxo")
 
 # Function to check if a program should use recursive flag
 is_recursive() {
@@ -45,7 +45,7 @@ is_recursive() {
 # Generate verification keys for each program
 for NAME in "${PROGRAMS[@]}"; do
   oracle_hash_args=()
-  if [ "$NAME" == "agg_agg" ]; then
+  if [ "$NAME" == "agg_final" ]; then
     oracle_hash_args=("--oracle_hash" "keccak")
   fi
 
@@ -53,15 +53,11 @@ for NAME in "${PROGRAMS[@]}"; do
   echo "$(echo "$NAME" | tr '[:lower:]' '[:upper:]')"
   echo "================"
 
-  if is_recursive "$NAME"; then
-    echo "Generating verification key for $NAME with recursive flag"
-    $BACKEND write_vk ${oracle_hash_args[@]} --scheme ultra_honk --honk_recursion 1 --init_kzg_accumulator -b $REPO_ROOT/fixtures/programs/${NAME}.json -o $REPO_ROOT/fixtures/keys/ --output_format bytes_and_fields \
-      && mv $REPO_ROOT/fixtures/keys/{vk,${NAME}_key} && mv $REPO_ROOT/fixtures/keys/{vk_fields.json,${NAME}_key_fields.json}
-  else
-    echo "Generating verification key for $NAME"
-    $BACKEND write_vk ${oracle_hash_args[@]} --scheme ultra_honk -b $REPO_ROOT/fixtures/programs/${NAME}.json -o $REPO_ROOT/fixtures/keys/ --output_format bytes_and_fields \
-      && mv $REPO_ROOT/fixtures/keys/{vk,${NAME}_key} && mv $REPO_ROOT/fixtures/keys/{vk_fields.json,${NAME}_key_fields.json}
-  fi
+  echo "Generating verification key for $NAME..."
+  $BACKEND write_vk ${oracle_hash_args[@]} --scheme ultra_honk -b $REPO_ROOT/fixtures/programs/${NAME}.json -o $REPO_ROOT/fixtures/keys/ \
+    && python3 -c 'import sys, json; d=sys.stdin.buffer.read(); print(json.dumps([f"0x{d[i:i+32].hex()}" for i in range(0, len(d), 32)], indent=2))' < $REPO_ROOT/fixtures/keys/vk > $REPO_ROOT/fixtures/keys/vk_fields.json \
+    && mv $REPO_ROOT/fixtures/keys/{vk,${NAME}_key} && mv $REPO_ROOT/fixtures/keys/{vk_fields.json,${NAME}_key_fields.json} \
+    && rm $REPO_ROOT/fixtures/keys/vk_hash
 
   # Print verification key hash as u256 and hex
   echo "Verification key hash for $NAME:"
@@ -80,20 +76,86 @@ for NAME in "${PROGRAMS[@]}"; do
   # Update agg_agg/src/main.nr with the agg_utxo verification key hash
   if [ "$NAME" == "agg_utxo" ]; then
     AGG_UTXO_VK_HASH=$(echo "$VK_HASH_OUTPUT" | grep "u256:" | cut -d' ' -f2)
-    echo "Updating agg_agg/src/main.nr with agg_utxo verification key hash: $AGG_UTXO_VK_HASH"
-    sed -i.bak "s/global AGG_UTXO_VERIFICATION_KEY_HASH: Field = [0-9]*;/global AGG_UTXO_VERIFICATION_KEY_HASH: Field = $AGG_UTXO_VK_HASH;/" $REPO_ROOT/noir/agg_agg/src/main.nr
-    rm $REPO_ROOT/noir/agg_agg/src/main.nr.bak
+    echo "Updating agg_final/src/main.nr with agg_utxo verification key hash: $AGG_UTXO_VK_HASH"
+    sed -i.bak "s/global AGG_UTXO_VERIFICATION_KEY_HASH: Field = [0-9]*;/global AGG_UTXO_VERIFICATION_KEY_HASH: Field = $AGG_UTXO_VK_HASH;/" $REPO_ROOT/noir/agg_final/src/main.nr
+    rm $REPO_ROOT/noir/agg_final/src/main.nr.bak
   fi
 
-  $BACKEND write_solidity_verifier --scheme ultra_honk -k $REPO_ROOT/fixtures/keys/${NAME}_key -o $REPO_ROOT/eth/noir/${NAME}.sol
-  sed -i.bak 's/external pure/internal pure/g' $REPO_ROOT/eth/noir/${NAME}.sol
-  rm $REPO_ROOT/eth/noir/${NAME}.sol.bak
-  if [[ "$(uname)" == "Darwin" ]]; then
-    SOLC=$REPO_ROOT/fixtures/binaries/solc-v0.8.29-macos
-  else
-    SOLC=$REPO_ROOT/fixtures/binaries/solc-v0.8.29-linux
+  # Update agg_final/src/main.nr with the agg_agg verification key hash
+  if [ "$NAME" == "agg_agg" ]; then
+    AGG_AGG_VK_HASH=$(echo "$VK_HASH_OUTPUT" | grep "u256:" | cut -d' ' -f2)
+    echo "Updating agg_final/src/main.nr with agg_agg verification key hash: $AGG_AGG_VK_HASH"
+    sed -i.bak "s/global AGG_AGG_VERIFICATION_KEY_HASH: Field = [0-9]*;/global AGG_AGG_VERIFICATION_KEY_HASH: Field = $AGG_AGG_VK_HASH;/" $REPO_ROOT/noir/agg_final/src/main.nr
+    rm $REPO_ROOT/noir/agg_final/src/main.nr.bak
   fi
-  $SOLC --combined-json bin --revert-strings strip --optimize --optimize-runs 1 $REPO_ROOT/eth/noir/$NAME.sol | jq -r ".contracts[\"$REPO_ROOT/eth/noir/$NAME.sol:HonkVerifier\"].bin" > $REPO_ROOT/eth/contracts/noir/${NAME}_HonkVerifier.bin
+
+  if [ "$NAME" == "agg_final" ]; then
+    FINAL_VK_HASH=$(echo "$VK_HASH_OUTPUT" | grep "hex:" | cut -d' ' -f2)
+    echo "Updating eth/scripts/deploy.ts and pkg/contracts/src.rs with final verification key hash: $FINAL_VK_HASH"
+    sed -i.bak "s/const AGG_FINAL_VERIFICATION_KEY_HASH = \".*\";/const AGG_FINAL_VERIFICATION_KEY_HASH = \"$FINAL_VK_HASH\";/" $REPO_ROOT/eth/scripts/deploy.ts
+    # TODO: this doesn't work, it's not updating the const
+    sed -i.bak "s/pub const AGG_FINAL_VERIFICATION_KEY_HASH .*;/pub const AGG_FINAL_VERIFICATION_KEY_HASH: &str = \"$FINAL_VK_HASH\";/" $REPO_ROOT/pkg/contracts/src/rollup.rs
+    rm $REPO_ROOT/eth/scripts/deploy.ts.bak
+    rm $REPO_ROOT/pkg/contracts/src/rollup.rs.bak
+  fi
+
+  if [ "$NAME" == "agg_final" ]; then
+    $BACKEND write_solidity_verifier --scheme ultra_honk -k $REPO_ROOT/fixtures/keys/${NAME}_key -o $REPO_ROOT/eth/noir/${NAME}.sol
+    if [[ "$(uname)" == "Darwin" ]]; then
+      SOLC=$REPO_ROOT/fixtures/binaries/solc-v0.8.29-macos
+    else
+      SOLC=$REPO_ROOT/fixtures/binaries/solc-v0.8.29-linux
+    fi
+
+    SOLC_INPUT=$(mktemp)
+    cat <<EOF > "$SOLC_INPUT"
+{
+  "language": "Solidity",
+  "sources": {
+    "agg_agg.sol": {
+      "urls": ["eth/noir/$NAME.sol"]
+    }
+  },
+  "settings": {
+    "optimizer": { "enabled": true, "runs": 0 },
+    "debug": { "revertStrings": "strip" },
+    "outputSelection": {
+      "*": {
+        "*": ["evm.bytecode", "evm.deployedBytecode"],
+        "": ["id"]
+      }
+    }
+  }
+}
+EOF
+
+    SOLC_OUTPUT=$(mktemp)
+    (cd "$REPO_ROOT" && $SOLC --standard-json "$SOLC_INPUT") > "$SOLC_OUTPUT"
+
+    SOURCE_KEY=$(jq -r '.contracts | keys[0]' "$SOLC_OUTPUT")
+    if [[ "$SOURCE_KEY" == "null" ]]; then
+      echo "Failed to determine source key from solc output" >&2
+      exit 1
+    fi
+
+    HONK_BYTECODE=$(jq -r ".contracts[\"$SOURCE_KEY\"][\"HonkVerifier\"].evm.bytecode.object" "$SOLC_OUTPUT")
+    if [[ "$HONK_BYTECODE" == "null" || -z "$HONK_BYTECODE" ]]; then
+      echo "Failed to extract HonkVerifier bytecode from solc output" >&2
+      exit 1
+    fi
+    printf '%s' "$HONK_BYTECODE" > "$REPO_ROOT/eth/contracts/noir/${NAME}_HonkVerifier.bin"
+
+    LIB_BYTECODE=$(jq -r ".contracts[\"$SOURCE_KEY\"][\"ZKTranscriptLib\"].evm.bytecode.object" "$SOLC_OUTPUT")
+    if [[ "$LIB_BYTECODE" == "null" || -z "$LIB_BYTECODE" ]]; then
+      echo "Failed to extract ZKTranscriptLib bytecode from solc output" >&2
+      exit 1
+    fi
+    printf '%s' "$LIB_BYTECODE" > "$REPO_ROOT/eth/contracts/noir/${NAME}_ZKTranscriptLib.bin"
+
+    jq ".contracts[\"$SOURCE_KEY\"][\"HonkVerifier\"].evm.bytecode.linkReferences" "$SOLC_OUTPUT" > "$REPO_ROOT/eth/contracts/noir/${NAME}_HonkVerifier.linkrefs.json"
+
+    rm "$SOLC_INPUT" "$SOLC_OUTPUT"
+  fi
 done
 
 echo "Successfully copied compiled programs to fixtures/keys/programs"

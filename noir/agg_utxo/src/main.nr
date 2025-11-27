@@ -1,9 +1,7 @@
 use dep::std;
-use common::is_one_of;
 use poseidon::poseidon2;
 
-global UTXO_VERIFICATION_KEY_HASH: Field =
-    18779959434705083215725546760451184879298382931437993861134690217528836166710;
+global UTXO_VERIFICATION_KEY_HASH: Field = 20361994226032552507663901262286744551869524558436762371297713593361795171294;
 
 struct AggUtxoProofInput {
     proof: [Field; 508],
@@ -16,15 +14,17 @@ struct AggUtxoProofInput {
 
 fn main(
     verification_key: [Field; 115],
-    verification_key_hash: Field,
     proofs: [AggUtxoProofInput; 3],
-    messages: pub [Field; 15],
+    // TODO: maybe we can remove this
+    verification_key_hash: pub [Field; 2],
     old_root: pub Field,
     new_root: pub Field,
     commit_hash: pub Field,
+    messages: pub [Field; 1000],
 ) {
     // Hardcode verification_key_hash for utxo proof
-    assert(verification_key_hash == UTXO_VERIFICATION_KEY_HASH, "only utxo proof allowed");
+    assert(verification_key_hash[0] != 0, "dummy verfication key hash");
+    assert(verification_key_hash[1] != 0, "dummy verfication key hash");
 
     let mut root = old_root;
     let mut utxo_hashes: [Field; 3] = [0, 0, 0];
@@ -38,8 +38,9 @@ fn main(
 
         let utxo_kind = proof.utxo_kind;
         let is_padding = utxo_kind == 0;
-        let is_proof_kind_mint_or_burn = is_one_of(utxo_kind, [2, 3]);
         let is_burn = utxo_kind == 3;
+        let is_mint = utxo_kind == 2;
+        let is_proof_kind_mint_or_burn = is_burn | is_mint;
 
         let mut msg_note_kind = 0;
         let mut msg_value = 0;
@@ -106,7 +107,7 @@ fn main(
             } else {
                 public_inputs
             },
-            verification_key_hash,
+            UTXO_VERIFICATION_KEY_HASH,
             7,
         );
 
@@ -193,60 +194,6 @@ fn empty_tree() {
     println("empty root hash:");
     println(hash);
     assert(hash == 2473073130432999597457871252851154814051443713747864452328961082127445883391);
-}
-
-#[test(should_fail_with = "only utxo proof allowed")]
-fn test_invalid_verification_key_hash() {
-    let verification_key = [0; 115];
-    let invalid_hash = 1234567890; // Wrong hash
-
-    let proofs = [
-        AggUtxoProofInput {
-            proof: [0; 508],
-            utxo_kind: 1,
-            input_merkle_paths: [[0; 160]; 2],
-            output_merkle_paths: [[0; 160]; 2],
-            input_commitments: [0; 2],
-            output_commitments: [0; 2],
-        },
-        AggUtxoProofInput {
-            proof: [0; 508],
-            utxo_kind: 1,
-            input_merkle_paths: [[0; 160]; 2],
-            output_merkle_paths: [[0; 160]; 2],
-            input_commitments: [0; 2],
-            output_commitments: [0; 2],
-        },
-        AggUtxoProofInput {
-            proof: [0; 508],
-            utxo_kind: 1,
-            input_merkle_paths: [[0; 160]; 2],
-            output_merkle_paths: [[0; 160]; 2],
-            input_commitments: [0; 2],
-            output_commitments: [0; 2],
-        },
-    ];
-
-    // First proof has kind = 1 (non-padding), so it should verify the hash
-    let messages = [
-        1, 0, 0, 0, 0, // First proof: kind = 1 (send)
-        0, 0, 0, 0, 0, // Second proof: kind = 0 (padding)
-        0, 0, 0, 0, 0, // Third proof: kind = 0 (padding)
-    ];
-    let old_root = 2473073130432999597457871252851154814051443713747864452328961082127445883391;
-    let new_root = 2473073130432999597457871252851154814051443713747864452328961082127445883391;
-    let commit_hash = poseidon2::Poseidon2::hash([0, 0, 0, 0], 4);
-
-    // This should fail because the verification key hash is incorrect
-    main(
-        verification_key,
-        invalid_hash,
-        proofs,
-        messages,
-        old_root,
-        new_root,
-        commit_hash,
-    );
 }
 
 #[test]
