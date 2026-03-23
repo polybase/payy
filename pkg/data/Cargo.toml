@@ -1,0 +1,41 @@
+[package]
+name = "data"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+diesel = [
+  "dep:diesel",
+  "dep:diesel-util",
+  "diesel-util/diesel",
+  "database/diesel",
+  "element/diesel",
+  "kyc/diesel",
+  "primitives/diesel",
+]
+stripe = ["dep:async-stripe"]
+ts-rs = [
+  "dep:ts-rs",
+  "element/ts-rs",
+  "primitives/ts-rs",
+  "kyc/ts-rs",
+]
+
+[dependencies]
+chrono = { workspace = true }
+async-stripe = { workspace = true, optional = true }
+database = { workspace = true, optional = true, default-features = false }
+diesel = { workspace = true, optional = true, features = ["postgres"] }
+diesel-util = { workspace = true, optional = true }
+element = { workspace = true }
+kyc = { workspace = true }
+primitives = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+strum = { workspace = true }
+ts-rs = { workspace = true, optional = true }
+uuid = { workspace = true }
+workspace-hack.workspace = true
+
+[dev-dependencies]

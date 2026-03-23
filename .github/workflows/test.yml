@@ -1,0 +1,307 @@
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - ".github/workflows/test.yml"
+      - "pkg/**"
+      - "eth/**"
+      - "flake.lock"
+      - "flake.nix"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "clippy.toml"
+      - "rust-toolchain.toml"
+      - "docker/*"
+  push:
+    branches:
+      - main
+
+name: Test
+
+env:
+  CARGO_INCREMENTAL: "0"
+  RUSTFLAGS: "-Dwarnings --cfg tracing_unstable"
+  RUSTDOCFLAGS: "-Dwarnings"
+  RUST_BACKTRACE: "1"
+  GITHUB_TOKEN: ${{ secrets.CLAUDE_GITHUB_PAT }}
+  SKIP_UPLOAD: ${{ github.event_name == 'pull_request' && 'true' || 'false' }}
+  # Main branch pushes should rebuild the canonical cache, so skip downloads
+  # when creating the fresh artifacts. Dependabot PRs do not receive repository
+  # secrets, so default to skipping cache downloads when the GCS key is
+  # unavailable. GitHub expressions treat missing secrets as null, so guard on
+  # both existence and non-emptiness.
+  SKIP_DOWNLOAD: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || !(secrets.SCCACHE_GCS_SA_KEY_BASE64 && secrets.SCCACHE_GCS_SA_KEY_BASE64 != '') && 'true' || 'false' }}
+
+permissions:
+  contents: read
+
+jobs:
+  docker-build:
+    name: Docker Build
+    runs-on: "k3s-runners"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup sccache
+        uses: ./.github/actions/setup-sccache
+        with:
+          sccache_gcs_sa_key_base64: "${{ secrets.SCCACHE_GCS_SA_KEY_BASE64 }}"
+
+      - name: Log in to Docker Hub
+        env:
+          DOCKER_PAT_ZKCAL: ${{ secrets.DOCKER_PAT_ZKCAL }}
+        if: ${{ env.DOCKER_PAT_ZKCAL != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: zkcal
+          password: ${{ env.DOCKER_PAT_ZKCAL }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/Dockerfile.node
+          push: false
+          no-cache: true
+          outputs: type=cacheonly
+          build-args: ${{ env.SCCACHE_BUILD_ARGS }}
+          secrets: ${{ env.SCCACHE_BUILD_SECRETS }}
+
+  cargo-test:
+    name: Cargo Test in Docker
+    runs-on: "k3s-runners"
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup sccache
+        uses: ./.github/actions/setup-sccache
+        with:
+          sccache_gcs_sa_key_base64: "${{ secrets.SCCACHE_GCS_SA_KEY_BASE64 }}"
+
+      - name: Log in to Docker Hub
+        env:
+          DOCKER_PAT_ZKCAL: ${{ secrets.DOCKER_PAT_ZKCAL }}
+        if: ${{ env.DOCKER_PAT_ZKCAL != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: zkcal
+          password: ${{ env.DOCKER_PAT_ZKCAL }}
+
+      - name: Test
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/Dockerfile.node
+          target: tester
+          push: false
+          no-cache: true
+          outputs: type=cacheonly
+          build-args: ${{ env.SCCACHE_BUILD_ARGS }}
+          secrets: ${{ env.SCCACHE_BUILD_SECRETS }}
+
+  cargo-doc:
+    name: Cargo Doc
+    runs-on: "k3s-runners"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # Need at least 2 commits for diff
+
+      - name: Check for doc comment changes
+        id: check-docs
+        run: |
+          if git diff HEAD^ HEAD -U0 | grep -q '^\+\s*///\|^\+\s*//!\|^\+\s*#\[doc'; then
+            echo "has_doc_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_doc_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup sccache
+        if: steps.check-docs.outputs.has_doc_changes == 'true'
+        uses: ./.github/actions/setup-sccache
+        with:
+          sccache_gcs_sa_key_base64: "${{ secrets.SCCACHE_GCS_SA_KEY_BASE64 }}"
+
+      - name: Compile eth contracts
+        if: steps.check-docs.outputs.has_doc_changes == 'true'
+        working-directory: eth
+        run: npm install && npm run compile
+
+      - name: Install protoc
+        if: steps.check-docs.outputs.has_doc_changes == 'true'
+        run: |
+          PROTOC_VERSION="32.1"
+          curl -LO "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip"
+          unzip -o protoc-*.zip -d $HOME/.local
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Run cargo doc
+        if: steps.check-docs.outputs.has_doc_changes == 'true'
+        run: cargo doc --no-deps
+
+  clippy:
+    name: Clippy Check
+    runs-on: "k3s-runners"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 5
+
+      - name: Set PATH for Cargo
+        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Set PATH for Cargo
+        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Setup sccache
+        uses: ./.github/actions/setup-sccache
+        with:
+          backend: gcs
+          sccache_bucket: polybase-sccache-eu
+          sccache_key_prefix: testing-sccache
+          sccache_gcs_sa_key_base64: "${{ secrets.SCCACHE_GCS_SA_KEY_BASE64 }}"
+
+      - name: Install zstd
+        run: sudo apt-get update && sudo apt-get install -y zstd
+
+      - name: Install npm modules
+        run: cd .github/actions/cloud-cache && npm install
+
+      - name: Get cache from bucket
+        id: cloud-cache
+        uses: ./.github/actions/cloud-cache
+        with:
+          gcs-key: ${{ secrets.SCCACHE_GCS_SA_KEY_BASE64 }}
+          bucket: polybase-target-cache-eu
+          prefix: testing-cache
+          local-path: target
+          skip-upload: ${{ env.SKIP_UPLOAD }}
+          skip-download: ${{ env.SKIP_DOWNLOAD }}
+          primary-key-generator: |
+            echo "cargo-clippy-target-$(git rev-parse HEAD)" >> $PRIMARY_KEY
+          fallback-key-generator: |
+            commits=$(git log --pretty=format:%H -n 5 --skip=1)
+            for commit in $commits; do
+              echo "cargo-clippy-target-$commit"
+              echo "cargo-clippy-target-$commit" >> $FALLBACK_KEYS
+            done
+
+      - name: Get ~/.cargo cache from bucket
+        id: cloud-cache-home-cargo
+        uses: ./.github/actions/cloud-cache
+        with:
+          gcs-key: ${{ secrets.SCCACHE_GCS_SA_KEY_BASE64 }}
+          bucket: polybase-target-cache-eu
+          prefix: testing-cache
+          local-path: ~/.cargo
+          skip-upload: ${{ env.SKIP_UPLOAD }}
+          skip-download: ${{ env.SKIP_DOWNLOAD }}
+          primary-key-generator: |
+            echo "cargo-clippy-home-cargo-$(git rev-parse HEAD)" >> $PRIMARY_KEY
+          fallback-key-generator: |
+            commits=$(git log --pretty=format:%H -n 5 --skip=1)
+            for commit in $commits; do
+              echo "cargo-clippy-home-cargo-$commit"
+              echo "cargo-clippy-home-cargo-$commit" >> $FALLBACK_KEYS
+            done
+
+      - name: Compile eth contracts
+        working-directory: eth
+        run: npm install && npm run compile
+
+      - name: Install protoc
+        run: |
+          PROTOC_VERSION="32.1"
+          curl -LO "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip"
+          unzip -o protoc-*.zip -d $HOME/.local
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install cargo hack
+        run: cargo install cargo-hack
+
+      - name: Install cargo-i18n
+        run: cargo install rust-i18n-cli
+
+      - name: Ensure clippy is available
+        run: rustup component add clippy
+
+      - name: Run Clippy
+        run: |
+          cargo hack clippy \
+            --workspace --all-targets \
+            --feature-powerset \
+            --exclude-features bb_rs,bb_utxo
+
+      - name: Verify rust-i18n translations
+        run: cargo i18n
+
+  rust-ts-type-sync:
+    name: Rust/TypeScript Type Sync Check
+    runs-on: "k3s-runners"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 5
+
+      - name: Setup sccache
+        uses: ./.github/actions/setup-sccache
+        with:
+          sccache_gcs_sa_key_base64: "${{ secrets.SCCACHE_GCS_SA_KEY_BASE64 }}"
+
+      - name: Install npm modules
+        run: cd .github/actions/cloud-cache && npm install
+
+      - name: Get cache from bucket
+        id: cloud-cache
+        uses: ./.github/actions/cloud-cache
+        with:
+          gcs-key: ${{ secrets.SCCACHE_GCS_SA_KEY_BASE64 }}
+          bucket: polybase-target-cache-eu
+          prefix: testing-cache
+          local-path: target
+          skip-upload: ${{ env.SKIP_UPLOAD }}
+          skip-download: ${{ env.SKIP_DOWNLOAD }}
+          primary-key-generator: |
+            echo "cargo-target-$(git rev-parse HEAD)" >> $PRIMARY_KEY
+          fallback-key-generator: |
+            commits=$(git log --pretty=format:%H -n 5 --skip=1)
+            for commit in $commits; do
+              echo "cargo-target-$commit"
+              echo "cargo-target-$commit" >> $FALLBACK_KEYS
+            done
+
+      - name: Make scripts executable
+        run: chmod +x app/packages/payy/scripts/*.sh
+
+      - name: Ensure jq is available
+        run: |
+          if command -v jq >/dev/null 2>&1; then
+            jq --version
+            exit 0
+          fi
+
+          if command -v apt-get >/dev/null 2>&1; then
+            (sudo apt-get update && sudo apt-get install -y jq) || (apt-get update && apt-get install -y jq)
+            jq --version
+            exit 0
+          fi
+
+          echo "jq is required but no apt-get package manager was found on this runner."
+          exit 1
+
+      - name: Install protobuf compiler
+        run: |
+          PROTOC_VERSION="32.1"
+          curl -LO "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip"
+          unzip -o protoc-*.zip -d $HOME/.local
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Check Rust/TypeScript type sync
+        run: app/packages/payy/scripts/check-ts-types.sh

@@ -14,6 +14,7 @@ struct TxnDayStats {
 #[derive(Debug, serde::Serialize)]
 pub struct StatsResponse {
     last_7_days_txns: Vec<TxnDayStats>,
+    today_txns: u64,
 }
 
 #[tracing::instrument(err, skip_all)]
@@ -29,5 +30,10 @@ pub async fn get_stats(state: web::Data<State>) -> HttpResult<web::Json<StatsRes
         .map(|(date, count)| TxnDayStats { date, count })
         .collect();
 
-    Ok(web::Json(StatsResponse { last_7_days_txns }))
+    let today_txns = state.txn_stats.count_today_txns();
+
+    Ok(web::Json(StatsResponse {
+        last_7_days_txns,
+        today_txns,
+    }))
 }

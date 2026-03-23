@@ -1,0 +1,21 @@
+[package]
+name = "node-client-http"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+client-http = { workspace = true }
+http-interface = { workspace = true }
+element = { workspace = true }
+node-interface = { workspace = true }
+primitives = { workspace = true }
+zk-primitives = { workspace = true }
+
+async-trait = { workspace = true }
+serde = { workspace = true }
+reqwest = { workspace = true }
+workspace-hack.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+unimock = { workspace = true }

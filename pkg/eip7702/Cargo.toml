@@ -1,0 +1,26 @@
+[package]
+name = "eip7702"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ethereum-types = { workspace = true }
+contextful = { workspace = true }
+thiserror = { workspace = true }
+secp256k1 = { workspace = true }
+sha3 = { workspace = true }
+web3 = { workspace = true }
+rlp = { workspace = true }
+reqwest = { workspace = true }
+async-trait = { workspace = true }
+serde_json = { workspace = true }
+eth-util = { workspace = true }
+tokio = { workspace = true }
+hex = { workspace = true }
+test-spy = { workspace = true }
+tracing = { workspace = true }
+client-http = { workspace = true }
+workspace-hack.workspace = true
+
+[dev-dependencies]
+testutil = { workspace = true }

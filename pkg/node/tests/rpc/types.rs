@@ -1,4 +1,4 @@
-use node::UtxoProof;
+use element::Element;
 use primitives::{
     block_height::BlockHeight,
     hash::CryptoHash,
@@ -6,7 +6,7 @@ use primitives::{
     sig::Signature,
 };
 use serde::{Deserialize, Serialize};
-use smirk::Element;
+use zk_primitives::UtxoProof;
 
 #[derive(Debug, PartialEq, Deserialize)]
 pub struct Block {
@@ -59,6 +59,17 @@ pub struct ElementResponse {
     pub height: u64,
     pub root_hash: Element,
     pub txn_hash: CryptoHash,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ElementsListItem {
+    pub element: Element,
+    pub height: u64,
+    #[expect(dead_code)]
+    pub root_hash: Element,
+    #[expect(dead_code)]
+    pub txn_hash: CryptoHash,
+    pub spent: bool,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -134,4 +145,24 @@ pub struct BlockWithInfo {
 pub struct ListBlocksResponse {
     pub blocks: Vec<BlockWithInfo>,
     pub cursor: OpaqueCursor<BlockHeight>,
+}
+
+#[derive(Debug, PartialEq, Deserialize)]
+pub struct SmirkElementInfo {
+    pub element: Element,
+    pub inserted_at_height: u64,
+}
+
+pub type GetAllSmirkElementsResponse = Vec<SmirkElementInfo>;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StatsResponse {
+    pub last_7_days_txns: Vec<TxnDayStats>,
+    pub today_txns: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TxnDayStats {
+    pub date: chrono::NaiveDate,
+    pub count: u64,
 }

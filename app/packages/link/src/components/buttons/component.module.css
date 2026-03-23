@@ -1,0 +1,47 @@
+.btn_container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 20px;
+}
+
+.btn {
+    padding: 20px 50px;
+    width: 300px;
+    background-color: #242424;
+    border: none;
+    border-radius: 68px;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    outline: none;
+    font-weight: 500;
+    letter-spacing: -0.05em;
+    border: 3px solid #242424;
+}
+
+.btn_solid {
+    background-color: #242424;
+}
+
+.btn_outline {
+    background-color: transparent;
+    border: 3px solid #242424;
+    color: #242424;
+    font-weight: 600;
+}
+
+.btn_outline:hover {
+    color: #444;
+    border-color: #444;
+}
+
+.btn_solid:hover {
+    background-color: #333333;
+}
+
+.btn_solid:active {
+    background-color: #111;
+    outline: none;
+}

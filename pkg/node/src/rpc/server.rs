@@ -1,16 +1,17 @@
 #![warn(clippy::unwrap_used, clippy::expect_used)]
 
+use super::routes::error::Error as RoutesError;
 use crate::{NodeShared, TxnStats};
 use actix_cors::Cors;
 use actix_server::Server;
-use actix_web::{dev::Service, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{App, HttpResponse, HttpServer, Responder, dev::Service, web};
 use rpc::{
-    error::{not_found_error_handler, HTTPError},
+    error::{HTTPError, not_found_error_handler},
     middleware::Middleware,
 };
 use std::sync::Arc;
 
-use super::routes::{configure_routes, State};
+use super::routes::{State, configure_routes};
 
 async fn root() -> impl Responder {
     HttpResponse::Ok()
@@ -49,7 +50,7 @@ pub fn create_rpc_server(
 
                     async move {
                         if is_out_of_sync {
-                            let err = HTTPError::from(crate::rpc::routes::error::Error::OutOfSync);
+                            let err = HTTPError::from(RoutesError::OutOfSync);
                             Err(err.into())
                         } else {
                             fut.await

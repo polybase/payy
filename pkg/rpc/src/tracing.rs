@@ -1,14 +1,19 @@
+// lint-long-file-override allow-max-lines=300
 use clap::ValueEnum;
+use opentelemetry::trace::TracerProvider;
 use opentelemetry_otlp::{
-    OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
-    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+    MetricExporter, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, SpanExporter,
 };
-use opentelemetry_sdk::trace::{RandomIdGenerator, Sampler};
-use sentry_tracing::{event_from_event, EventMapping};
+use opentelemetry_sdk::{
+    metrics::SdkMeterProvider,
+    trace::{RandomIdGenerator, Sampler, SdkTracerProvider},
+};
+use sentry_tracing::{EventMapping, event_from_event};
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, fmt};
 use tracing::field::Visit;
-use tracing_subscriber::{filter::FilterFn, layer::SubscriberExt, Layer};
+use tracing_subscriber::{Layer, filter::FilterFn, layer::SubscriberExt};
 
 #[derive(
     ValueEnum, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Deserialize, Serialize,
@@ -101,15 +106,14 @@ pub fn setup_tracing(
     let use_otel_tracing = std::env::var(OTEL_EXPORTER_OTLP_ENDPOINT).is_ok()
         || std::env::var(OTEL_EXPORTER_OTLP_TRACES_ENDPOINT).is_ok();
     let telemetry = if use_otel_tracing {
-        let trace_config = opentelemetry_sdk::trace::config()
+        let trace_exporter = SpanExporter::builder().with_tonic().build()?;
+        let tracer_provider = SdkTracerProvider::builder()
             .with_sampler(Sampler::AlwaysOn)
-            .with_id_generator(RandomIdGenerator::default());
-
-        let tracer = opentelemetry_otlp::new_pipeline()
-            .tracing()
-            .with_exporter(opentelemetry_otlp::new_exporter().tonic())
-            .with_trace_config(trace_config)
-            .install_batch(opentelemetry_sdk::runtime::Tokio)?;
+            .with_id_generator(RandomIdGenerator::default())
+            .with_batch_exporter(trace_exporter)
+            .build();
+        opentelemetry::global::set_tracer_provider(tracer_provider.clone());
+        let tracer = tracer_provider.tracer(env!("CARGO_PKG_NAME"));
 
         Some(
             tracing_opentelemetry::layer()
@@ -125,10 +129,10 @@ pub fn setup_tracing(
     let use_otel_metrics = std::env::var(OTEL_EXPORTER_OTLP_ENDPOINT).is_ok()
         || std::env::var(OTEL_EXPORTER_OTLP_METRICS_ENDPOINT).is_ok();
     let metrics = if use_otel_metrics {
-        let meter_provider = opentelemetry_otlp::new_pipeline()
-            .metrics(opentelemetry_sdk::runtime::Tokio)
-            .with_exporter(opentelemetry_otlp::new_exporter().tonic())
-            .build()?;
+        let metric_exporter = MetricExporter::builder().with_tonic().build()?;
+        let meter_provider = SdkMeterProvider::builder()
+            .with_periodic_exporter(metric_exporter)
+            .build();
 
         opentelemetry::global::set_meter_provider(meter_provider.clone());
         Some(tracing_opentelemetry::MetricsLayer::new(meter_provider))
@@ -154,7 +158,7 @@ pub fn setup_tracing(
             EventMapping::Ignore
         } else {
             // send the original `sentry` event unchanged
-            EventMapping::Event(event_from_event(evt, ctx))
+            EventMapping::Event(event_from_event(evt, &ctx))
         }
     });
 

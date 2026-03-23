@@ -2,7 +2,7 @@
 ///
 /// ```rust
 /// # use smirk::*;
-/// # use zk_primitives::*;
+/// # use element::Element;
 /// let tree: Tree<64, _> = smirk! {
 ///   // the element is converted using Element::from
 ///   123 => "hello",
@@ -53,7 +53,7 @@ macro_rules! smirk {
 ///
 /// ```rust
 /// # use smirk::*;
-/// # use zk_primitives::*;
+/// # use element::Element;
 /// let batch: Batch<64, _> = batch! {
 ///   // the element is converted using Element::from
 ///   123 => "hello",
@@ -97,22 +97,18 @@ macro_rules! batch {
 
 /// Helper macro to create an [`Element`]
 ///
-/// [`Element`]: zk_primitives::Element
+/// [`Element`]: element::Element
 #[macro_export]
 macro_rules! element {
-    ($e:literal) => {{
-        zk_primitives::Element::new($e)
-    }};
-    ($e:expr) => {{
-        zk_primitives::Element::from($e)
-    }};
+    ($e:literal) => {{ element::Element::new($e) }};
+    ($e:expr) => {{ element::Element::from($e) }};
 }
 
 #[cfg(test)]
 mod tests {
-    use zk_primitives::Element;
+    use element::Element;
 
-    use crate::{smirk, Batch, Tree};
+    use crate::{Batch, Tree};
 
     type T = Tree<64, i32>;
     type B = Batch<64, i32>;

@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-use crate::Element;
+use element::Element;
 
 const COMPUTE_DEPTH: usize = 257;
 
@@ -38,8 +38,8 @@ fn fallback(depth: usize) -> Element {
         other => {
             // if you hit this warning, consider increasing `COMPUTE_DEPTH` above
             eprintln!("WARNING - using slow fallback for `empty_tree_hash` for depth: {other}");
-            let hash = fallback(other - 1);
-            crate::hash_merge([hash, hash])
+            let hashed = fallback(other - 1);
+            hash::hash_merge([hashed, hashed])
         }
     }
 }
@@ -53,7 +53,7 @@ fn get_cache() -> &'static [Element] {
 
         for _ in 1..COMPUTE_DEPTH {
             let hash = *vec.last().unwrap();
-            let new_hash = crate::hash_merge([hash, hash]);
+            let new_hash = hash::hash_merge([hash, hash]);
             vec.push(new_hash);
         }
 

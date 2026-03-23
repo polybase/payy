@@ -1,0 +1,20 @@
+[package]
+name = "hash-poseidon"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+element = { workspace = true }
+minimal-poseidon = { workspace = true }
+serde = { workspace = true }
+hex = { workspace = true }
+workspace-hack.workspace = true
+
+[dev-dependencies]
+insta = { workspace = true }
+rand_chacha = { workspace = true }
+rand_xorshift = { workspace = true }
+rand = { workspace = true }
+
+[features]
+test-api = []

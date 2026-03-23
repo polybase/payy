@@ -1,19 +1,23 @@
 [package]
 name = "burn-substitutor"
 version = "1.3.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 contracts = { workspace = true }
+element = { workspace = true }
+node-client-http = { workspace = true }
+node-interface = { workspace = true }
 primitives = { workspace = true }
 rpc = { workspace = true }
-zk-circuits = { workspace = true }
 zk-primitives = { workspace = true }
+eth-util = { workspace = true }
+url = { workspace = true }
 
 clap = { workspace = true }
-eyre = { workspace = true }
-reqwest = { workspace = true }
+contextful = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+workspace-hack = { workspace = true }

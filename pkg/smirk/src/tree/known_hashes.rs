@@ -1,4 +1,4 @@
-use crate::{hash_cache::KnownHash, Tree};
+use crate::{Tree, hash_cache::KnownHash};
 
 use super::tree_repr::Node;
 
@@ -42,7 +42,8 @@ impl Node {
 
 #[cfg(test)]
 mod tests {
-    use zk_primitives::{hash_merge, Element};
+    use element::Element;
+    use hash::hash_merge;
 
     use crate::{hash::empty_tree_hash, smirk};
 

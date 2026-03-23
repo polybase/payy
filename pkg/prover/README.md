@@ -14,7 +14,7 @@ npm run deploy -- --network localhost
 Copy the `Rollup` contract address and set it as an environment variable `ROLLUP_CONTRACT_ADDR`:
 
 ```
-export ROLLUP_CONTRACT_ADDR=0x2279b7a0a67db372996a5fab50d91eaa73d2ebe6
+export ROLLUP_CONTRACT_ADDR=0xdc64a140aa3e981100a9beca4e685f962f0cf6c9
 ```
 
 Then run the tests:
@@ -22,5 +22,3 @@ Then run the tests:
 ```
 cargo test
 ```
-
-

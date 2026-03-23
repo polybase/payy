@@ -1,8 +1,9 @@
 use libp2p::{
+    PeerId, Transport,
     core::{muxing::StreamMuxerBox, transport::Boxed, upgrade},
     dns::TokioDnsConfig,
     identity::Keypair,
-    noise, tcp, yamux, PeerId, Transport,
+    noise, tcp, yamux,
 };
 
 /// Create the transports for the swarm, we use TCP/IP and quic.

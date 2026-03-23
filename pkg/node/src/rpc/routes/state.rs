@@ -1,4 +1,4 @@
-use crate::{rpc::stats, NodeShared};
+use crate::{NodeShared, rpc::stats};
 use std::sync::Arc;
 
 pub struct State {

@@ -1,33 +1,35 @@
 [package]
 name = "contracts"
 version = "1.3.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 zk-primitives = { workspace = true }
+element = { workspace = true }
 testutil = { workspace = true }
+eth-util = { workspace = true }
+contextful = { workspace = true }
 
-color-eyre = { workspace = true }
 ethereum-types = { workspace = true }
-eyre = { workspace = true }
 hex = { workspace = true }
 parking_lot = { workspace = true }
 rand = { workspace = true }
 rustc-hex = { workspace = true }
 secp256k1 = { workspace = true }
-serde = { workspace = true }
 serde_json = { workspace = true }
 sha3 = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 web3 = { workspace = true }
-clap = { workspace = true }
 tracing = { workspace = true }
+workspace-hack.workspace = true
 
 [dev-dependencies]
+zk-circuits = { workspace = true }
+barretenberg-cli = { workspace = true }
+hash = { workspace = true }
 
 expect-test = { workspace = true }
 secp256k1 = { workspace = true }
 smirk = { workspace = true }
-zk-circuits = { workspace = true }
-serial_test = { workspace = true }
+reqwest = { workspace = true }

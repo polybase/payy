@@ -1,0 +1,1 @@
+ALTER TABLE "wallets" DROP COLUMN "fraud_block";

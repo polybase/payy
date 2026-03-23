@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.polybaselabs.wallet",
+      "sha256_cert_fingerprints": [
+        "58:C0:A6:E3:99:D2:31:1C:76:C3:87:9D:E4:70:B4:18:6B:19:94:BA:2D:23:D3:F2:34:A4:D2:F9:88:B3:B1:CC"
+      ]
+    }
+  }
+]

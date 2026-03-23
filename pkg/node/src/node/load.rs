@@ -1,12 +1,13 @@
 use std::{path::Path, sync::OnceLock};
 
 use block_store::BlockStore;
-use smirk::Element;
+use contextful::ResultContextExt as _;
+use element::Element;
 use tracing::info;
 
 use crate::{
-    block::Block, config::Config, constants::MERKLE_TREE_DEPTH, types::BlockHeight, BlockFormat,
-    Node, NodeShared, PersistentMerkleTree, Result,
+    BlockFormat, Node, NodeShared, PersistentMerkleTree, Result, block::Block, config::Config,
+    constants::MERKLE_TREE_DEPTH, types::BlockHeight,
 };
 
 pub(super) struct LoadedData {
@@ -21,6 +22,7 @@ fn empty_tree_hash() -> Element {
 }
 
 impl Node {
+    #[tracing::instrument(skip_all)]
     pub(super) fn load_db_and_smirk(config: &Config) -> Result<LoadedData> {
         let db_path = &config.db_path.join("latest");
         info!("Loading DB from: {}", db_path.to_str().unwrap());
@@ -28,10 +30,15 @@ impl Node {
         let smirk_path = config.smirk_path.join("latest");
         info!("Loading Smirk from: {}", &smirk_path.to_str().unwrap());
 
-        let block_store = BlockStore::create_or_load(db_path)?;
-        let mut persistent_tree = smirk::storage::Persistent::load(&smirk_path)?;
+        let block_store = BlockStore::create_or_load(db_path)
+            .context("load block store from latest database path")?;
+        let mut persistent_tree = smirk::storage::Persistent::load(&smirk_path)
+            .context("load persistent smirk tree from latest path")?;
 
-        let Some(max_height) = block_store.get_max_height()? else {
+        let Some(max_height) = block_store
+            .get_max_height()
+            .context("fetch max block height from block store")?
+        else {
             info!(
                 smirk_root_hash = ?persistent_tree.tree().root_hash(),
                 "No blocks found in the block store, resetting smirk and starting from genesis"
@@ -40,8 +47,8 @@ impl Node {
             drop(persistent_tree);
 
             Self::reset_db_and_smirk(None, Some(&config.smirk_path))?;
-            let persistent_tree =
-                smirk::storage::Persistent::load(smirk_path)?;
+            let persistent_tree = smirk::storage::Persistent::load(&smirk_path)
+                .context("reload persistent smirk tree after reset")?;
 
             debug_assert_eq!(persistent_tree.tree().root_hash(), empty_tree_hash());
 
@@ -54,7 +61,11 @@ impl Node {
             return Ok(data);
         };
 
-        let block = block_store.get(max_height)?.unwrap().into_block();
+        let block = block_store
+            .get(max_height)
+            .context("fetch latest block from block store")?
+            .unwrap()
+            .into_block();
 
         if persistent_tree.tree().root_hash() == block.content.state.root_hash {
             let data = LoadedData {
@@ -67,7 +78,8 @@ impl Node {
         }
 
         let previous_block = block_store
-            .get(BlockHeight(max_height.0 - 1))?
+            .get(BlockHeight(max_height.0 - 1))
+            .context("fetch previous block during crash recovery")?
             .unwrap()
             .into_block();
 
@@ -83,7 +95,6 @@ impl Node {
                 &mut persistent_tree,
                 &block.content.state,
                 max_height,
-                config.bad_blocks.contains(&max_height),
             )?;
             assert!(persistent_tree.tree().root_hash() == block.content.state.root_hash);
 
@@ -107,10 +118,15 @@ impl Node {
 
         Self::reset_db_and_smirk(Some(&config.db_path), Some(&config.smirk_path))?;
 
-        let block_store = BlockStore::create_or_load(db_path)?;
-        let persistent_tree = smirk::storage::Persistent::load(&smirk_path)?;
+        let block_store =
+            BlockStore::create_or_load(db_path).context("reload block store after full reset")?;
+        let persistent_tree = smirk::storage::Persistent::load(&smirk_path)
+            .context("reload persistent smirk tree after full reset")?;
 
-        debug_assert!(block_store.get_max_height()?.is_none());
+        let max_height = block_store
+            .get_max_height()
+            .context("verify block store empty after reset")?;
+        debug_assert!(max_height.is_none());
         debug_assert_eq!(persistent_tree.tree().root_hash(), empty_tree_hash(),);
 
         let data = LoadedData {
@@ -123,6 +139,7 @@ impl Node {
     }
 
     /// Moves current db and smirk to old-{unix-timestamp-millis}-{random}
+    #[tracing::instrument(skip_all)]
     fn reset_db_and_smirk(db_path: Option<&Path>, smirk_path: Option<&Path>) -> Result<()> {
         let timestamp = chrono::Utc::now().timestamp_millis();
         let random = rand::random::<u32>();
@@ -130,13 +147,15 @@ impl Node {
 
         if let Some(db_path) = db_path {
             let new_db_path = db_path.join(&new_dir_name);
-            std::fs::rename(db_path.join("latest"), &new_db_path)?;
+            std::fs::rename(db_path.join("latest"), &new_db_path)
+                .context("rename latest db directory into timestamped backup")?;
             info!("Moved db to {:?}", new_db_path);
         }
 
         if let Some(smirk_path) = smirk_path {
             let new_smirk_path = smirk_path.join(&new_dir_name);
-            std::fs::rename(smirk_path.join("latest"), &new_smirk_path)?;
+            std::fs::rename(smirk_path.join("latest"), &new_smirk_path)
+                .context("rename latest smirk directory into timestamped backup")?;
             info!("Moved smirk to {:?}", new_smirk_path);
         }
 

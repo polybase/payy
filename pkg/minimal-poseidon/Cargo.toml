@@ -1,0 +1,10 @@
+[package]
+name = "minimal-poseidon"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+halo2curves = { workspace = true, features = ["derive_serde"] }
+ff = { workspace = true }
+lazy_static = { workspace = true }
+workspace-hack.workspace = true

@@ -1,0 +1,32 @@
+[package]
+name = "aggregator"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+aggregator-interface = { workspace = true }
+barretenberg-interface = { workspace = true }
+node-interface = { workspace = true }
+element = { workspace = true }
+contracts = { workspace = true }
+contextful = { workspace = true }
+zk-circuits = { workspace = true }
+primitives = { workspace = true }
+zk-primitives = { workspace = true }
+prover = { workspace = true }
+smirk = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time"] }
+borsh = { workspace = true }
+sha3 = { workspace = true }
+futures = { workspace = true }
+
+async-trait = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+workspace-hack.workspace = true
+web3 = { workspace = true }
+unimock = { workspace = true }
+
+[dev-dependencies]
+hash = { workspace = true }

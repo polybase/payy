@@ -1,2 +1,59 @@
-/fixtures/params/*.srs filter=lfs diff=lfs merge=lfs -text
-audits/kalos_2024_02_23.pdf filter=lfs diff=lfs merge=lfs -text
+# Smart contract binaries - suppress diffs
+eth/contracts/**/*.bin binary -diff
+
+# Generated Solidity verifiers (90-97 KB each, auto-generated from Noir)
+eth/noir/*.sol -diff
+
+# Hardhat/Solidity artifacts and generated bindings
+eth/artifacts/**/*.json linguist-generated=true -diff
+eth/artifacts/**/*.d.ts linguist-generated=true -diff
+eth/artifacts/contracts/**/*.sol linguist-generated=true -diff
+
+# Noir compiled programs (large JSON or binary, up to 1.6 MB)
+fixtures/programs/* -diff
+
+# Verification keys and cryptographic data
+fixtures/keys/* -diff
+fixtures/keys/*_key_fields.json -diff
+
+# Proof files
+fixtures/proofs/*.proof -diff
+fixtures/circuits/*.proof -diff
+pkg/node/tests/cache/*.proof -diff
+
+# Cryptographic parameters
+fixtures/params/*.dat -diff
+
+# Insta snapshot files (keep diffs)
+**/snapshots/*.snap text
+linting/tests/__snapshots__/*.yml text
+
+# Test fixtures (includes 1.8 MB large_wallet_mateo.json)
+pkg/wallet-data-dep/tests/fixtures/*.json -diff
+pkg/bungee-client-http/fixtures/*.json -diff
+
+# Package lock files (auto-generated dependencies)
+yarn.lock linguist-generated=true
+package-lock.json linguist-generated=true
+Cargo.lock linguist-generated=true
+bun.lock linguist-generated=true
+bun.lockb binary linguist-generated=true
+flake.lock linguist-generated=true
+
+# Generated source code
+pkg/database/src/schema.rs linguist-generated=true
+**/ts-rs-bindings/*.ts linguist-generated=true
+.github/actions/**/dist/*.js linguist-generated=true -diff
+
+# Large generated/reference data
+app/packages/emoji-shortcode-mapping/*.json -diff
+app/packages/link/src/app/img/note.svg -diff
+
+# Contract compiler artifacts
+eth/contracts/noir/*.linkrefs.json -diff
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary

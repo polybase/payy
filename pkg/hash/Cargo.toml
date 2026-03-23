@@ -1,0 +1,22 @@
+[package]
+name = "hash"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+element = { workspace = true }
+
+rand = { workspace = true, optional = true }
+serde = { workspace = true }
+hex = { workspace = true }
+bn254_blackbox_solver = { workspace = true }
+workspace-hack.workspace = true
+
+[dev-dependencies]
+insta = { workspace = true }
+rand_chacha = { workspace = true }
+rand_xorshift = { workspace = true }
+rand = { workspace = true }
+
+[features]
+test-api = []

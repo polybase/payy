@@ -1,0 +1,22 @@
+[package]
+name = "agg_final"
+type = "bin"
+authors = [""]
+compiler_version = ">=0.36.0"
+
+[package.metadata.generate_fixtures]
+solidity = true
+oracle_hash = "keccak"
+
+[[package.metadata.generate_fixtures.hash_updates]]
+path = "../../eth/scripts/deploy.ts"
+kind = "const_string"
+name = "AGG_FINAL_VERIFICATION_KEY_HASH"
+
+[[package.metadata.generate_fixtures.hash_updates]]
+path = "../../pkg/contracts/src/rollup.rs"
+kind = "const_string"
+name = "AGG_FINAL_VERIFICATION_KEY_HASH"
+
+[dependencies]
+poseidon = { tag = "v0.1.1", git = "https://github.com/noir-lang/poseidon" }

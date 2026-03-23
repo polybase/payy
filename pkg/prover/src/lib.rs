@@ -1,29 +1,30 @@
 #![warn(clippy::unwrap_used, clippy::expect_used)]
 #![deny(clippy::disallowed_methods)]
 
+// lint-long-file-override allow-max-lines=600
 mod constants;
 pub mod smirk_metadata;
-
-use crate::constants::{MERKLE_TREE_DEPTH, MERKLE_TREE_PATH_DEPTH, UTXO_AGGREGATIONS};
+use crate::constants::{
+    MERKLE_TREE_DEPTH, MERKLE_TREE_PATH_DEPTH, UTXO_AGG_LEAVES, UTXO_AGG_NUMBER, UTXO_AGGREGATIONS,
+};
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use constants::MAXIMUM_TXNS;
-use constants::{UTXO_AGG_LEAVES, UTXO_AGG_NUMBER};
 use contracts::RollupContract;
+use element::Element;
 use ethereum_types::H256;
 use primitives::sig::Signature;
 use smirk::{
+    Path, Tree,
     hash_cache::{NoopHashCache, SimpleHashCache},
-    Element, Tree,
 };
 use smirk_metadata::SmirkMetadata;
 use std::sync::Arc;
 use tracing::info;
 use web3::{ethabi, types::TransactionId};
-use zk_circuits::{
-    aggregate_utxo::AggregateUtxo,
-    chips::aggregation::snark::Snark,
-    data::{AggregateAgg, Batch, Insert, MerklePath, Note, ParameterSet, SnarkWitness, Utxo},
-    evm_verifier, Base, CircuitKind,
+use zk_circuits::{BbBackend, Prove, Verify};
+use zk_primitives::{
+    AggAgg, AggFinal, AggFinalProof, AggProof, AggUtxo, AggUtxoProof, MerklePath, UtxoProof,
+    UtxoProofBundleWithMerkleProofs,
 };
 
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -48,9 +49,6 @@ pub enum Error {
     #[error("ethabi error")]
     EthAbi(#[from] ethabi::Error),
 
-    #[error("zk error: {0}")]
-    Zk(#[from] zk_circuits::Error),
-
     #[error("TryFromSlice error")]
     TryFromSlice(#[from] std::array::TryFromSliceError),
 
@@ -74,36 +72,28 @@ pub enum Error {
 
     #[error("tokio task join error")]
     TokioTaskJoin(#[from] tokio::task::JoinError),
+
+    #[error("barretenberg prove error: {0}")]
+    BarretenbergProve(String),
+
+    #[error("vec to array conversion failed, expected {expected}, got {actual}")]
+    VecToArrayConversion { expected: usize, actual: usize },
 }
 
 #[derive(Debug, Clone)]
 pub struct Transaction {
-    pub proof: SnarkWitness,
+    pub proof: UtxoProof,
 }
 
 impl Transaction {
-    pub fn new(proof: SnarkWitness) -> Self {
+    pub fn new(proof: UtxoProof) -> Self {
         Self { proof }
-    }
-}
-#[derive(Debug, Clone, Default, BorshSerialize, BorshDeserialize)]
-pub struct Proof {
-    pub proof: Vec<u8>,
-    pub agg_instances: Vec<Element>,
-    pub old_root: Element,
-    pub new_root: Element,
-    pub utxo_hashes: Vec<Element>,
-}
-
-impl Proof {
-    pub fn new_root(&self) -> &Element {
-        &self.new_root
     }
 }
 
 #[derive(Debug, Clone, Default, BorshSerialize, BorshDeserialize)]
 pub struct RollupInput {
-    proof: Proof,
+    proof: AggFinalProof,
     height: u64,
     other_hash: [u8; 32],
     signatures: Vec<Signature>,
@@ -111,7 +101,7 @@ pub struct RollupInput {
 
 impl RollupInput {
     pub fn new(
-        proof: Proof,
+        proof: AggFinalProof,
         height: u64,
         other_hash: [u8; 32],
         signatures: Vec<Signature>,
@@ -124,8 +114,12 @@ impl RollupInput {
         }
     }
 
-    pub fn old_root(&self) -> &Element {
-        &self.proof.old_root
+    pub fn old_root(&self) -> Element {
+        self.proof.public_inputs.old_root
+    }
+
+    pub fn new_root(&self) -> Element {
+        self.proof.public_inputs.new_root
     }
 
     pub fn height(&self) -> u64 {
@@ -135,51 +129,35 @@ impl RollupInput {
 
 pub struct Prover {
     contract: RollupContract,
+    bb_backend: Arc<dyn BbBackend>,
 }
 
 impl Prover {
-    pub fn new(contract: RollupContract) -> Self {
-        Self { contract }
+    pub fn new(contract: RollupContract, bb_backend: Arc<dyn BbBackend>) -> Self {
+        Self {
+            contract,
+            bb_backend,
+        }
     }
 
     #[tracing::instrument(err, skip_all, fields(height, txns_len = txns.len()))]
     pub async fn prove(
         self: &Arc<Self>,
         notes_tree: &MerkleTree<SimpleHashCache>,
-        _ban_tree: &MerkleTree,
         height: u64,
         txns: [Option<Transaction>; MAXIMUM_TXNS],
-    ) -> Result<Proof> {
+    ) -> Result<AggFinalProof> {
         info!(
             "Bundling {} UTXO proof(s) and proving new root hash",
             txns.len()
         );
 
-        let (agg, proof) = tokio::task::spawn_blocking({
-            let s = Arc::clone(self);
-            let mut tree = notes_tree.clone();
+        let mut tree = notes_tree.clone();
+        let proof = self
+            .generate_aggregate_proof(&mut tree, txns, height)
+            .await?;
 
-            move || s.generate_aggregate_proof(&mut tree, txns, height)
-        })
-        .await??;
-
-        Ok(Proof {
-            proof,
-            agg_instances: agg
-                .agg_instances()
-                .iter()
-                .copied()
-                .map(Element::from)
-                .collect(),
-            old_root: Element::from(*agg.old_root()),
-            new_root: Element::from(*agg.new_root()),
-            utxo_hashes: agg
-                .utxo_values()
-                .iter()
-                .copied()
-                .map(Element::from)
-                .collect(),
-        })
+        Ok(proof)
     }
 
     #[tracing::instrument(err, skip(self), fields(height = input.height))]
@@ -189,13 +167,12 @@ impl Prover {
         let tx = self
             .contract
             .verify_block(
-                &input.proof.proof,
-                // These should never fail. If they fail, we will catch them in testing
-                #[allow(clippy::unwrap_used)]
-                input.proof.agg_instances.clone().try_into().unwrap(),
-                &input.proof.old_root,
-                &input.proof.new_root,
-                &input.proof.utxo_hashes,
+                &input.proof.proof.0,
+                &input.proof.public_inputs.old_root,
+                &input.proof.public_inputs.new_root,
+                &input.proof.public_inputs.commit_hash,
+                &input.proof.public_inputs.messages.to_vec(),
+                &input.proof.kzg,
                 input.other_hash,
                 input.height,
                 &input
@@ -249,92 +226,130 @@ impl Prover {
     }
 
     #[tracing::instrument(err, skip_all)]
-    fn generate_aggregate_proof(
+    async fn generate_aggregate_proof(
         &self,
         tree: &mut MerkleTree<SimpleHashCache>,
         txns: [Option<Transaction>; 6],
         current_block: u64,
-    ) -> Result<(AggregateAgg<1>, Vec<u8>), Error> {
-        let mut txns = txns.into_iter().map(|t| match t {
-            Some(t) => Ok(t),
-            None => Ok(Transaction {
-                proof: SnarkWitness::V1(
-                    Utxo::<MERKLE_TREE_DEPTH>::new_padding()
-                        .snark(CircuitKind::Utxo)?
-                        .to_witness(),
-                ),
-            }),
-        });
+    ) -> Result<AggFinalProof, Error> {
+        let txns = txns
+            .into_iter()
+            .map(|t| match t {
+                Some(t) => Ok(t),
+                None => Ok(Transaction {
+                    proof: UtxoProof::default(),
+                }),
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let txns = &mut txns.iter();
 
         let mut utxo_aggregations = Vec::new();
         for _i in 0..UTXO_AGGREGATIONS {
+            // Take the first 3 txns (removing from the vec)
             // Unwrap is safe because we know we have enough txns
             #[allow(clippy::unwrap_used)]
-            let txns: [Transaction; UTXO_AGG_NUMBER] = (&mut txns)
+            let txns: [Transaction; UTXO_AGG_NUMBER] = txns
                 .take(3)
-                .collect::<Result<Vec<_>>>()?
+                .cloned()
+                .collect::<Vec<_>>()
                 .try_into()
                 .unwrap();
 
-            let utxo_aggregate = self.aggregate_utxo(tree, txns.clone(), current_block)?;
+            let utxo_aggregate = self
+                .aggregate_utxo(tree, txns.clone(), current_block)
+                .await?;
             utxo_aggregations.push(utxo_aggregate);
         }
 
-        #[allow(clippy::unwrap_used)]
-        let agg = self.aggregate_aggregate_utxo(&utxo_aggregations.try_into().unwrap())?;
-        let agg_agg_agg = AggregateAgg::<1>::new([agg.snark(ParameterSet::TwentyOne)?]);
-        let agg = agg_agg_agg;
-        let (pk, _) = agg.keygen(ParameterSet::TwentyOne);
-        let proof = evm_verifier::gen_proof(
-            ParameterSet::TwentyOne,
-            &pk,
-            agg.clone(),
-            &[&agg.public_inputs()],
-        )?;
+        let utxo_aggregations: [AggUtxoProof; UTXO_AGGREGATIONS] = utxo_aggregations
+            .try_into()
+            .map_err(|v: Vec<_>| Error::VecToArrayConversion {
+                expected: UTXO_AGGREGATIONS,
+                actual: v.len(),
+            })?;
 
-        Ok((agg, proof))
+        let agg_proofs: [AggProof; UTXO_AGGREGATIONS] =
+            utxo_aggregations.map(|proof| AggProof::AggUtxo(Box::new(proof)));
+
+        let agg_agg = AggAgg::new(agg_proofs);
+        let agg_agg_proof = agg_agg
+            .prove(&*self.bb_backend)
+            .await
+            .map_err(|e| Error::BarretenbergProve(e.to_string()))?;
+
+        let agg_final = AggFinal::new(agg_agg_proof);
+        let proof = agg_final
+            .prove(&*self.bb_backend)
+            .await
+            .map_err(|e| Error::BarretenbergProve(e.to_string()))?;
+
+        // Verify the newly generated proof
+        proof
+            .verify(&*self.bb_backend)
+            .await
+            .map_err(|e| Error::BarretenbergProve(e.to_string()))?;
+
+        Ok(proof)
     }
 
     #[tracing::instrument(err, skip_all)]
-    fn aggregate_aggregate_utxo(
-        &self,
-        aggregations: &[AggregateUtxo<UTXO_AGG_NUMBER, MERKLE_TREE_DEPTH, UTXO_AGG_LEAVES>;
-             UTXO_AGGREGATIONS],
-    ) -> Result<AggregateAgg<UTXO_AGGREGATIONS>, Error> {
-        Ok(AggregateAgg::new(
-            #[allow(clippy::unwrap_used)]
-            TryInto::<[Snark; UTXO_AGGREGATIONS]>::try_into(
-                aggregations
-                    .iter()
-                    .map(|a| a.snark(ParameterSet::TwentyOne))
-                    .collect::<Result<Vec<Snark>, _>>()?,
-            )
-            .unwrap(),
-        ))
-    }
-
-    #[tracing::instrument(err, skip_all)]
-    fn aggregate_utxo(
+    async fn aggregate_utxo(
         &self,
         tree: &mut MerkleTree<SimpleHashCache>,
         utxos: [Transaction; UTXO_AGG_NUMBER],
         current_block: u64,
-    ) -> Result<AggregateUtxo<UTXO_AGG_NUMBER, MERKLE_TREE_DEPTH, UTXO_AGG_LEAVES>, Error> {
-        let (_, _, _, batch) = self.gen_batch(tree, &utxos, current_block)?;
-        // TODO: use pre-generated VK as this can be expensive
-        let (_, utxo_vk) = Utxo::<MERKLE_TREE_DEPTH>::default().keygen(ParameterSet::Fourteen);
+    ) -> Result<AggUtxoProof, Error> {
+        if utxos.iter().all(|utxo| utxo.proof.is_padding()) {
+            return Ok(AggUtxoProof::default());
+        }
 
-        Ok(AggregateUtxo::new(
-            utxos.map(|u| {
-                let SnarkWitness::V1(proof) = u.proof;
-                proof.to_snark(&utxo_vk, ParameterSet::Fourteen)
-            }),
-            batch,
-        ))
+        let (_, old_tree, new_tree, merkle_paths) =
+            self.gen_merkle_paths(tree, &utxos, current_block)?;
+
+        // Chunk the merkle paths into 3 x 4
+        let merkle_paths = merkle_paths.chunks(4).collect::<Vec<_>>();
+
+        let mut utxo_proof_bundles = Vec::new();
+
+        for (i, chunk) in merkle_paths.into_iter().enumerate() {
+            let utxo = &utxos[i];
+
+            let utxo_proof_bundle = match utxo.proof.is_padding() {
+                false => UtxoProofBundleWithMerkleProofs::new(
+                    utxo.proof.clone(),
+                    &[
+                        chunk[0].clone(),
+                        chunk[1].clone(),
+                        chunk[2].clone(),
+                        chunk[3].clone(),
+                    ],
+                ),
+                true => UtxoProofBundleWithMerkleProofs::default(),
+            };
+
+            utxo_proof_bundles.push(utxo_proof_bundle);
+        }
+
+        let utxo_proof_bundles: [UtxoProofBundleWithMerkleProofs; UTXO_AGG_NUMBER] =
+            utxo_proof_bundles
+                .try_into()
+                .map_err(|v: Vec<_>| Error::VecToArrayConversion {
+                    expected: UTXO_AGG_NUMBER,
+                    actual: v.len(),
+                })?;
+
+        let agg_utxo = AggUtxo::new(utxo_proof_bundles, old_tree, new_tree);
+
+        let agg_utxo_proof = agg_utxo
+            .prove(&*self.bb_backend)
+            .await
+            .map_err(|e| Error::BarretenbergProve(e.to_string()))?;
+
+        Ok(agg_utxo_proof)
     }
 
     #[tracing::instrument(err, skip_all)]
-    fn gen_batch(
+    fn gen_merkle_paths(
         &self,
         tree: &mut MerkleTree<SimpleHashCache>,
         txns: &[Transaction; UTXO_AGG_NUMBER],
@@ -343,99 +358,68 @@ impl Prover {
         usize,
         Element,
         Element,
-        Batch<UTXO_AGG_LEAVES, MERKLE_TREE_DEPTH>,
+        [MerklePath<MERKLE_TREE_DEPTH>; UTXO_AGG_LEAVES],
     )> {
-        let (inserts, old_tree, new_tree) = {
-            let old_tree = tree.root_hash();
-            let padding_path = tree.path_for(Note::padding_note().commitment());
+        let padding_path = MerklePath::default();
 
-            let mut leaves = vec![];
+        let (merkle_paths, old_tree, new_tree) = {
+            let old_tree = tree.root_hash();
+
+            let mut merkle_paths = vec![];
 
             // Extract leaves to be inserted from proof
             for Transaction { proof } in txns {
-                let instances = match &proof {
-                    SnarkWitness::V1(proof) => &proof.instances[0],
-                };
+                for leaf in proof.public_inputs.input_commitments {
+                    if leaf.is_zero() {
+                        merkle_paths.push(padding_path.clone());
+                        continue;
+                    }
 
-                let elements = instances
-                    .iter()
-                    .skip(3)
-                    .map(|f| Element::from_base(f.to_base()))
-                    .collect::<Vec<Element>>();
+                    merkle_paths.push(path_to_merkle_path(tree.path_for(leaf)));
+                    tree.remove(leaf)?;
+                }
 
-                // Skip the first instance, as that is the root
-                leaves.extend(elements);
-            }
+                for leaf in proof.public_inputs.output_commitments {
+                    if leaf.is_zero() {
+                        merkle_paths.push(padding_path.clone());
+                        continue;
+                    }
 
-            let mut inserts = vec![];
-            for leaf in leaves {
-                let path = if leaf == Element::ZERO {
-                    padding_path.clone()
-                } else {
+                    // Insert the leaf into the tree
                     tree.insert(
                         leaf,
                         SmirkMetadata {
                             inserted_in: current_block,
                         },
                     )?;
-                    tree.path_for(leaf)
-                };
-
-                let fpath = path
-                    .siblings_deepest_first()
-                    .iter()
-                    .cloned()
-                    .take(MERKLE_TREE_PATH_DEPTH)
-                    .collect::<Vec<Element>>();
-
-                let mp = MerklePath::new(fpath);
-                inserts.push(Insert::new(leaf, mp));
+                    // Then add the path to the merkle paths
+                    merkle_paths.push(path_to_merkle_path(tree.path_for(leaf)));
+                }
             }
 
             let new_tree = tree.root_hash();
 
-            (inserts, old_tree, new_tree)
+            (merkle_paths, old_tree, new_tree)
         };
-        let inserts_len: usize = inserts.len();
-
-        #[allow(clippy::unwrap_used)]
-        let fixed_size_inserts: [Insert<MERKLE_TREE_DEPTH>; UTXO_AGG_LEAVES] =
-            inserts.try_into().unwrap();
-
-        Ok((
-            inserts_len,
-            old_tree,
-            new_tree,
-            Batch::new(fixed_size_inserts),
-        ))
+        let inserts_len: usize = merkle_paths.len();
+        let merkle_paths: [MerklePath<MERKLE_TREE_DEPTH>; UTXO_AGG_LEAVES] = merkle_paths
+            .try_into()
+            .map_err(|v: Vec<_>| Error::VecToArrayConversion {
+                expected: UTXO_AGG_LEAVES,
+                actual: v.len(),
+            })?;
+        Ok((inserts_len, old_tree, new_tree, merkle_paths))
     }
 
-    pub fn get_proof(&self, notes_tree: &MerkleTree, note_cm: Base) -> Result<Vec<Base>, Error> {
-        let el = Element::from_base(note_cm);
+    // pub fn get_merkle_path_for_commitment(
+    //     &self,
+    //     notes_tree: &MerkleTree,
+    //     commitment: Base,
+    // ) -> Result<Vec<Base>, Error> {
+    //     let el = Element::from_base(commitment);
 
-        // Sibling path
-        let path = notes_tree.path_for(el);
-
-        let path = path
-            .siblings_deepest_first()
-            .iter()
-            .copied()
-            .map(Element::to_base)
-            .collect();
-
-        Ok(path)
-    }
-
-    // TODO: We don't use this yet, when we do, make the ban tree persistent
-    // /// Bans a given address, adding them to the banned list
-    // pub async fn ban_address(&self, address: Base) -> Result<Vec<Base>, Error> {
-    //     let mut ban_tree = self.ban_tree.lock();
-    //     let el = Element::from_base(address);
-
-    //     // Insert address into banned tree
-    //     ban_tree.insert(el, ())?;
-
-    //     let path = ban_tree.path_for(el);
+    //     // Sibling path
+    //     let path = notes_tree.path_for(el);
 
     //     let path = path
     //         .siblings_deepest_first()
@@ -446,27 +430,17 @@ impl Prover {
 
     //     Ok(path)
     // }
+}
 
-    /// Checks if the address is in the banned list
-    pub async fn compliance_check(
-        &self,
-        ban_tree: &MerkleTree,
-        address: Base,
-    ) -> Result<(bool, Vec<Base>), Error> {
-        let el = Element::from_base(address);
+fn path_to_merkle_path(path: Path) -> MerklePath<MERKLE_TREE_DEPTH> {
+    let elements = path
+        .siblings_deepest_first()
+        .iter()
+        .cloned()
+        .take(MERKLE_TREE_PATH_DEPTH)
+        .collect::<Vec<Element>>();
 
-        let is_banned = ban_tree.contains_element(&el);
-        let path = ban_tree.path_for(el);
-
-        let path = path
-            .siblings_deepest_first()
-            .iter()
-            .copied()
-            .map(Element::to_base)
-            .collect();
-
-        Ok((is_banned, path))
-    }
+    MerklePath::new(elements)
 }
 
 // #[cfg(test)]

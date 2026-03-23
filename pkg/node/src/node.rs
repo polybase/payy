@@ -1,3 +1,4 @@
+// lint-long-file-override allow-max-lines=700
 use crate::block::Block;
 use crate::cache::BlockCache;
 use crate::config::Config;
@@ -10,14 +11,17 @@ use crate::mempool::Mempool;
 use crate::network::NetworkEvent;
 use crate::network_handler::network_handler;
 use crate::node::load::LoadedData;
+use crate::sync::SyncWorker;
 use crate::types::BlockHeight;
-use crate::utxo::UtxoProof;
 use crate::{sync, util};
-use block_store::{BlockListOrder, BlockStore, StoreList};
+use block_store::{BlockListOrder, BlockStore, ElementHistoryIndexEntry, StoreList};
+use contextful::ResultContextExt as _;
 use contracts::RollupContract;
 use doomslug::{Approval, ApprovalContent, ApprovalStake, ApprovalValidated, Doomslug};
+use element::Element;
 use futures::Stream;
 use libp2p::PeerId;
+use node_interface::{ElementData, RpcError};
 use p2p2::Network;
 use parking_lot::{Mutex, RwLock};
 use primitives::hash::CryptoHash;
@@ -26,17 +30,18 @@ use primitives::peer::{self, Address, PeerIdSigner};
 use primitives::tick_worker::TickWorker;
 use prover::smirk_metadata::SmirkMetadata;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
 use std::ops::RangeBounds;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
-use tokio_stream::wrappers::UnboundedReceiverStream;
 use tokio_stream::StreamExt;
+use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::{debug, error, info, instrument};
-use zk_primitives::Element;
+use zk_circuits::BbBackend;
+use zk_primitives::UtxoProof;
 
 pub use self::block_format::BlockFormat;
 pub use self::txn_format::TxnFormat;
@@ -86,7 +91,7 @@ pub struct NodeShared {
     /// Ethereum private key
     local_peer: PeerIdSigner,
 
-    rollup_contract: RollupContract,
+    rollup_contracts: Arc<HashMap<u64, RollupContract>>,
 
     /// Config
     config: Config,
@@ -95,7 +100,7 @@ pub struct NodeShared {
     doomslug: Arc<Mutex<Doomslug>>,
 
     /// Mempool for storing pending txns
-    mempool: Mempool<CryptoHash, UtxoProof, BlockHeight, Element, Arc<Block>>,
+    mempool: Mempool<Element, UtxoProof, BlockHeight, Element, Arc<Block>>,
 
     // Block cache (unconfirmed blocks)
     pub(crate) block_cache: Arc<Mutex<BlockCache>>,
@@ -126,6 +131,8 @@ pub struct NodeShared {
     ///
     /// If empty, whitelisting is disabled (i.e. all IPs are allowed)
     pub whitelisted_ips: HashSet<IpAddr>,
+
+    pub bb_backend: Arc<dyn BbBackend>,
 }
 
 pub struct NodeSharedArc(Arc<NodeShared>);
@@ -139,11 +146,23 @@ pub struct NodeSharedState {
     listeners: Vec<mpsc::UnboundedSender<Arc<Block>>>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ElementSeenInfo {
+    #[expect(dead_code)]
+    pub input_height: Option<BlockHeight>,
+    pub output_height: BlockHeight,
+    #[expect(dead_code)]
+    pub input_block_hash: Option<CryptoHash>,
+    pub output_block_hash: CryptoHash,
+    pub spent: bool,
+}
+
 impl Node {
     pub fn new(
         local_peer: PeerIdSigner,
-        rollup_contract: RollupContract,
+        rollup_contracts: Arc<HashMap<u64, RollupContract>>,
         config: Config,
+        bb_backend: Arc<dyn BbBackend>,
     ) -> Result<Self> {
         info!("Mode: {:?}", config.mode);
         info!(
@@ -158,7 +177,9 @@ impl Node {
             block: initial_block,
         } = Self::load_db_and_smirk(&config)?;
 
-        block_store.migrate()?;
+        block_store
+            .migrate()
+            .context("run block store migrations during node startup")?;
 
         let block_store = Arc::new(block_store);
         let notes_tree = Arc::new(RwLock::new(persistent_tree));
@@ -185,13 +206,23 @@ impl Node {
             vec![config.p2p.laddr.clone()].into_iter(),
             config.p2p.dial.clone().into_iter(),
             config.p2p.whitelisted_ips.clone(),
-        )?;
+        )
+        .context("initialize P2P network stack with configured addresses")?;
 
         let (sync_worker_sender, sync_worker_receiver) = mpsc::unbounded_channel();
 
+        let primary_chain_id = config
+            .primary_chain_id()
+            .ok_or(Error::MissingPrimaryChainConfig)?;
+        let primary_rollup_contract = rollup_contracts.get(&primary_chain_id).cloned().ok_or(
+            Error::MissingPrimaryRollupContract {
+                chain_id: primary_chain_id,
+            },
+        )?;
+
         let node_shared = Arc::new(NodeShared {
             local_peer,
-            rollup_contract: rollup_contract.clone(),
+            rollup_contracts: Arc::clone(&rollup_contracts),
             mempool: Mempool::default(),
             block_store,
             block_cache,
@@ -206,11 +237,12 @@ impl Node {
             }),
             sync_worker: sync::SyncWorkerChannel(sync_worker_sender.clone()),
             whitelisted_ips: config.p2p.whitelisted_ips,
+            bb_backend,
         });
 
-        let sync_worker = crate::sync::SyncWorker::new(
+        let sync_worker = SyncWorker::new(
             Arc::clone(&node_shared),
-            rollup_contract,
+            Some(primary_rollup_contract),
             config.sync_chunk_size,
             config.fast_sync_threshold,
             Duration::from_millis(config.sync_timeout_ms),
@@ -242,19 +274,16 @@ impl Node {
             }
         }
 
+        // Run the ticker
+        self.shared
+            .ticker
+            .run(NodeSharedArc(Arc::clone(&self.shared)));
+
         // Wait for the handlers
         tokio::select! {
             res = self.sync_worker.run() => {
                 if let Err(err) =  res {
                     tracing::error!(?err, "Sync worker ended");
-                }
-            }
-            res = self.shared.ticker.run(NodeSharedArc(Arc::clone(&self.shared))) => {
-                match res {
-                    Ok(()) => {}
-                    Err(err) => {
-                        tracing::error!(?err, "Commit ticker ended");
-                    }
                 }
             }
         }
@@ -282,18 +311,38 @@ impl NodeShared {
         &self.notes_tree
     }
 
-    #[must_use]
-    pub(crate) fn is_validator_for_height(&self, height: BlockHeight) -> bool {
+    pub(crate) fn is_validator_for_height(&self, height: BlockHeight) -> Result<bool> {
         if self.config.mode != Mode::Validator {
-            return false;
+            return Ok(false);
         }
 
-        // Check if I am a validator in Ethereum for the given height
-        self.rollup_contract
+        let contract = self.primary_rollup_contract_required()?;
+
+        Ok(contract
             .validators_for_height(height.0)
             .into_iter()
             .map(peer::Address::from)
-            .any(|p| self.local_peer.address() == p)
+            .any(|p| self.local_peer.address() == p))
+    }
+
+    pub(super) fn primary_rollup_contract(&self) -> Option<&RollupContract> {
+        let chain_id = self.config.primary_chain_id()?;
+        self.rollup_contracts.get(&chain_id)
+    }
+
+    pub(super) fn primary_rollup_contract_required(&self) -> Result<&RollupContract> {
+        let chain_id = self
+            .config
+            .primary_chain_id()
+            .ok_or(Error::MissingPrimaryChainConfig)?;
+
+        self.rollup_contracts
+            .get(&chain_id)
+            .ok_or(Error::MissingPrimaryRollupContract { chain_id })
+    }
+
+    pub(super) fn rollup_contract_for_chain(&self, chain_id: u64) -> Option<&RollupContract> {
+        self.rollup_contracts.get(&chain_id)
     }
 
     pub(crate) fn get_merkle_paths(&self, elements: &[Element]) -> Result<Vec<Vec<Element>>> {
@@ -305,7 +354,8 @@ impl NodeShared {
             .map(|e| {
                 // Check the element is in the tree
                 if !tree.contains_element(e) {
-                    return Err(Error::ElementNotInTree { element: *e });
+                    Err::<Vec<Element>, _>(RpcError::ElementNotFound(ElementData { element: *e }))
+                        .context("merkle path requested for element not present in notes tree")?;
                 }
 
                 // Return the path
@@ -369,11 +419,15 @@ impl NodeShared {
         // 1. Check if the accept is from a valid validator
         // 2. Check if the accept is for the current proposal
         // 3. Check if I am the leader of the accept
-        let approval: ApprovalValidated = approval_message.clone().try_into()?;
+        let approval: ApprovalValidated = approval_message
+            .clone()
+            .try_into()
+            .context("convert approval message into validated doomslug approval")?;
 
         // Get validator stakes
-        let stakes = self
-            .rollup_contract
+        let contract = self.primary_rollup_contract_required()?;
+
+        let stakes = contract
             .validators_for_height(approval_message.content.target_height)
             .into_iter()
             .map(|address| {
@@ -402,13 +456,22 @@ impl NodeShared {
 
     pub fn get_leader_for_block_height(&self, height: BlockHeight) -> Address {
         // TODO: will validators be in the same order for all nodes?
-        let validators = self.rollup_contract.validators_for_height(height.0);
+        let Some(contract) = self.primary_rollup_contract() else {
+            return self.self_peer();
+        };
+
+        let validators = contract.validators_for_height(height.0);
+        if validators.is_empty() {
+            return self.self_peer();
+        }
         let leader_index = height.0 % validators.len() as u64;
         Address::from(validators[leader_index as usize])
     }
 
     pub(crate) async fn handle_out_of_sync(&self) -> Result<()> {
-        self.sync_worker.out_of_sync(self.max_height())?;
+        self.sync_worker
+            .out_of_sync(self.max_height())
+            .context("check whether node is out of sync before scheduling recovery")?;
 
         Ok(())
     }
@@ -419,22 +482,23 @@ impl NodeShared {
         order: BlockListOrder,
     ) -> impl StoreList<Item = Result<BlockFormat>> + '_ {
         self.block_store.list(height_range, order).map(|r| {
-            let (_, block) = r?;
+            let (_, block) = r.context("materialize block entry from store list during fetch")?;
             Ok(block)
         })
     }
 
-    pub fn fetch_blocks_paginated(
-        &self,
-        cursor: &Option<CursorChoice<BlockHeight>>,
+    pub fn fetch_blocks_paginated<'a>(
+        &'a self,
+        cursor: &'a Option<CursorChoice<BlockHeight>>,
         order: BlockListOrder,
         limit: usize,
-    ) -> Result<impl Iterator<Item = Result<BlockFormat>> + '_> {
+    ) -> Result<impl Iterator<Item = Result<BlockFormat>> + 'a> {
         Ok(self
             .block_store
-            .list_paginated(cursor, order, limit)?
+            .list_paginated(cursor, order, limit)
+            .context("paginate block store listing")?
             .map(|r| {
-                let (_, block) = r?;
+                let (_, block) = r.context("materialize paginated block entry")?;
                 Ok(block)
             }))
     }
@@ -447,36 +511,75 @@ impl NodeShared {
         self.block_store
             .list_non_empty(height_range, order)
             .map(|r| {
-                let (_, block) = r?;
+                let (_, block) = r.context("materialize non-empty block entry from store")?;
                 Ok(block)
             })
     }
 
-    pub fn fetch_blocks_non_empty_paginated(
-        &self,
-        cursor: &Option<CursorChoice<BlockHeight>>,
+    pub fn fetch_blocks_non_empty_paginated<'a>(
+        &'a self,
+        cursor: &'a Option<CursorChoice<BlockHeight>>,
         order: BlockListOrder,
         limit: usize,
-    ) -> Result<impl Iterator<Item = Result<BlockFormat>> + '_> {
+    ) -> Result<impl Iterator<Item = Result<BlockFormat>> + 'a> {
         Ok(self
             .block_store
-            .list_non_empty_paginated(cursor, order, limit)?
+            .list_non_empty_paginated(cursor, order, limit)
+            .context("paginate non-empty block listing")?
             .map(|r| {
-                let (_, block) = r?;
+                let (_, block) = r.context("materialize paginated non-empty block entry")?;
                 Ok(block)
             }))
     }
 
     pub(crate) fn get_block(&self, height: BlockHeight) -> Result<Option<BlockFormat>> {
-        Ok(self.block_store.get(height)?)
+        Ok(self
+            .block_store
+            .get(height)
+            .context("fetch block by height from block store")?)
     }
 
     pub(crate) fn get_block_by_hash(&self, hash: CryptoHash) -> Result<Option<BlockFormat>> {
-        let Some(block_height) = self.block_store.get_block_height_by_hash(hash.into_inner())? else {
+        let Some(block_height) = self
+            .block_store
+            .get_block_height_by_hash(hash.into_inner())
+            .context("resolve block height by block hash")?
+        else {
             return Ok(None);
         };
 
         self.get_block(block_height)
+    }
+
+    /// Returns info about when an element was first seen (as an output), and whether it was later
+    /// spent (seen as an input). If the element has never been seen, returns None.
+    pub(crate) fn get_element_seen_info(
+        &self,
+        element: Element,
+    ) -> Result<Option<ElementSeenInfo>> {
+        let (input_hist, output_hist) = self
+            .block_store
+            .get_element_history(element)
+            .context("fetch element history from block store")?;
+        if let Some(out) = output_hist {
+            let spent = input_hist.is_some();
+            Ok(Some(ElementSeenInfo {
+                input_height: input_hist.as_ref().map(|h| h.block_height),
+                output_height: out.block_height,
+                input_block_hash: input_hist.map(|h| h.block_hash),
+                output_block_hash: out.block_hash,
+                spent,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub(crate) fn element_history_range(
+        &self,
+        range: impl RangeBounds<BlockHeight>,
+    ) -> Vec<ElementHistoryIndexEntry> {
+        self.block_store.element_history_range(range)
     }
 
     pub(crate) async fn commit_stream(
@@ -514,7 +617,10 @@ impl NodeShared {
     }
 
     pub(crate) fn get_txn(&self, txn_hash: [u8; 32]) -> Result<Option<(UtxoProof, TxnMetadata)>> {
-        let txn = self.block_store.get_txn_by_hash(txn_hash)?;
+        let txn = self
+            .block_store
+            .get_txn_by_hash(txn_hash)
+            .context("fetch transaction by hash from block store")?;
         Ok(txn.map(|TxnFormat::V1(txn, metadata)| (txn, metadata)))
     }
 

@@ -2,21 +2,22 @@ use core::fmt::Debug;
 use std::sync::Arc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use rocksdb::{IteratorMode, DB};
+use element::Element;
+use rocksdb::{DB, IteratorMode};
 use wire_message::WireMessage;
-use zk_primitives::Element;
 
 use crate::{
+    Batch, Tree,
     hash_cache::{KnownHash, SimpleHashCache},
     storage::format::{KeyV2, ValueFormat},
-    Batch, Tree,
 };
 
 use super::{
-    format::{KeyFormat, ValueV2},
     Error,
+    format::{KeyFormat, ValueV2},
 };
 
+#[tracing::instrument(skip_all)]
 pub(super) fn load_tree<const DEPTH: usize, V>(
     db: &DB,
 ) -> Result<Tree<DEPTH, V, SimpleHashCache>, Error>

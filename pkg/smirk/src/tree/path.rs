@@ -1,6 +1,6 @@
-use std::iter::zip;
-
-use crate::{Element, Lsb, Tree};
+// lint-long-file-override allow-max-lines=400
+use crate::Tree;
+use element::{Element, Lsb};
 
 use super::tree_repr::Node;
 
@@ -22,6 +22,7 @@ use super::tree_repr::Node;
 /// To get a [`Path`], generate it from a tree:
 /// ```rust
 /// # use smirk::*;
+/// # use element::Element;
 /// let tree: Tree<64, _> = smirk! { 1, 2, 3, 4, 5 };
 ///
 /// // generate a path for the element 1
@@ -44,23 +45,17 @@ use super::tree_repr::Node;
 /// assert_ne!(hash_if_collision, tree.root_hash());
 /// ```
 #[derive(Debug, Clone)]
-pub struct Path<const DEPTH: usize> {
+pub struct Path {
     /// The siblings of the element with the deepest siblings first
-    ///
-    /// The first N - 1 values are the siblings, and the last value is the element that created
-    /// this [`Path`]
-    ///
-    /// Ideally, we would have 2 fields here:
-    ///  - `siblings: [Element: {N - 1}]`
-    ///  - `element: Element`
-    /// Unfortunately, Rust doesn't yet support this. So we just squeeze them together and deal
-    /// with it 🤷
-    pub siblings: [Element; DEPTH],
+    pub siblings: Vec<Element>,
+
+    /// The element that this path leads to
+    pub element: Element,
 
     pub(crate) root_hash: Element,
 }
 
-impl<const DEPTH: usize> Path<DEPTH> {
+impl Path {
     /// Get a slice of siblings in this path
     ///
     /// Note that a [`Tree<DEPTH>`] will generate a `Path<DEPTH>` (due to limitations in Rust's
@@ -68,6 +63,7 @@ impl<const DEPTH: usize> Path<DEPTH> {
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// let tree = Tree::<64, i32>::new();
     /// let path = tree.path_for(Element::ONE);
     /// assert_eq!(path.siblings_deepest_first().len(), 63);
@@ -75,7 +71,7 @@ impl<const DEPTH: usize> Path<DEPTH> {
     #[inline]
     #[must_use]
     pub fn siblings_deepest_first(&self) -> &[Element] {
-        &self.siblings[0..(DEPTH - 1)]
+        &self.siblings
     }
 
     /// The [`Element`] that this path proves the (non) existance of (i.e. the argument to
@@ -83,6 +79,7 @@ impl<const DEPTH: usize> Path<DEPTH> {
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// let tree = Tree::<64, ()>::default();
     /// let element = Element::new(1234);
     ///
@@ -92,7 +89,7 @@ impl<const DEPTH: usize> Path<DEPTH> {
     #[inline]
     #[must_use]
     pub fn element(&self) -> Element {
-        *self.siblings.last().unwrap()
+        self.element
     }
 
     /// The bits that are used by this path to determine left/right choices
@@ -101,6 +98,7 @@ impl<const DEPTH: usize> Path<DEPTH> {
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// let tree = Tree::<4, i32>::default();
     /// let path = tree.path_for(Element::ONE);
     /// let bits: Vec<bool> = path.lsb().iter().copied().collect();
@@ -114,7 +112,7 @@ impl<const DEPTH: usize> Path<DEPTH> {
     #[must_use]
     #[doc(alias = "least_significant_bits")]
     pub fn lsb(&self) -> Lsb {
-        self.element().lsb(DEPTH - 1)
+        self.element().lsb(self.siblings.len())
     }
 
     /// Check whether this [`Path`] proves the existance of the given [`Element`]
@@ -124,6 +122,7 @@ impl<const DEPTH: usize> Path<DEPTH> {
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// let tree: Tree<64, _> = smirk! { 1, 2, 3 };
     ///
     /// let path_for_1 = tree.path_for(Element::new(1));
@@ -148,6 +147,7 @@ impl<const DEPTH: usize> Path<DEPTH> {
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// let tree: Tree<64, ()> = smirk! { 1, 2, 3, 4, 5 };
     /// let element = Element::new(3);
     ///
@@ -161,21 +161,19 @@ impl<const DEPTH: usize> Path<DEPTH> {
     /// assert_ne!(root_hash_if_null, tree.root_hash());
     /// ```
     ///
-    /// Internally, this function calls [`zk_primitives::compute_merkle_root`]. See the docs for
+    /// Internally, this function calls [`hash::compute_merkle_root`]. See the docs for
     /// that function for more details
     #[must_use]
     pub fn compute_root_hash(&self, element: Element) -> Element {
-        // `.lsb()` yields bits in *big endian* order - so we need to reverse them
-        let bits = self.lsb().into_iter().rev();
-        let siblings = self.siblings_deepest_first().iter().copied();
-
-        zk_primitives::compute_merkle_root(element, zip(siblings, bits))
+        let siblings = self.siblings_deepest_first();
+        hash::compute_merkle_root(element, self.element(), siblings)
     }
 
     /// The root hash of the tree when this path was created
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// let tree: Tree<64, _> = smirk! { 1, 2, 3, 4, 5 };
     /// let path = tree.path_for(Element::ONE);
     ///
@@ -194,6 +192,7 @@ impl<const DEPTH: usize, V, C> Tree<DEPTH, V, C> {
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// let tree: Tree<64, _> = smirk! {
     ///     1 => 123,
     ///     2 => 234,
@@ -213,10 +212,11 @@ impl<const DEPTH: usize, V, C> Tree<DEPTH, V, C> {
     /// Given that, this function cannot fail, since every location is conceptually occupied
     /// (either with a real value or [`Element::NULL_HASH`])
     #[must_use]
-    pub fn path_for(&self, element: Element) -> Path<DEPTH> {
+    pub fn path_for(&self, element: Element) -> Path {
         let bits = element.lsb(DEPTH - 1);
 
-        let mut siblings = [Element::NULL_HASH; DEPTH];
+        let mut siblings = Vec::with_capacity(DEPTH - 1);
+        siblings.resize(DEPTH - 1, Element::NULL_HASH);
         let mut tree = &self.tree;
 
         for (index, bit) in bits.iter().enumerate() {
@@ -251,14 +251,12 @@ impl<const DEPTH: usize, V, C> Tree<DEPTH, V, C> {
             }
         }
 
-        // set the last element
-        *siblings.last_mut().unwrap() = element;
-
         // reverse the siblings so they are in depth-first order
         siblings[0..DEPTH - 1].reverse();
 
         Path {
             siblings,
+            element,
             root_hash: self.root_hash(),
         }
     }

@@ -1,0 +1,1 @@
+ALTER TABLE "wallets" ADD COLUMN "fraud_block" BOOL NOT NULL DEFAULT FALSE;

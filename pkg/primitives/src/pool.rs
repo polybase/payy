@@ -110,6 +110,17 @@ impl<T> Drop for PoolGuard<T> {
     }
 }
 
+impl<T> std::fmt::Debug for PoolGuard<T>
+where
+    T: std::fmt::Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PoolGuard")
+            .field("value", &self.value)
+            .finish()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

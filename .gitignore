@@ -2,11 +2,32 @@ target/
 .DS_Store
 /.direnv/
 node_modules
-pkg/zk-circuits/params
 
 pkg/**/params
-dist
+dist/
 
 *.service-account.json
 
 .env.local
+
+# json-store test data
+pkg/json-store/test_fixtures/
+
+# for Vim editor using CoC, for instance
+temp_fixtures
+*.vim
+*.env.*
+!.env.development
+
+.claude/settings.local.json
+# Keep the dist for cloud-cache as it's required by github actions
+!.github/actions/cloud-cache/dist/
+
+# Hardhat debug files
+*.dbg.json
+
+# Claude Code completion markers
+.done
+
+# Symlink to GENERATED_AI_GUIDANCE.md (canonical file)
+CLAUDE.md

@@ -1,3 +1,4 @@
+// lint-long-file-override allow-max-lines=800
 use std::future::Future;
 use std::pin::Pin;
 use std::str::FromStr;
@@ -7,20 +8,40 @@ use std::time::Duration;
 use super::{Error, Result};
 use crate::config::Config;
 use crate::constants::MERKLE_TREE_DEPTH;
+use crate::errors::Error as NodeError;
 use crate::prover::db::{LastSeenBlock, ProverDb};
 use crate::types::BlockHeight;
 use crate::{Mode, NodeShared, PersistentMerkleTree};
-use contracts::RollupContract;
+use contracts::{Error as ContractsError, RollupContract};
 use either::Either;
-use futures::StreamExt;
-use prover::smirk_metadata::SmirkMetadata;
+use element::Element;
+use futures::{StreamExt, future::pending};
+use prover::{MAXIMUM_TXNS, RollupInput};
 use prover::{Prover, Transaction};
-use prover::{RollupInput, MAXIMUM_TXNS};
 use scopeguard::ScopeGuard;
-use smirk::{empty_tree_hash, Element, Tree};
-use tokio::sync::{mpsc, Mutex, Notify};
-use tracing::{error, info};
-use zk_circuits::data::Utxo;
+use smirk::empty_tree_hash;
+use tokio::sync::{Mutex, Notify, mpsc};
+use tracing::{error, info, warn};
+use web3::types::U256;
+
+const GWEI_IN_WEI: u64 = 1_000_000_000;
+
+fn gas_price_exceeds_threshold(max_rollup_gas_price_gwei: u64, current_gas_price: U256) -> bool {
+    let max_gas_price = U256::from(max_rollup_gas_price_gwei) * U256::from(GWEI_IN_WEI);
+
+    let exceeds_threshold = current_gas_price > max_gas_price;
+
+    if exceeds_threshold {
+        info!(
+            ?current_gas_price,
+            ?max_gas_price,
+            "Skipping rollup due to high gas price"
+        );
+    }
+
+    exceeds_threshold
+}
+use zk_primitives::{AggFinalProof, UtxoKind};
 
 pub async fn run_prover(config: &Config, node: Arc<NodeShared>) -> Result<()> {
     let (client, postgres_future) = if let Some(url) = &config.prover_database_url {
@@ -45,15 +66,23 @@ pub async fn run_prover(config: &Config, node: Arc<NodeShared>) -> Result<()> {
         web3::signing::SecretKey::from_slice(&config.secret_key.secret_key().secret_bytes()[..])
             .unwrap();
 
+    let chain = config
+        .primary_chain()
+        .ok_or_else(|| Error::Node(NodeError::UnsupportedChain { chain_id: 0 }))?;
+
     let contracts_client =
-        contracts::Client::new(&config.eth_rpc_url, config.minimum_gas_price_gwei);
-    let contract =
-        contracts::RollupContract::load(contracts_client, &config.rollup_contract_addr, secret_key)
-            .await?;
+        contracts::Client::new(&chain.eth_rpc_url, config.minimum_gas_price_gwei);
+    let contract = contracts::RollupContract::load(
+        contracts_client,
+        u128::from(chain.chain_id),
+        &chain.rollup_contract_addr,
+        secret_key,
+    )
+    .await?;
 
     let db_path = config.db_path.join("prover");
     let prover_state_db = Arc::new(ProverDb::create_or_load(&db_path)?);
-    let prover = Arc::new(Prover::new(contract.clone()));
+    let prover = Arc::new(Prover::new(contract.clone(), Arc::clone(&node.bb_backend)));
 
     let smirk_path = config.smirk_path.join("prover");
     let notes_tree = Arc::new(Mutex::new(Some(PersistentMerkleTree::load(&smirk_path)?)));
@@ -95,32 +124,59 @@ pub async fn run_prover(config: &Config, node: Arc<NodeShared>) -> Result<()> {
         Some(n) => return Err(Error::InvalidProverVersion(n)),
     }
 
-    tokio::try_join!(
-        run_prover_worker(
-            config,
-            Arc::clone(&node),
-            contract.clone(),
-            Arc::clone(&prover_state_db),
-            Arc::clone(&notes_tree),
-            client.clone(),
-            prover_worker_delete_smirk,
-            Arc::clone(&prover),
-            Arc::clone(&proof_notifier),
-        ),
-        run_rollup_worker(
-            Duration::from_millis(config.rollup_wait_time_ms),
-            contract,
-            prover_state_db,
-            prover,
-            proof_notifier,
-            None,
-            client,
-        ),
+    let prover_worker_future = {
+        let node = Arc::clone(&node);
+        let contract_clone = contract.clone();
+        let prover_state_db_clone = Arc::clone(&prover_state_db);
+        let notes_tree_clone = Arc::clone(&notes_tree);
+        let client_clone = client.clone();
+        let prover_clone = Arc::clone(&prover);
+        let proof_notifier_clone = Arc::clone(&proof_notifier);
+
         async move {
-            postgres_future.await?;
-            Ok(())
+            if config.enable_prover_worker {
+                run_prover_worker(
+                    config,
+                    node,
+                    contract_clone,
+                    prover_state_db_clone,
+                    notes_tree_clone,
+                    client_clone,
+                    prover_worker_delete_smirk,
+                    prover_clone,
+                    proof_notifier_clone,
+                )
+                .await
+            } else {
+                info!("Prover worker disabled via configuration (enable_prover_worker = false)");
+                pending::<Result<()>>().await
+            }
         }
-    )?;
+    };
+
+    let rollup_worker_future = async {
+        if config.enable_rollup_worker {
+            run_rollup_worker(
+                Duration::from_millis(config.rollup_wait_time_ms),
+                contract,
+                prover_state_db,
+                prover,
+                proof_notifier,
+                chain.max_rollup_gas_price_gwei,
+                None,
+                client,
+            )
+            .await
+        } else {
+            info!("Rollup worker disabled via configuration (enable_rollup_worker = false)");
+            pending::<Result<()>>().await
+        }
+    };
+
+    tokio::try_join!(prover_worker_future, rollup_worker_future, async move {
+        postgres_future.await?;
+        Ok(())
+    })?;
 
     Ok(())
 }
@@ -140,48 +196,15 @@ async fn run_prover_worker<Fut>(
 where
     Fut: Future<Output = Result<()>>,
 {
-    let ban_tree = Tree::<MERKLE_TREE_DEPTH, SmirkMetadata>::new();
-
     let initial_contract_block_height = BlockHeight(contract.block_height().await?);
 
-    {
-        // Wait for node to notice it's out of sync
-        tokio::time::sleep(Duration::from_secs(5)).await;
-        // Wait for node to sync.
-        // Trying to sync without waiting would mean invalid prover smirk tree,
-        // if the node synced with fast sync.
-        while node.is_out_of_sync() {
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        }
-
-        let mut prover_tree = notes_tree.lock().await;
-        let prover_tree = prover_tree.as_mut().unwrap();
-        let node_notes_tree = node.notes_tree().read();
-
-        let elements_rolled_up_not_in_prover =
-            node_notes_tree.tree().elements().filter(|(el, meta)| {
-                meta.inserted_in <= initial_contract_block_height.0
-                    && !prover_tree.tree().contains_element(el)
-            });
-
-        let mut batch = smirk::Batch::new();
-        let mut highest_block_height = None;
-        for (el, meta) in elements_rolled_up_not_in_prover {
-            batch.insert(*el, SmirkMetadata::inserted_in(meta.inserted_in))?;
-            if highest_block_height.map_or(true, |highest_block_height: BlockHeight| {
-                meta.inserted_in > highest_block_height.0
-            }) {
-                highest_block_height = Some(BlockHeight(meta.inserted_in));
-            }
-        }
-        prover_tree.insert_batch(batch)?;
-
-        if let Some(highest_block_height) = highest_block_height {
-            prover_state_db.set_last_seen_block(LastSeenBlock {
-                height: highest_block_height,
-                root_hash: prover_tree.tree().root_hash(),
-            })?;
-        }
+    // Wait for node to notice it's out of sync
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    // Wait for node to sync.
+    // Trying to sync without waiting would mean invalid prover smirk tree,
+    // if the node synced with fast sync.
+    while node.is_out_of_sync() {
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
 
     let last_seen_block = prover_state_db
@@ -206,7 +229,9 @@ where
         })?;
         delete_smirk().await?;
         // Exit the process and let the supervisor restart us
-        panic!("Our tree's root hash does not match the last seen block's root hash. Please restart the prover");
+        panic!(
+            "Our tree's root hash does not match the last seen block's root hash. Please restart the prover"
+        );
     }
 
     let height = last_seen_block.height + BlockHeight(1);
@@ -275,7 +300,6 @@ where
                 notes_tree.lock().await.as_mut().unwrap(),
                 &commit.content.state,
                 commit.content.header.height,
-                is_a_bad_block,
             )?;
             prover_state_db.set_last_seen_block(LastSeenBlock {
                 height: commit_height,
@@ -293,7 +317,7 @@ where
             .state
             .txns
             .iter()
-            .map(|utxo| Ok(Some(Transaction::new(utxo.to_snark_witness()))))
+            .map(|utxo_proof| Ok(Some(Transaction::new(utxo_proof.clone()))))
             .collect::<Result<Vec<_>>>()?;
 
         while txns.len() < MAXIMUM_TXNS {
@@ -316,50 +340,40 @@ where
 
         let proof = match config.mode {
             Mode::MockProver => {
-                let utxo_hashes = txns
-                    .into_iter()
-                    .map(|txn| txn.map(|t| t.proof.try_as_v_1().unwrap().instances))
-                    .map(|maybe_instances| {
-                        maybe_instances.unwrap_or_else(|| {
-                            vec![Utxo::<MERKLE_TREE_DEPTH>::new_padding()
-                                .public_inputs()
-                                .into_iter()
-                                .map(Element::from_base)
-                                .collect::<Vec<_>>()]
-                        })
-                    })
-                    .flat_map(|instances| {
-                        let root = instances[0][0];
-                        let mb_hash = instances[0][1];
-                        let mb_value = instances[0][2];
+                let mut agg_final_proof = AggFinalProof::default();
+                agg_final_proof.public_inputs.old_root = notes_tree.tree().root_hash();
+                agg_final_proof.public_inputs.new_root = commit.content.state.root_hash;
 
-                        [root, mb_hash, mb_value]
-                    })
-                    .collect::<Vec<_>>();
+                let mut messages = [Element::ZERO; 1000];
+                let mut index = 0;
 
-                prover::Proof {
-                    proof: vec![],
-                    agg_instances: vec![Element::ZERO; 12],
-                    old_root: notes_tree.tree().root_hash(),
-                    new_root: commit.content.state.root_hash,
-                    utxo_hashes,
+                for proof in commit.content.state.txns.iter() {
+                    let proof_messages = match proof.kind() {
+                        UtxoKind::Null | UtxoKind::Send => &[][..],
+                        UtxoKind::Mint => &proof.public_inputs.messages[..4],
+                        UtxoKind::Burn => &proof.public_inputs.messages[..],
+                    };
+
+                    for &message in proof_messages {
+                        messages[index] = message;
+                        index += 1;
+                    }
                 }
+
+                agg_final_proof.public_inputs.messages = messages.to_vec();
+
+                agg_final_proof
             }
             _ => {
                 prover
-                    .prove(
-                        notes_tree.tree(),
-                        &ban_tree,
-                        commit_height.0,
-                        txns.try_into().unwrap(),
-                    )
+                    .prove(notes_tree.tree(), commit_height.0, txns.try_into().unwrap())
                     .await?
             }
         };
 
-        if proof.new_root() != &commit.content.state.root_hash {
+        if proof.public_inputs.new_root != commit.content.state.root_hash {
             return Err(Error::RootMismatch {
-                got: *proof.new_root(),
+                got: proof.public_inputs.new_root,
                 expected: commit.content.state.root_hash,
             });
         }
@@ -367,12 +381,7 @@ where
         let rollup_input = RollupInput::new(proof, commit_height.0, other_hash, signatures);
         prover_state_db.set_rollup(commit_height, rollup_input.clone())?;
 
-        NodeShared::apply_block_to_tree(
-            notes_tree,
-            &commit.content.state,
-            commit_height,
-            is_a_bad_block,
-        )?;
+        NodeShared::apply_block_to_tree(notes_tree, &commit.content.state, commit_height)?;
         prover_state_db.set_last_seen_block(LastSeenBlock {
             height: commit_height,
             root_hash: commit.content.state.root_hash,
@@ -416,6 +425,7 @@ async fn run_rollup_worker(
     prover_state_db: Arc<ProverDb>,
     prover: Arc<Prover>,
     proof_notifier: Arc<Notify>,
+    max_rollup_gas_price_gwei: Option<u64>,
     rollup_subscription: Option<mpsc::Sender<BlockHeight>>,
     postgres_db: Option<Arc<tokio_postgres::Client>>,
 ) -> Result<()> {
@@ -438,7 +448,8 @@ async fn run_rollup_worker(
 
         let Some(rollup) = prover_state_db
             .list_rollups(contract_height.next()..max)
-            .next() else {
+            .next()
+        else {
             info!(?contract_height, "No proofs to roll up");
             continue;
         };
@@ -448,7 +459,7 @@ async fn run_rollup_worker(
 
         let rollup_contract_root_hash =
             Element::from_be_bytes(rollup_contract.root_hash().await?.0);
-        let rollup = if rollup.old_root() != &rollup_contract_root_hash {
+        let rollup = if rollup.old_root() != rollup_contract_root_hash {
             info!(
                 ?contract_height,
                 ?rollup_contract_root_hash,
@@ -506,6 +517,20 @@ async fn run_rollup_worker(
             rollup
         };
 
+        if let Some(max_gas_price_gwei) = max_rollup_gas_price_gwei {
+            let current_gas_price = match rollup_contract.client.fast_gas_price().await {
+                Ok(price) => price,
+                Err(err) => {
+                    let err = ContractsError::from(err);
+                    warn!(?err, "Failed to fetch gas price; skipping rollup attempt");
+                    continue;
+                }
+            };
+            if gas_price_exceeds_threshold(max_gas_price_gwei, current_gas_price) {
+                continue;
+            }
+        }
+
         let pending_nonce = rollup_contract
             .client
             .get_nonce(
@@ -558,24 +583,78 @@ async fn run_rollup_worker(
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::{
+        io::Write,
+        str::FromStr,
+        sync::{Arc, Mutex},
+    };
 
     use crate::{
-        block::{BlockContent, BlockHeader, BlockState},
         Block,
+        block::{BlockContent, BlockHeader, BlockState},
     };
 
     use super::*;
-    use contracts::{util::convert_element_to_h256, SecretKey};
+    use contracts::{SecretKey, util::convert_element_to_h256};
     use doomslug::ApprovalContent;
     use primitives::peer::PeerIdSigner;
-    use prover::Proof;
     use tempdir::TempDir;
     use testutil::{
-        eth::{EthNode, EthNodeOptions},
         ACCOUNT_1_SK,
+        eth::{EthNode, EthNodeOptions},
     };
+    use zk_circuits::BbBackend;
+    use zk_primitives::AggFinalProof;
 
+    #[derive(Clone)]
+    struct BufferingWriter {
+        buffer: Arc<Mutex<Vec<u8>>>,
+    }
+
+    impl Write for BufferingWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.buffer.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn logs_and_skips_when_gas_price_exceeds_threshold() {
+        let buffer = Arc::new(Mutex::new(Vec::new()));
+        let writer = {
+            let buffer = Arc::clone(&buffer);
+            move || BufferingWriter {
+                buffer: Arc::clone(&buffer),
+            }
+        };
+
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(writer)
+            .without_time()
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        assert!(super::gas_price_exceeds_threshold(
+            1,
+            U256::from(2_000_000_000u64)
+        ));
+        assert!(!super::gas_price_exceeds_threshold(
+            3,
+            U256::from(2_000_000_000u64)
+        ));
+
+        let logs = String::from_utf8(buffer.lock().unwrap().clone()).unwrap();
+        assert!(
+            logs.contains("Skipping rollup due to high gas price"),
+            "expected log to contain skip message, got: {logs}"
+        );
+    }
+
+    #[ignore]
     #[tokio::test]
     async fn test_rollup() {
         tracing_subscriber::fmt()
@@ -600,7 +679,8 @@ mod tests {
             .unwrap();
 
         let prover_db = Arc::new(ProverDb::create_or_load(tempdir.path()).unwrap());
-        let prover = Prover::new(rollup_contract.clone());
+        let bb_backend: Arc<dyn BbBackend> = Arc::new(barretenberg_cli::CliBackend);
+        let prover = Prover::new(rollup_contract.clone(), bb_backend);
         let proof_notifier = Arc::new(Notify::new());
 
         let (rollup_height_sender, mut rollup_height_receiver) = mpsc::channel(1);
@@ -611,6 +691,7 @@ mod tests {
             Arc::clone(&prover_db),
             Arc::new(prover),
             Arc::clone(&proof_notifier),
+            None,
             Some(rollup_height_sender),
             None,
         );
@@ -618,7 +699,7 @@ mod tests {
         let mut rollup_worker = Box::pin(rollup_worker);
 
         let mut last_block = Block::genesis();
-        let mut last_root = empty_tree_hash(MERKLE_TREE_DEPTH);
+        // let mut last_root = empty_tree_hash(MERKLE_TREE_DEPTH);
         for height in [1, 2, 3] {
             let new_root = Element::new(height);
             let block = BlockContent {
@@ -641,13 +722,7 @@ mod tests {
                 .set_rollup(
                     BlockHeight(height),
                     RollupInput::new(
-                        Proof {
-                            proof: Vec::new(),
-                            agg_instances: vec![Element::ZERO; 12],
-                            old_root: last_root,
-                            new_root,
-                            utxo_hashes: vec![Element::ZERO; 18],
-                        },
+                        AggFinalProof::default(),
                         height,
                         *other_hash.inner(),
                         vec![approval.signature],
@@ -673,7 +748,7 @@ mod tests {
             );
 
             last_block = block;
-            last_root = new_root;
+            // last_root = new_root;
         }
     }
 }

@@ -2,6 +2,33 @@
 
 Rollup smart contracts to verify the rollup state on Ethereum.
 
+## Testing
+
+The project uses Hardhat with Mocha/Chai testing framework and blockchain-specific matchers for comprehensive smart contract testing.
+
+### Run Tests
+
+```bash
+yarn test
+```
+
+### Test Features
+
+- **Blockchain-specific matchers**: Clean, readable assertions for smart contract testing
+- **Balance assertions**: `expect(await contract.balanceOf(owner.address)).to.equal(1000)`
+- **Event testing**: `expect(transaction).to.emit(contract, "Transfer")`
+- **Revert testing**: `expect(contract.connect(addr1).withdraw()).to.be.revertedWith("Not owner")`
+- **Balance change testing**: `expect(tx).to.changeEtherBalance(addr1, ethers.parseEther("1"))`
+
+### Continuous Integration
+
+Tests run automatically on:
+- Pull requests modifying files in `eth/`
+- Pushes to `main` and `next` branches
+- Manual workflow dispatch
+
+All tests must pass with 100% success rate before merge.
+
 ## Run locally
 
 Run the local Ethereum hardhat node (resets on each restart):
@@ -15,6 +42,15 @@ Deploy the contract:
 ```bash
 yarn deploy:local
 ```
+
+### EIP-7702 delegate deployment
+
+`scripts/deploy_eip7702.ts` now deploys the `Eip7702SimpleAccount` delegate via the
+canonical deterministic deployment proxy (`0x4e59…b4956C`) using the salt
+`EIP7702_SIMPLE_ACCOUNT_RECEIVE_V1`. The script prints the expected CREATE2 address and
+only broadcasts the transaction if the deterministic deployer is available on the selected
+network. When running against a development Hardhat chain, the script automatically falls
+back to a traditional deployment.
 
 Run server:
 
@@ -60,111 +96,83 @@ cargo run --release server
 #### Deploy
 
 ```bash
-OWNER=0x6B96F1A8D65eDe8AD688716078B3DD79f9BD7323 PROVER_ADDRESS=0x6B96F1A8D65eDe8AD688716078B3DD79f9BD7323 VALIDATORS=0x6B96F1A8D65eDe8AD688716078B3DD79f9BD7323 AMOY_URL=https://polygon-amoy.g.alchemy.com/v2/9e_9NcJQ4rvg9RCsW2l7dqdbHw0VHBCf SECRET_KEY=<SECRET_KEY> GAS_PRICE_GWEI=2 yarn deploy -- --network amoy
+OWNER=0x6B96F1A8D65eDe8AD688716078B3DD79f9BD7323 PROVER_ADDRESS=0x6B96F1A8D65eDe8AD688716078B3DD79f9BD7323 VALIDATORS=0x6B96F1A8D65eDe8AD688716078B3DD79f9BD7323 AMOY_URL=<AMOY_URL> SECRET_KEY=<SECRET_KEY> GAS_PRICE_GWEI=2 yarn deploy -- --network amoy
 ```
 
 #### Upgrade
 
 ```bash
-ROLLUP_PROXY_ADMIN_ADDR=0x3a7122f0711822e63aa6218f4db3a6e40f97bdcf ROLLUP_CONTRACT_ADDR=0x1e44fa332fc0060164061cfedf4d3a1346a9dc38 AMOY_URL=https://polygon-amoy.g.alchemy.com/v2/9e_9NcJQ4rvg9RCsW2l7dqdbHw0VHBCf SECRET_KEY=<SECRET_KEY> yarn upgrade-rollup -- --network amoy
+ROLLUP_PROXY_ADMIN_ADDR=0x3a7122f0711822e63aa6218f4db3a6e40f97bdcf ROLLUP_CONTRACT_ADDR=0x1e44fa332fc0060164061cfedf4d3a1346a9dc38 AMOY_URL=<AMOY_URL> SECRET_KEY=<SECRET_KEY> yarn upgrade-rollup -- --network amoy
 ```
 
 Add `UPGRADE_DEPLOY=true` to deploy the contract (not just print the calldata).
-
-#### Addresses:
-
-```
-USDC_CONTRACT_ADDR=0x206fcb3bea972c5cd6b044160b8b0691fb4aff57
-AGGREGATE_BIN_ADDR=0x58f2e5031af2d6c1996334b10880973c494e3b06
-AGGREGATE_VERIFIER_ADDR=0xa98e2c3a375b5aedf31b1276594a11ff41d72a36
-MINT_BIN_ADDR=0x3945f7f99460c86dfe73de6a757b1b6ed1a52604
-MINT_VERIFIER_ADDR=0xfeda1cec4b2b9f958e6c0823cf14b0e687fa4a59
-BURN_BIN_ADDR=0xaa331ab85fa49137cbfbb614bc20eb55e0e1ae46
-BURN_VERIFIER_ADDR=0xe952927e6ff3c66933fa23f228dc74f7eff95fe3
-ROLLUP_V1_CONTRACT_ADDR=0x618975654efb35f6674fe9d1afb9f95fa78a31a7
-ROLLUP_PROXY_ADMIN_ADDR=0x3a7122f0711822e63aa6218f4db3a6e40f97bdcf
-ROLLUP_V2_CONTRACT_ADDR=0x6c5da7ccab84eb7abadbcbe87b3913ccbad0fb9a
-ROLLUP_V3_CONTRACT_ADDR=0x9b89bb7a804639bfde8c8d5b5826007988142a38
-ROLLUP_V4_CONTRACT_ADDR=0x68427f3169ed36b7b5933446305964f2b3445067
-BURN_TO_ADDRESS_ROUTER_CONTRACT_ADDR=0x3471dadabe5a8491e14a9192b1960a55108aea8d
-BURN_V2_BIN_ADDR=0x8ef4a7d9d791c4798eff556ea9bbdbdc981678f7
-BURN_VERIFIER_V2_ADDR=0xbe5aee548b3b738dfb58cc3ea1c5d2c2b5d468fc
-ROLLUP_V5_CONTRACT_ADDR=0xba3c280ddfca291f815cd61dc295009aae002795
-ROLLUP_CONTRACT_ADDR=0x1e44fa332fc0060164061cfedf4d3a1346a9dc38
-ROLLUP_V6_CONTRACT_ADDR=0x9165dbc43077c107f899a37b3c693d251a4bdb78
-```
 
 ### Testnet
 
 #### Deploy
 
 ```bash
-OWNER=0x06BB7004273ac82309a7b1dF90B8cb76d6BA299F PROVER_ADDRESS=0x6B96F1A8D65eDe8AD688716078B3DD79f9BD7323 VALIDATORS=0x6B96F1A8D65eDe8AD688716078B3DD79f9BD7323 POLYGON_URL=https://polygon-mainnet.g.alchemy.com/v2/UrFsshbLOrSG1_cPayD3OHHi0s066Shx SECRET_KEY=<SECRET_KEY> yarn deploy -- --network polygon
+OWNER=0x6B96F1A8D65eDe8AD688716078B3DD79f9BD7323 PROVER_ADDRESS=0x6B96F1A8D65eDe8AD688716078B3DD79f9BD7323 VALIDATORS=0x6B96F1A8D65eDe8AD688716078B3DD79f9BD7323 MAINNET_URL=<MAINNET_URL> SECRET_KEY=<SECRET_KEY> yarn deploy -- --network mainnet
 ```
 
 #### Upgrade
 
 ```bash
-SECRET_KEY=... ROLLUP_CONTRACT_ADDR=0x24baf24128af44f03d61a3e657b1cec298ef6cdc ROLLUP_PROXY_ADMIN_ADDR=0xbb923b4c1cc57c4d929adfbc4160bfc26ad750ab  POLYGON_URL=https://polygon-mainnet.g.alchemy.com/v2/UrFsshbLOrSG1_cPayD3OHHi0s066Shx yarn upgrade-rollup -- --network polygon
+SECRET_KEY=... ROLLUP_CONTRACT_ADDR=0x883ff65e5ac46fc2c25a4e4ea901bf7e7f6c1705 ROLLUP_PROXY_ADMIN_ADDR=0x90588eedc0c12b8ba50823de7344e1b404384798  MAINNET_URL=<MAINNET_URL> yarn upgrade-rollup -- --network mainnet
 ```
 
-Addresses:
+#### Addresses
 
 ```
-AGGREGATE_BIN_ADDR=0xebcde42fc628f06a2d395a972cb81b267a105577
-AGGREGATE_VERIFIER_ADDR=0xd8ce1f59185707503bffe45e34b29e3617049c27
-MINT_BIN_ADDR=0x30edc6ccf96dbda5d62e5e270d0731dac7298f81
-MINT_VERIFIER_ADDR=0xd9d38308653b83501a5feee170c6030890f9e43b
-BURN_BIN_ADDR=0xf009a7a0a89f7514322edc1ae5c15ce0e1db4070
-BURN_VERIFIER_ADDR=0x4ac88e4a18f8f99a49bf7ccfc05b49cf8ef41cd9
-ROLLUP_V1_CONTRACT_ADDR=0x4514b09f62834d9d5807f4f24d200b4ff98046ed
-ROLLUP_PROXY_ADMIN_ADDR=0xbb923b4c1cc57c4d929adfbc4160bfc26ad750ab
-ROLLUP_V2_CONTRACT_ADDR=0xc4d8c671fbe3834e9d476bc146d348907d235614
-ROLLUP_V3_CONTRACT_ADDR=0x2cc9818c40c54de413b783aad42e407ade1d3093
-ROLLUP_V4_CONTRACT_ADDR=0xc546293e7c89a425eaf093eb01d104ef8aba7c14
-BURN_V2_BIN_ADDR=0x3160976dfe28b90cc0c60f9f372ee5c44a4746b5
-BURN_VERIFIER_V2_ADDR=0x9ffda5bdd6a8c63ad431ca0249c5e16d19c3d708
-ROLLUP_V5_CONTRACT_ADDR=0x61d67ac8d472a91c8f9bb0c8f92ed12cc362c196
-ROLLUP_CONTRACT_ADDR=0x24baf24128af44f03d61a3e657b1cec298ef6cdc
-BURN_TO_ADDRESS_ROUTER_CONTRACT_ADDR=0x947502b6c4363e5ba5d7b65748478fb2ebc7319b
-ROLLUP_V6_CONTRACT_ADDR=0x2f0b843869de91eef34441b639b41218ae67f4ee
-ACROSS_WITH_AUTHORIZATION_CONTRACT_ADDR=0xf5bf1a6a83029503157bb3761488bb75d64002e7
+{
+  proverAddress: '0x6B96F1A8D65eDe8AD688716078B3DD79f9BD7323',
+  validators: [ '0x6B96F1A8D65eDe8AD688716078B3DD79f9BD7323' ],
+  ownerAddress: '0x6B96F1A8D65eDe8AD688716078B3DD79f9BD7323',
+  deployerIsProxyAdmin: true
+}
+Linked library ZKTranscriptLib (__$e6391f3e4b1839f34ea5577896c8005de7$__) at 0x8a15e6434c1036048dfe4832468eddceed98da8a
+AGGREGATE_VERIFIER_ADDR=0x69b820ac692cacf2797fd5bd0caff247a2c3cdec
+ROLLUP_V1_IMPL_ADDR=0x89b1d6cf21a8c2769e4db4bbb4fdb11097e6a9cf
+ROLLUP_CONTRACT_ADDR=0x883ff65e5ac46fc2c25a4e4ea901bf7e7f6c1705
+ROLLUP_PROXY_ADMIN_ADDR=0x90588eedc0c12b8ba50823de7344e1b404384798
+EIP7702_SIMPLE_ACCOUNT_ADDR=0xd2c66eb938fe5847522891a247264eac90eea93e
 ```
+
 
 ### Mainnet
 
 ```bash
-OWNER=0x230Dfb03F078B0d5E705F4624fCC915f3126B40f PROVER_ADDRESS=0x5343b904bf837befb2f5a256b0cd5fbf30503d38 VALIDATORS=0x41582701cb3117680687df80bd5a2ca971bda964,0x75eadc4a85ee07e3b60610dc383eab1b27b1c4c1,0x53b385c35d7238d44dfd591eee94fee83f6711de,0x05dc3d71e2a163e6926956bc0769c5cb8a6b9d1a,0x581c5d92e35e51191a982ebd803f92742e3c9fe3,0xbb82aef611b513965371b3d33c4d3b6c8b926f24,0xeacb0b7e37709bafb4204c0c31a2919212049975,0xf9d65db5f8952bee5ea990df79a0032eda0752b7,0x662b7930b201fbe11bcef3cdef6e8f2c8ed4983a,0x68a78d978497b0a87ff8dbeaffae8e68ad4c39dc POLYGON_URL=https://polygon-mainnet.g.alchemy.com/v2/UrFsshbLOrSG1_cPayD3OHHi0s066Shx SECRET_KEY=<SECRET_KEY> yarn deploy -- --network polygon
+OWNER=0x230Dfb03F078B0d5E705F4624fCC915f3126B40f PROVER_ADDRESS=0x5343B904Bf837Befb2f5A256B0CD5fbF30503D38 VALIDATORS=0x41582701CB3117680687Df80bD5a2ca971bDA964 MAINNET_URL=<MAINNET_URL> SECRET_KEY=<SECRET> yarn deploy -- --network mainnet
 ```
 
-Addresses:
+
+#### Addresses
 
 ```
-USDC_CONTRACT_ADDR=0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359
-AGGREGATE_BIN_ADDR=0x31063c00ad62f9090abb9308f4549a1dee4a6362
-AGGREGATE_VERIFIER_ADDR=0x9d9fe636a329a07d26b5c5e8411b278462f5f325
-MINT_BIN_ADDR=0xe025bb7ce28a4565a890a8d708faf9dd48ea1678
-MINT_VERIFIER_ADDR=0xe938b6c17a39e80c7630040df0d2dbe794d42534
-BURN_BIN_ADDR=0x4449d93873f7523d1b6cdfaa5a792e0867ca3a17
-BURN_VERIFIER_ADDR=0x36e4a9f800e07a4aa6647c83e97f7e47b8028895
-ROLLUP_V1_CONTRACT_ADDR=0x470e6986d9a54b498f4fa39ee118d25d52cc0a19
-ROLLUP_CONTRACT_ADDR=0x4cbb5041df8d815d752239960fba5e155ba2687e
-ROLLUP_PROXY_ADMIN_ADDR=0xe022130f28c4e6ddf1da5be853a185fbeb84d795
-BURN_TO_ADDRESS_ROUTER_CONTRACT_ADDR=0x8e93495fb707785af8c1345858e4898c2d005f7b
-BURN_V2_BIN_ADDR=0x2c103552a8f311cd6e35c2ca69e2f42e812c12d0
-BURN_VERIFIER_V2_ADDR=0x51c77c8b99aab9d6c83a4deb1247c528325e5c0b
-ROLLUP_V5_CONTRACT_ADDR=0x451a98322400d2a9018303cc66a68b3d903a3329
-ROLLUP_V6_CONTRACT_ADDR=0x3a58033501778babcd785cd89c054f16fa9b1f2b
-ACROSS_WITH_AUTHORIZATION_CONTRACT_ADDR=0xf5bf1a6a83029503157bb3761488bb75d64002e7
+{
+  proverAddress: '0x5343B904Bf837Befb2f5A256B0CD5fbF30503D38',
+  validators: [ '0x41582701CB3117680687Df80bD5a2ca971bDA964' ],
+  ownerAddress: '0x230Dfb03F078B0d5E705F4624fCC915f3126B40f',
+  deployerIsProxyAdmin: false
+}
+Linked library ZKTranscriptLib (__$e6391f3e4b1839f34ea5577896c8005de7$__) at 0xab57f01dc6cffd313233ec14d474cdf82512ff66
+AGGREGATE_VERIFIER_ADDR=0xb553c325959c8615d9018f00906aec3799b94200
+ROLLUP_V1_IMPL_ADDR=0x7d8837b547f4fea0053571cb149e845fc58e9b2d
+ROLLUP_CONTRACT_ADDR=0x367c1eaf14aa06b78ce76bd0243297de79d85270
+ROLLUP_PROXY_ADMIN_ADDR=0xfe455bacaf1968f1ae6a322b8ffbe56840e2f590
+EIP7702_SIMPLE_ACCOUNT_ADDR=0x63b925fe7096104471bcbee5358505bf6e892344
 ```
 
 #### Upgrade
 
 ```bash
-SECRET_KEY=... ROLLUP_CONTRACT_ADDR=0x4cbb5041df8d815d752239960fba5e155ba2687e ROLLUP_PROXY_ADMIN_ADDR=0xe022130f28c4e6ddf1da5be853a185fbeb84d795  POLYGON_URL=https://polygon-mainnet.g.alchemy.com/v2/UrFsshbLOrSG1_cPayD3OHHi0s066Shx yarn upgrade-rollup -- --network polygon
+SECRET_KEY=... ROLLUP_CONTRACT_ADDR=0x367c1eaf14aa06b78ce76bd0243297de79d85270 ROLLUP_PROXY_ADMIN_ADDR=0xfe455bacaf1968f1ae6a322b8ffbe56840e2f590  MAINNET_URL=<MAINNET_URL> yarn upgrade-rollup -- --network mainnet
 ```
 
 ### Upgrade Rollup contract
+
+Fresh deployments now use the merged `contracts/rollup3/RollupV1.sol` implementation, so the
+upgrade flow is only required for legacy rollup2 deployments.
 
 Using `yarn upgrade-rollup`, you can upgrade a previously deployed rollup contract to a new version.
 
@@ -173,6 +181,123 @@ Example without a specified network:
 ```bash
 SECRET_KEY=... ROLLUP_CONTRACT_ADDR=<proxy_contract_addr> ROLLUP_PROXY_ADMIN_ADDR=<proxy_admin_contract_addr> yarn upgrade-rollup
 ```
+
+## Mint migration (Polygon -> Ethereum)
+
+Migration is a three-step process:
+
+1. **Extract**: `scripts/extract-mints.ts` reads `MintAdded` events from the source chain and saves unspent mints to a JSON file.
+2. **Filter**: `scripts/filter-mints.ts` verifies candidates against the source chain state (via `getMint`) to ensure they are valid and unspent.
+3. **Submit**: `scripts/submit-mints.ts` reads the verified JSON file, filters out mints already present on the target chain, and submits the rest.
+
+### Step 1: Extract Mints
+
+Required environment variables:
+- `SOURCE_RPC_URL`: Source chain RPC endpoint
+- `SOURCE_CONTRACT_ADDRESS`: Source rollup contract address
+
+Optional:
+- `START_BLOCK`, `END_BLOCK`: Scan range
+- `OUTPUT_FILE`: Path to save mints (default: `mints.json`)
+- `BLOCK_BATCH_SIZE`: Blocks per scan chunk (default: 10000)
+- `RPC_CONCURRENCY`: Concurrent requests (default: 5)
+
+```bash
+SOURCE_RPC_URL=<polygon_url> SOURCE_CONTRACT_ADDRESS=<addr> yarn extract-mints
+```
+
+### Step 2: Filter Mints
+
+Required environment variables:
+- `SOURCE_RPC_URL`: Source chain RPC endpoint
+- `SOURCE_CONTRACT_ADDRESS`: Source rollup contract address
+
+Optional:
+- `INPUT_FILE`: Path to read extracted mints (default: `mints.json`)
+- `OUTPUT_FILE`: Path to save verified mints (default: `filtered-mints.json`)
+- `RPC_CONCURRENCY`: Concurrent verification requests (default: 10)
+
+```bash
+SOURCE_RPC_URL=<polygon_url> SOURCE_CONTRACT_ADDRESS=<addr> yarn filter-mints
+```
+
+### Step 3: Submit Mints
+
+Required environment variables:
+- `TARGET_RPC_URL`: Target chain RPC endpoint
+- `TARGET_CONTRACT_ADDRESS`: Target rollup contract address
+- `PRIVATE_KEY`: Private key for transaction submission
+
+Optional:
+- `INPUT_FILE`: Path to read verified mints (default: `filtered-mints.json`)
+- `DRY_RUN`: Set to `true` to skip transactions
+- `PRINT_TX`: Set to `true` to print transaction data (for Safe execution) instead of sending
+- Gas fees are set automatically to 2x the RPC-recommended EIP-1559 fees (`maxFeePerGas` and `maxPriorityFeePerGas`)
+
+```bash
+TARGET_RPC_URL=<eth_url> TARGET_CONTRACT_ADDRESS=<addr> PRIVATE_KEY=<key> INPUT_FILE=filtered-mints.json yarn submit-mints
+```
+
+## Rollup initializer requirements
+
+`RollupV1.initialize` now accepts eight arguments:
+
+```solidity
+function initialize(
+    address owner,
+    address usdcAddress,
+    address verifierAddress,
+    address prover,
+    address[] calldata initialValidators,
+    bytes32 verifierKeyHash,
+    uint32 verifierMessagesCount,
+    bytes32 initialNoteKind
+);
+```
+
+- `verifierMessagesCount` must match the `messages_length` that your aggregate verifier enforces. The legacy `agg_final` circuit expects 1,000 messages (6 UTXOs * 5 messages per UTXO * padding), but if you regenerate a verifier with a different circuit you **must** update this value so the contract can size-check proofs before calling into the verifier. You can source the count from:
+  - the `messages_length` field on the deployed verifier contract (visible via `rollup.zkVerifiers(keyHash).messages_length`), or
+  - the generator metadata emitted by `noir/generate_fixtures.sh`. Keep the value alongside the verifier address in your deployment runbook.
+- `initialNoteKind` binds the rollup to the token it will mint/burn. For bridged EVM assets we use format `0x0002 || chain_id(uint64, big endian) || token_address(20 bytes)`. The helper in [`eth/scripts/noteKind.ts`](./scripts/noteKind.ts) (`generateNoteKindBridgeEvm(chainId, tokenAddress)`) produces the correct 32-byte value; reuse it (e.g. through `ts-node`) when onboarding new tokens so deposits, withdrawals, and burn substitutions resolve to the right ERC20 contract.
+
+Record both arguments in your deployment checklist—operators must replay them any time they redeploy or upgrade through `TransparentUpgradeableProxy`.
+
+## Security Improvements
+
+### Block Height Validation (ENG-4064)
+
+The `verifyRollup` function in `contracts/rollup3/RollupV1.sol` now includes validation to ensure new block heights are strictly greater than the current block height. This prevents:
+
+- **Rollback Attacks**: Malicious actors cannot submit blocks with decreasing heights
+- **Replay Attacks**: Same block height cannot be reused
+- **Sequencing Integrity**: Maintains proper rollup block ordering
+- **State Inconsistency**: Prevents breaking dependent systems expecting monotonic height increases
+
+The validation is implemented as:
+```solidity
+require(height > blockHeight, "RollupV1: New block height must be greater than current");
+```
+
+### Testing
+
+Run the security tests with:
+```bash
+yarn test test/SimpleBlockHeightTest.test.ts
+```
+
+## Verifier Addresses
+
+This table documents deployed verifier contract addresses and their configurations:
+
+| Verifier Address | Verification Key | Messages | Notes |
+|------------------|------------------|----------|-------|
+| `0xe859860f654da247ba1468785ea40a386e982110` | `0x122d2ac7542fa020cbfff0836b5d0c30898330074b19869179bba49b5db69967` | 1000 | AGG_FINAL verifier |
+
+**Verification Key** corresponds to `AGG_FINAL_VERIFICATION_KEY_HASH`, which is consumed by the rollup verifier logic in [pkg/contracts/src/rollup.rs](../pkg/contracts/src/rollup.rs) and deployment tooling.
+
+**Messages** reflects the `verifierMessagesCount` value you supplied during `initialize`. For the current `agg_final` deployment this still equals the historical `AGG_FINAL_MESSAGES` constant (1000), but if you deploy a verifier with a different circuit you must update both the table and the initializer arguments so every operator knows which count to pass.
+
+Verifier contracts and their verification keys are generated via [noir/generate_fixtures.sh](../noir/generate_fixtures.sh); rerun that script whenever a circuit changes. Update this table whenever a new verifier is deployed so downstream operators have a single source of truth.
 
 ## Regenerating EVM aggregate proof verifier
 

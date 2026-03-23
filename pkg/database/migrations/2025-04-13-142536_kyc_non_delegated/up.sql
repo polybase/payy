@@ -1,0 +1,1 @@
+ALTER TABLE "ramps_accounts" ADD COLUMN "kyc_non_delegated_status" TEXT;

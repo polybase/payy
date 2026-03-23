@@ -1,0 +1,5 @@
+This folder was obtained from and included as part of: 
+
+https://github.com/stevenrskelton/flag-icon
+
+MIT License : http://opensource.org/licenses/MIT

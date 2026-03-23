@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS notes_status_owner_version_value_idx;

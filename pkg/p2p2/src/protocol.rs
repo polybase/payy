@@ -6,7 +6,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use futures::prelude::*;
 use libp2p::request_response;
 use tokio::io;
-use wire_message::{wire_message, WireMessage};
+use wire_message::{WireMessage, wire_message};
 
 #[derive(Clone)]
 pub struct PolyProtocol<NetworkEvent: Clone + Send + BorshSerialize + BorshDeserialize + 'static>(

@@ -1,0 +1,28 @@
+[package]
+name = "wallet-data-dep"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+element = { workspace = true }
+indexmap = { workspace = true }
+hash-poseidon = { workspace = true }
+wallet-primitives = { workspace = true }
+zk-primitives = { workspace = true }
+
+ethereum-types = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+workspace-hack.workspace = true
+
+[dev-dependencies]
+insta = { workspace = true, features = ["yaml", "redactions"] }
+
+[dependencies.ts-rs]
+workspace = true
+optional = true
+
+[features]
+ts-rs = ["dep:ts-rs", "element/ts-rs", "zk-primitives/ts-rs"]

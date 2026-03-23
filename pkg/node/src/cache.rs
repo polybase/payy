@@ -1,3 +1,4 @@
+// lint-long-file-override allow-max-lines=400
 use std::collections::{BTreeMap, HashMap};
 
 use primitives::hash::CryptoHash;
@@ -168,8 +169,8 @@ impl BlockCache {
 
 #[cfg(test)]
 mod tests {
+    use element::Element;
     use primitives::sig::Signature;
-    use smirk::Element;
 
     use crate::block::{BlockContent, BlockHeader, BlockState};
 
@@ -266,19 +267,13 @@ mod tests {
 
         for i in 0..3 {
             assert!(block_cache.get_by_height(i.into()).is_none());
-            assert!(block_cache
-                .block_hash_heights
-                .get(&BlockHeight(i))
-                .is_none());
+            assert!(!block_cache.block_hash_heights.contains_key(&BlockHeight(i)));
         }
 
         // Check blocks and hashes above or equal to the confirmed height are untouched
         for i in 3..6 {
             assert!(block_cache.get_by_height(i.into()).is_some());
-            assert!(block_cache
-                .block_hash_heights
-                .get(&BlockHeight(i))
-                .is_some());
+            assert!(block_cache.block_hash_heights.contains_key(&BlockHeight(i)));
         }
     }
 

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
+use element::Element;
 use proptest::{arbitrary::StrategyFor, prelude::*, strategy::Map};
-use zk_primitives::Element;
 
 use crate::Batch;
 

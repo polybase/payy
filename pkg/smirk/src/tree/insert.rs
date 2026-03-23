@@ -1,4 +1,6 @@
-use crate::{batch, hash_cache::HashCache, CollisionError, Element, Path, Tree};
+// lint-long-file-override allow-max-lines=300
+use crate::{CollisionError, Path, Tree, batch, hash_cache::HashCache};
+use element::Element;
 
 impl<const DEPTH: usize, V, C> Tree<DEPTH, V, C> {
     /// Insert a non-null element and a value into the tree
@@ -9,6 +11,7 @@ impl<const DEPTH: usize, V, C> Tree<DEPTH, V, C> {
     /// - If the tree already contained this an entry at this element, `false` is returned
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// let mut tree = Tree::<64, i32>::new();
     ///
     /// let res = tree.insert(Element::new(1), 123);
@@ -32,6 +35,7 @@ impl<const DEPTH: usize, V, C> Tree<DEPTH, V, C> {
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// let mut tree = Tree::<64, i32>::new();
     /// tree.insert(Element::new(1), 123).unwrap();
     ///
@@ -60,6 +64,7 @@ impl<const DEPTH: usize, V, C> Tree<DEPTH, V, C> {
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// let mut tree = Tree::<64, i32>::new();
     ///
     /// let elements = (1..=10).map(|i| (Element::new(i), i as i32));
@@ -88,7 +93,7 @@ impl<const DEPTH: usize, V, C> Tree<DEPTH, V, C> {
     pub fn insert_with_paths<I: IntoIterator<Item = (Element, V)>>(
         &mut self,
         entries: I,
-    ) -> Result<Vec<Path<DEPTH>>, CollisionError>
+    ) -> Result<Vec<Path>, CollisionError>
     where
         C: HashCache,
     {
@@ -112,10 +117,7 @@ impl<const DEPTH: usize, V, C> Tree<DEPTH, V, C> {
     /// was inserted
     ///
     /// This function is a convenience wrapper around [`Tree::insert_with_paths`]
-    pub fn insert_with_paths_default<I>(
-        &mut self,
-        elements: I,
-    ) -> Result<Vec<Path<DEPTH>>, CollisionError>
+    pub fn insert_with_paths_default<I>(&mut self, elements: I) -> Result<Vec<Path>, CollisionError>
     where
         I: IntoIterator<Item = Element>,
         V: Default,
@@ -139,7 +141,7 @@ mod tests {
 
     use test_strategy::proptest;
 
-    use crate::{smirk, tree::error::StructName, Collision};
+    use crate::{Collision, smirk, tree::error::StructName};
 
     use super::*;
 
@@ -151,7 +153,7 @@ mod tests {
         assert!(res.is_ok());
         assert_eq!(
             format!("0x{:x}", tree.root_hash()),
-            "0x26debce8a5ba1d092589121944bfc2cc55d858bcd7a697ec2fd1b832b4b20c40"
+            "0x5281c6856f41bb70d2d33a56206f93b20da3babd86361d692e7422d505ca654"
         );
 
         let res = tree.insert(Element::new(1), 1);
@@ -188,7 +190,7 @@ mod tests {
         for (element, value) in entries {
             match tree.insert(element, value) {
                 Err(_) => assert_eq!(tree.root_hash(), last_hash),
-                Ok(_) => {
+                Ok(()) => {
                     let new_root_hash = tree.root_hash();
                     assert!(!seen_hashes.contains(&new_root_hash));
 
@@ -209,7 +211,9 @@ mod tests {
         let tree_3: Tree<64, _> = smirk! { 3, 6, 8 };
 
         let paths = tree.insert_with_paths_default(elements).unwrap();
-        let [first, second, third] = &paths[..] else { panic!() };
+        let [first, second, third] = &paths[..] else {
+            panic!()
+        };
 
         assert_eq!(first.actual_root_hash(), tree_1.root_hash(),);
         assert_eq!(second.actual_root_hash(), tree_2.root_hash(),);

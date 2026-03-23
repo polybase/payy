@@ -1,0 +1,15 @@
+[package]
+name = "client-http-longpoll"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rpc = { workspace = true }
+
+parking_lot = { workspace = true }
+async-trait = { workspace = true }
+async-stream = { workspace = true }
+tokio = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
+workspace-hack.workspace = true

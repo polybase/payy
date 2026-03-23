@@ -1,9 +1,9 @@
-use super::{error, State};
+use super::{State, error};
 use actix_web::web;
+use element::Element;
 use rpc::error::HttpResult;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use zk_primitives::Element;
 
 #[derive(Debug, Deserialize)]
 pub struct MerklePathRequestQuery {

@@ -1,3 +1,4 @@
+// lint-long-file-override allow-max-lines=800
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
 
@@ -267,8 +268,7 @@ impl DoomslugApprovalsTrackersAtHeight {
     /// * `now`      - the current timestamp
     /// * `approval` - the approval to be processed
     /// * `stakes`   - all the stakes of all the block producers in the current epoch
-    /// * `threshold_mode` - how many approvals are needed to produce a block. Is used to compute
-    ///                the return value
+    /// * `threshold_mode` - how many approvals are needed to produce a block. Is used to compute the return value
     ///
     /// # Returns
     /// Same as `DoomslugApprovalsTracker::process_approval`
@@ -387,10 +387,10 @@ impl Doomslug {
         }
     }
 
-    #[cfg(feature = "test_features")]
-    pub fn adv_disable(&mut self) {
-        self.threshold_mode = DoomslugThresholdMode::NoApprovals
-    }
+    // #[cfg(feature = "test_features")]
+    // pub fn adv_disable(&mut self) {
+    //     self.threshold_mode = DoomslugThresholdMode::NoApprovals
+    // }
 
     /// Returns the `(hash, height)` of the current tip. Currently is only used by tests.
     pub fn get_tip(&self) -> (CryptoHash, BlockHeight) {
@@ -692,14 +692,13 @@ impl Doomslug {
     ///    enough chunks, or
     ///  - The block has 1/2 of approvals, and T(h' / 6) has passed since the block has had 1/2 of
     ///    approvals for the first time, where h' is time since the last ds-final block.
-    /// Only the height is passed into the function, we use the tip known to `Doomslug` as the
-    /// parent hash.
+    ///    Only the height is passed into the function, we use the tip known to `Doomslug` as the
+    ///    parent hash.
     ///
     /// # Arguments:
     /// * `now`               - current timestamp
     /// * `target_height`     - the height for which the readiness is checked
-    /// * `has_enough_chunks` - if not, we will wait for T(h' / 6) even if we have 2/3 approvals &
-    ///                         have the previous block ds-final.
+    /// * `has_enough_chunks` - if not, we will wait for T(h' / 6) even if we have 2/3 approvals & have the previous block ds-final.
     #[must_use]
     pub fn ready_to_produce_block(
         &mut self,

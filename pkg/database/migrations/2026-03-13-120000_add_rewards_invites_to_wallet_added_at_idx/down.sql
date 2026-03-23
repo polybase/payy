@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS rewards_invites_to_wallet_added_at_idx;

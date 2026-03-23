@@ -1,0 +1,33 @@
+{
+    "applinks": {
+        "apps": [],
+        "details": [
+            {
+                "appID": "M3K9QT3D4W.com.polybaselabs.wallet",
+                "paths": [
+                    "/r/*",
+                    "/s/*",
+                    "/s",
+                    "/invite/*",
+                    "/connect/*",
+                    "/app*"
+                ]
+            }
+        ]
+    },
+    "appclips": {
+        "apps": [
+            "M3K9QT3D4W.com.polybaselabs.wallet.Clip"
+        ]
+    },
+    "activitycontinuation": {
+        "apps": [
+            "M3K9QT3D4W.com.polybaselabs.wallet"
+        ]
+    },
+    "webcredentials": {
+        "apps": [
+            "M3K9QT3D4W.com.polybaselabs.wallet"
+        ]
+    }
+}

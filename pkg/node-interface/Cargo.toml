@@ -1,0 +1,28 @@
+[package]
+name = "node-interface"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+element = { workspace = true }
+rpc = { workspace = true }
+rpc-error-convert = { workspace = true }
+primitives = { workspace = true }
+zk-primitives = { workspace = true }
+
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+unimock = { workspace = true }
+workspace-hack.workspace = true
+
+[dependencies.ts-rs]
+workspace = true
+optional = true
+
+[features]
+ts-rs = ["dep:ts-rs", "element/ts-rs", "primitives/ts-rs", "zk-primitives/ts-rs"]
+
+[package.metadata.cargo-machete]
+ignored = ["serde_json"]

@@ -5,7 +5,7 @@
 // use node::PersistentMerkleTree;
 // use prover::smirk_metadata::SmirkMetadata;
 // use serial_test::serial;
-// use zk_primitives::Element;
+// use element::Element;
 
 // use super::{Server, ServerConfig};
 

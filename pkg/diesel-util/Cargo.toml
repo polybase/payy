@@ -1,0 +1,11 @@
+[package]
+name = "diesel-util"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+diesel = ["dep:diesel"]
+
+[dependencies]
+diesel = { workspace = true, optional = true }
+workspace-hack.workspace = true

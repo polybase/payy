@@ -1,59 +1,80 @@
-use std::{str::FromStr, sync::Arc};
-
+// lint-long-file-override allow-max-lines=600
 use super::State;
-use crate::{node, utxo::UtxoProof, BlockFormat};
+use crate::{BlockFormat, Error, node};
 use actix_web::web;
-use base64::Engine;
 use block_store::BlockListOrder;
-use eyre::Context;
+use element::Element;
 use futures::StreamExt;
 use itertools::Itertools;
+use json_with_logging::JsonWithLogging;
+use node_interface::{ElementData, RpcError, TransactionRequest, TransactionResponse};
 use primitives::{
     block_height::BlockHeight,
-    hash::CryptoHash,
     pagination::{Cursor, CursorChoice, OpaqueCursor, OpaqueCursorChoice, Paginator},
 };
 use rpc::error::{HTTPError, HttpResult};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use wire_message::WireMessage;
-use zk_circuits::data::SnarkWitness;
-use zk_primitives::Element;
-
-#[derive(Deserialize)]
-pub struct SubmitUtxoBody {
-    snark: SnarkWitness,
-}
-
-#[derive(Serialize)]
-pub struct SubmitUtxoResp {
-    height: BlockHeight,
-    root_hash: Element,
-    txn_hash: CryptoHash,
-}
+use zk_circuits::{Proof, Verify};
+use zk_primitives::UtxoProof;
 
 #[tracing::instrument(err, skip_all)]
 pub async fn submit_txn(
     state: web::Data<State>,
-    web::Json(data): web::Json<SubmitUtxoBody>,
-) -> HttpResult<web::Json<SubmitUtxoResp>> {
-    let SnarkWitness::V1(snark) = &data.snark;
+    body: JsonWithLogging<TransactionRequest>,
+) -> HttpResult<web::Json<TransactionResponse>> {
+    let data = body.into_inner();
+    let utxo_proof = data.proof;
 
     tracing::info!(
         method = "submit_txn",
-        instances = ?snark.instances,
-        proof = base64::prelude::BASE64_STANDARD.encode(&snark.proof),
+        proof = serde_json::to_string(&utxo_proof).unwrap(),
         "Incoming request"
     );
 
-    let utxo = UtxoProof::from_snark_witness(data.snark);
-    let utxo_hash = utxo.hash();
+    let circuit_proof = Proof::from(utxo_proof.clone());
+    if let Err(_err) = circuit_proof.verify(&*state.node.bb_backend).await {
+        return Err(RpcError::InvalidProof)?;
+    }
+
+    let utxo_hash = utxo_proof.hash();
+
+    if let Some((_, metadata)) = state
+        .node
+        .get_txn(utxo_hash.to_be_bytes())
+        .map_err(HTTPError::from)?
+    {
+        let root_hash = state
+            .node
+            .get_block(metadata.block_height)
+            .map_err(HTTPError::from)?
+            .map(|block_format| match block_format {
+                node::BlockFormat::V1(block) => block.content.state.root_hash,
+                node::BlockFormat::V2(block, _) => block.content.state.root_hash,
+            })
+            .unwrap_or_else(|| {
+                tracing::warn!(
+                    ?utxo_hash,
+                    height = ?metadata.block_height,
+                    "missing block for already included transaction"
+                );
+                Element::ZERO
+            });
+
+        return Err(RpcError::TxnAlreadyIncluded {
+            root_hash,
+            txn_hash: utxo_hash,
+            height: metadata.block_height,
+        })?;
+    }
 
     let node = Arc::clone(&state.node);
-    let block = tokio::spawn(async move { node.submit_transaction_and_wait(utxo).await })
+    let block = tokio::spawn(async move { node.submit_transaction_and_wait(utxo_proof).await })
         .await
-        .context("tokio spawn join handle error")??;
+        .map_err(|err| HTTPError::internal(Box::new(err)))??;
 
-    Ok(web::Json(SubmitUtxoResp {
+    Ok(web::Json(TransactionResponse {
         height: block.content.header.height,
         root_hash: block.content.state.root_hash,
         txn_hash: utxo_hash,
@@ -64,7 +85,7 @@ pub async fn submit_txn(
 pub(crate) struct TxnWithInfo {
     pub(crate) proof: UtxoProof,
     pub(crate) index_in_block: u64,
-    pub(crate) hash: CryptoHash,
+    pub(crate) hash: Element,
     pub(crate) block_height: BlockHeight,
     pub(crate) time: u64,
 }
@@ -118,16 +139,22 @@ pub async fn list_txns(
 ) -> HttpResult<web::Json<ListTxnsResponse>> {
     tracing::info!(method = "list_txns", ?path, ?query, "Incoming request");
 
-    let block_fetcher =
-        |cursor: &Option<CursorChoice<BlockHeight>>, order: BlockListOrder, limit: usize| {
-            state
+    let make_block_fetcher = |s: web::Data<State>| {
+        move |cursor: &Option<CursorChoice<BlockHeight>>,
+              order: BlockListOrder,
+              limit: usize|
+              -> Result<std::vec::IntoIter<Result<BlockFormat, Error>>, Error> {
+            let iter = s
                 .node
-                .fetch_blocks_non_empty_paginated(cursor, order, limit)
-        };
+                .fetch_blocks_non_empty_paginated(cursor, order, limit)?;
+            Ok(iter.collect::<Vec<_>>().into_iter())
+        }
+    };
 
     let max_height = state.node.max_height();
 
-    let (cursor, transactions) = list_txns_inner(block_fetcher, &query, max_height)?;
+    let (cursor, transactions) =
+        list_txns_inner(make_block_fetcher(state.clone()), &query, max_height)?;
 
     let (cursor, transactions) = if transactions.is_empty() && query.poll {
         let towards_newer_height = match (&query.order, query.cursor.as_deref()) {
@@ -163,7 +190,7 @@ pub async fn list_txns(
                     }
                     _ = non_empty_block_stream.next() => {
                         list_txns_inner(
-                            block_fetcher,
+                            make_block_fetcher(state.clone()),
                             &query,
                             max_height,
                         )?
@@ -284,21 +311,16 @@ pub struct GetTxnResponse {
 #[tracing::instrument(err, skip_all)]
 pub async fn get_txn(
     state: web::Data<State>,
-    path: web::Path<(String,)>,
+    path: web::Path<(Element,)>,
 ) -> HttpResult<web::Json<GetTxnResponse>> {
     tracing::info!(method = "get_txn", ?path, "Incoming request");
 
     let (txn_hash,) = path.into_inner();
-    let txn_hash =
-        CryptoHash::from_str(&txn_hash).map_err(|err| crate::Error::FailedToParseHash {
-            hash: txn_hash,
-            source: err,
-        })?;
 
     let (txn, metadata) = state
         .node
-        .get_txn(txn_hash.into_inner())?
-        .ok_or(crate::Error::TxnNotFound { txn: txn_hash })?;
+        .get_txn(txn_hash.to_be_bytes())?
+        .ok_or(RpcError::TxnNotFound(ElementData { element: txn_hash }))?;
 
     let time = metadata.block_time.unwrap_or_else(|| {
         node::NodeShared::estimate_block_time(metadata.block_height, state.node.max_height())
@@ -317,6 +339,7 @@ pub async fn get_txn(
 
 #[cfg(test)]
 mod tests {
+    use contextful::ResultContextExt;
     use primitives::pagination::Opaque;
 
     use crate::{Block, BlockFormat};
@@ -336,19 +359,13 @@ mod tests {
             block
         };
 
-        let new_proof = |recent_root: Element| UtxoProof {
-            recent_root,
-            ..UtxoProof::default()
-        };
+        let new_proof = || UtxoProof::default();
 
         let blocks = [
             new_block(1, vec![]),
-            new_block(2, vec![new_proof(Element::new(1))]),
-            new_block(
-                3,
-                vec![new_proof(Element::new(2)), new_proof(Element::new(3))],
-            ),
-            new_block(4, vec![new_proof(Element::new(4))]),
+            new_block(2, vec![new_proof()]),
+            new_block(3, vec![new_proof(), new_proof()]),
+            new_block(4, vec![new_proof()]),
         ];
 
         let max_height = blocks.last().unwrap().content.header.height;
@@ -359,9 +376,16 @@ mod tests {
 
         let block_fetcher =
             |cursor: &Option<CursorChoice<BlockHeight>>, order: BlockListOrder, limit: usize| {
-                Ok(store
-                    .list_paginated(cursor, order, limit)?
-                    .map(|r| r.map(|(_, block)| block).map_err(node::Error::from)))
+                let blocks = store
+                    .list_paginated(cursor, order, limit)
+                    .context("list paginated blocks")?
+                    .map(|res| -> Result<_, node::Error> {
+                        let (_, block) = res.context("load paginated block")?;
+                        Ok(block)
+                    })
+                    .collect::<Vec<_>>();
+
+                Ok(blocks.into_iter())
             };
 
         let (_pagination, txns) = list_txns_inner(
@@ -406,7 +430,6 @@ mod tests {
             .unwrap();
             assert_eq!(txns.len(), 1);
             assert_eq!(txns[0].block_height, BlockHeight(3));
-            assert_eq!(txns[0].proof.recent_root, Element::new(2));
 
             let (cursor, txns) = list_txns_inner(
                 block_fetcher,
@@ -421,7 +444,6 @@ mod tests {
             .unwrap();
             assert_eq!(txns.len(), 1);
             assert_eq!(txns[0].block_height, BlockHeight(3));
-            assert_eq!(txns[0].proof.recent_root, Element::new(3));
 
             let (cursor, txns) = list_txns_inner(
                 block_fetcher,
@@ -436,7 +458,6 @@ mod tests {
             .unwrap();
             assert_eq!(txns.len(), 1);
             assert_eq!(txns[0].block_height, BlockHeight(2));
-            assert_eq!(txns[0].proof.recent_root, Element::new(1));
 
             let (cursor, txns) = list_txns_inner(
                 block_fetcher,
@@ -469,7 +490,6 @@ mod tests {
             .unwrap();
             assert_eq!(txns.len(), 1);
             assert_eq!(txns[0].block_height, BlockHeight(2));
-            assert_eq!(txns[0].proof.recent_root, Element::new(1));
 
             let (cursor, txns) = list_txns_inner(
                 block_fetcher,
@@ -484,7 +504,6 @@ mod tests {
             .unwrap();
             assert_eq!(txns.len(), 1);
             assert_eq!(txns[0].block_height, BlockHeight(3));
-            assert_eq!(txns[0].proof.recent_root, Element::new(2));
 
             let (cursor, txns) = list_txns_inner(
                 block_fetcher,
@@ -499,7 +518,6 @@ mod tests {
             .unwrap();
             assert_eq!(txns.len(), 1);
             assert_eq!(txns[0].block_height, BlockHeight(3));
-            assert_eq!(txns[0].proof.recent_root, Element::new(3));
 
             let (cursor, txns) = list_txns_inner(
                 block_fetcher,
@@ -514,7 +532,6 @@ mod tests {
             .unwrap();
             assert_eq!(txns.len(), 1);
             assert_eq!(txns[0].block_height, BlockHeight(4));
-            assert_eq!(txns[0].proof.recent_root, Element::new(4));
 
             let (cursor, txns) = list_txns_inner(
                 block_fetcher,

@@ -1,0 +1,25 @@
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+
+# if you're seeing this message, you can opt out with `#[allow(clippy::disallowed_methods)]`, but only if you know what you're doing ^-^ 
+disallowed-methods = [
+
+  # we ban serialization/deserialization traits because we want to guarantee that any data which:
+  #  - is written by one version of a crate
+  #  - is read by another version of a crate
+  # is properly versioned.
+  # 
+  # We use the `wire_message::WireMessage` trait for this, which provides `WireMessage::to_vec` and `WireMessage::from_bytes`, 
+  # which allow for serialization, but require that the type implements this trait
+  { path = "borsh::to_vec", reason = "all wire messages should go through the `wire_message::WireMessage` trait" },
+  { path = "borsh::to_writer", reason = "all wire messages should go through the `wire_message::WireMessage` trait" },
+  { path = "borsh::from_slice", reason = "all wire messages should go through the `wire_message::WireMessage` trait" },
+
+  # we'll re-enable these when we have our own macro for borsh - we need to include `#[allow(clippy::disallowed_methods)]` in the output of the macro but I don't have time now
+
+  # { path = "borsh::BorshSerialize::serialize", reason = "all wire messages should go through the `wire_message::WireMessage` trait" },
+  # { path = "borsh::BorshDeserialize::deserialize", reason = "all wire messages should go through the `wire_message::WireMessage` trait" },
+  # { path = "borsh::BorshDeserialize::deserialize_reader", reason = "all wire messages should go through the `wire_message::WireMessage` trait" },
+  # { path = "borsh::BorshDeserialize::try_from_slice", reason = "all wire messages should go through the `wire_message::WireMessage` trait" },
+  # { path = "borsh::BorshDeserialize::try_from_reader", reason = "all wire messages should go through the `wire_message::WireMessage` trait" },
+]

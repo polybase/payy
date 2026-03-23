@@ -1,11 +1,22 @@
+// lint-long-file-override allow-max-lines=800
+mod aggregator_support;
+mod blocks_tree;
+mod elements;
 mod empty;
 mod merkle;
+mod smirk;
+mod stats;
 mod sync;
 mod transaction;
 mod types;
 
+use barretenberg_cli::CliBackend;
+use element::Element;
+use node_interface::BlockTreeResponse;
 pub use types::*;
-use web3::{contract::tokens::Tokenizable, ethabi::Token, signing::keccak256};
+use zk_circuits::Prove;
+
+use crate::rpc::types::ElementsListItem;
 
 use std::{
     env::VarError,
@@ -13,30 +24,18 @@ use std::{
     path::PathBuf,
     process::Command,
     str::FromStr,
-    sync::{mpsc, Arc, Mutex},
+    sync::{Arc, Mutex, mpsc},
 };
 
-use contracts::{
-    util::{convert_element_to_h256, convert_h160_to_element},
-    Address, RollupContract, SecretKey, USDCContract,
-};
+use contracts::{Address, RollupContract, SecretKey, USDCContract, util::convert_h160_to_element};
 use futures::Future;
-// use ethereum_types::H160;
-// use node::util::public_to_address;
 use once_cell::sync::Lazy;
-use primitives::hash::CryptoHash;
+use primitives::{block_height::BlockHeight, hash::CryptoHash};
 use reqwest::Url;
 use serde_json::json;
-use sha3::Digest;
-use testutil::{eth::EthNode, PortPool};
+use testutil::{PortPool, eth::EthNode};
 use tokio::runtime::RuntimeFlavor;
-use wire_message::WireMessage;
-use zk_circuits::{
-    constants::MERKLE_TREE_DEPTH,
-    data::{Burn, BurnTo, InputNote, Mint, Note, ParameterSet, SnarkWitness},
-    CircuitKind,
-};
-use zk_primitives::Element;
+use zk_primitives::{InputNote, Note, UtxoProof, bridged_polygon_usdc_note_kind};
 
 type Error = serde_json::Value;
 
@@ -70,7 +69,7 @@ impl ServerConfig {
             keep_port_after_drop,
             safe_eth_height_offset: 0,
             rollup_contract: Address::from_slice(
-                &hex::decode("2279b7a0a67db372996a5fab50d91eaa73d2ebe6").unwrap(),
+                &hex::decode("dc64a140aa3e981100a9beca4e685f962f0cf6c9").unwrap(),
             ),
             secret_key: hex::decode(
                 "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
@@ -88,41 +87,16 @@ impl ServerConfig {
             ..Self::single_node(keep_port_after_drop)
         }
     }
-
-    // TODO: once we bring this back, we need to configure EthNode to spawn with multiple validators
-    // fn four_nodes(keep_port_after_drop: bool) -> [Self; 4] {
-    //     let config = |secret_key| Self {
-    //         keep_port_after_drop,
-    //         rollup_contract: Address::from_slice(
-    //             &hex::decode(
-    //                 "2279b7a0a67db372996a5fab50d91eaa73d2ebe6",
-    //             )
-    //             .unwrap(),
-    //         ),
-    //         secret_key: hex::decode(secret_key).unwrap().try_into().unwrap(),
-    //         mock_prover: false,
-    //     };
-
-    //     // First 4 default hardhat accounts
-    //     [
-    //         config("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"),
-    //         config("59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"),
-    //         config("5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"),
-    //         config("7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6"),
-    //     ]
-    // }
 }
 
 #[derive(Debug)]
 struct Server {
     process: Option<std::process::Child>,
-    // Keep the root dir alive so that server can use it
     root_dir: tempdir::TempDir,
     api_port: u16,
     p2p_port: u16,
     secret_key: [u8; 32],
     rollup_contract_addr: Address,
-    // address: H160,
     peers: Vec<Peer>,
     keep_port_after_drop: bool,
     safe_eth_height_offset: u64,
@@ -139,7 +113,6 @@ struct Server {
 #[derive(Debug, Clone)]
 struct Peer {
     p2p_port: u16,
-    // _address: H160,
 }
 
 impl Drop for Server {
@@ -166,8 +139,6 @@ impl Server {
 
         match std::env::var("COPY_DATA_FROM_DIR") {
             Ok(copy_data_from_dir) => {
-                // copy both ${COPY_DATA_FROM_DIR}/db and ${COPY_DATA_FROM_DIR}/smirk to root_dir/db and root_dir/smirk
-                // making sure that the directories exist in COPY_DATA_FROM_DIR
                 for dir in &["db", "smirk"] {
                     let src = PathBuf::from(&copy_data_from_dir).join(dir).join("latest");
                     let dst = root_dir.path().join(dir).join("latest");
@@ -185,13 +156,6 @@ impl Server {
             Err(VarError::NotUnicode(_)) => panic!("COPY_DATA_FROM_DIR has invalid unicode"),
         }
 
-        // let public_key = secp256k1::SecretKey::from_slice(&config.secret_key)
-        //     .unwrap()
-        //     .public_key(secp256k1::SECP256K1);
-        // let public_key_bytes = public_key.serialize_uncompressed();
-        // let public_key_bytes = TryInto::<[u8; 64]>::try_into(&public_key_bytes[1..]).unwrap();
-        // let address = public_to_address(&public_key_bytes.into());
-
         let (stdout_sender, stdout) = mpsc::channel();
         let (stderr_sender, stderr) = mpsc::channel();
 
@@ -203,11 +167,7 @@ impl Server {
             safe_eth_height_offset: config.safe_eth_height_offset,
             secret_key: config.secret_key,
             rollup_contract_addr: config.rollup_contract,
-            // address,
-            peers: vec![Peer {
-                p2p_port,
-                // _address: address,
-            }],
+            peers: vec![Peer { p2p_port }],
             prover: config.mock_prover,
             api_port,
             p2p_port,
@@ -229,7 +189,6 @@ impl Server {
     fn to_peer(&self) -> Peer {
         Peer {
             p2p_port: self.p2p_port,
-            // _address: self.address,
         }
     }
 
@@ -338,7 +297,6 @@ impl Server {
             }
 
             if std::thread::panicking() {
-                // If a test failed, print the last 10 lines of output so we can debug node errors
                 let stdout = self
                     .stdout
                     .recv_timeout(std::time::Duration::from_secs(10))
@@ -393,14 +351,6 @@ impl Server {
         }
     }
 
-    // fn reset_db(&mut self) {
-    //     std::fs::remove_dir_all(self.root_dir.path().join("db")).unwrap();
-    // }
-
-    // fn reset_smirk(&mut self) {
-    //     std::fs::remove_dir_all(self.root_dir.path().join("smirk")).unwrap();
-    // }
-
     async fn setup_and_wait(config: ServerConfig, eth_node: Arc<EthNode>) -> Self {
         let mut server = Self::new(config, eth_node);
         server.run(None);
@@ -425,7 +375,7 @@ impl Server {
             match self.client.execute(req).await {
                 Ok(res) if res.status().is_success() => return Ok(()),
                 Ok(res) if is_last_retry => {
-                    return Err(format!("Failed to get health: {}", res.status()).into())
+                    return Err(format!("Failed to get health: {}", res.status()).into());
                 }
                 Ok(_) => {}
                 Err(err) if is_last_retry => return Err(err.into()),
@@ -439,42 +389,23 @@ impl Server {
 
     async fn wait(&self) -> Result<(), Box<dyn std::error::Error>> {
         self.wait_for_healthy().await?;
-
         Ok(())
     }
 
     #[allow(dead_code)]
     async fn wait_to_notice_sync(&self) -> Result<(), Box<dyn std::error::Error>> {
         self.wait_for_healthy().await?;
-
-        // When a node starts up, it doesn't know if it's out of sync yet,
-        // so /v0/health returns 200 OK, but practically the node is not
-        // ready to serve requests yet. So we wait a second to work around that.
         tokio::time::sleep(std::time::Duration::from_secs(10)).await;
         self.wait_for_healthy().await?;
-
         Ok(())
     }
 
-    // async fn wait_for_height(&self, min_height: u64) -> Result<(), Error> {
-    //     loop {
-    //         let height = self.height().await?;
-    //         if height.height > min_height {
-    //             return Ok(());
-    //         }
-    //         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    //     }
-    // }
-
-    pub async fn transaction(
-        &self,
-        snark_witness: &SnarkWitness,
-    ) -> Result<TransactionResp, Error> {
+    pub async fn transaction(&self, proof: &UtxoProof) -> Result<TransactionResp, Error> {
         let res = self
             .client
             .post(self.base_url().join("/v0/transaction").unwrap())
             .json(&json!({
-                "snark": snark_witness,
+                "proof": proof,
             }))
             .send()
             .await
@@ -546,6 +477,64 @@ impl Server {
         }
 
         Ok(res.json::<ElementResponse>().await.unwrap())
+    }
+
+    pub async fn list_elements(
+        &self,
+        elements: &[Element],
+        include_spent: bool,
+    ) -> Result<Vec<ElementsListItem>, Error> {
+        let res = self
+            .client
+            .get(self.base_url().join("/v0/elements").unwrap())
+            .query(&[
+                (
+                    "elements",
+                    elements
+                        .iter()
+                        .map(|e| e.to_hex())
+                        .collect::<Vec<_>>()
+                        .join(","),
+                ),
+                if include_spent {
+                    ("include_spent", include_spent.to_string())
+                } else {
+                    ("", "".to_string())
+                },
+            ])
+            .send()
+            .await
+            .unwrap();
+
+        if !res.status().is_success() {
+            let err = res.json::<Error>().await.unwrap();
+            return Err(err);
+        }
+
+        Ok(res.json().await.unwrap())
+    }
+
+    pub async fn block_tree(
+        &self,
+        height: BlockHeight,
+        diff_from: Option<BlockHeight>,
+    ) -> Result<BlockTreeResponse, Error> {
+        let mut request = self.client.get(
+            self.base_url()
+                .join(&format!("/v0/blocks/{}/tree", height.0))
+                .unwrap(),
+        );
+        if let Some(diff_height) = diff_from {
+            request = request.query(&[("diff_from", diff_height.0)]);
+        }
+        let res = request.send().await.unwrap();
+
+        if !res.status().is_success() {
+            let err = res.json::<Error>().await.unwrap();
+            return Err(err);
+        }
+
+        Ok(res.json().await.unwrap())
     }
 
     pub async fn list_blocks(&self, query: &ListBlocksQuery) -> Result<ListBlocksResponse, Error> {
@@ -624,9 +613,42 @@ impl Server {
 
         Ok(res.json().await.unwrap())
     }
+
+    pub async fn get_all_smirk_elements(&self) -> Result<GetAllSmirkElementsResponse, Error> {
+        let res = self
+            .client
+            .get(self.base_url().join("/v0/smirk/elements/all").unwrap())
+            .header("x-guild", "LC38R7uFkM&M")
+            .send()
+            .await
+            .unwrap();
+
+        if !res.status().is_success() {
+            let err = res.json::<Error>().await.unwrap();
+            return Err(err);
+        }
+
+        Ok(res.json().await.unwrap())
+    }
+
+    pub async fn stats(&self) -> Result<StatsResponse, Error> {
+        let res = self
+            .client
+            .get(self.base_url().join("/v0/stats").unwrap())
+            .send()
+            .await
+            .unwrap();
+
+        if !res.status().is_success() {
+            let err = res.json::<Error>().await.unwrap();
+            return Err(err);
+        }
+
+        Ok(res.json::<StatsResponse>().await.unwrap())
+    }
 }
 
-fn mint_with_note<'m, 't>(
+async fn mint_with_note<'m, 't>(
     rollup: &'m RollupContract,
     _usdc: &'m USDCContract,
     server: &'t Server,
@@ -635,16 +657,15 @@ fn mint_with_note<'m, 't>(
     impl Future<Output = Result<(), contracts::Error>> + 'm,
     impl Future<Output = Result<TransactionResp, Error>> + 't,
 ) {
-    let utxo = zk_circuits::data::Utxo::<MERKLE_TREE_DEPTH>::new_mint(note.clone());
-    let snark = cache_utxo_proof("mint", &utxo);
-
-    let mint = Mint::new([note.clone()]);
-    let proof = mint.evm_proof(ParameterSet::Eight).unwrap();
+    let output_notes = [note.clone(), Note::padding_note()];
+    let utxo = zk_primitives::Utxo::new_mint(output_notes.clone());
+    let backend = CliBackend;
+    let proof = utxo.prove(&backend).await.unwrap();
 
     (
         async move {
             let tx = rollup
-                .mint(&proof, &note.commitment(), &note.value(), &note.source())
+                .mint(&utxo.mint_hash(), &note.value, &note.contract)
                 .await?;
 
             while rollup
@@ -654,142 +675,63 @@ fn mint_with_note<'m, 't>(
                 .transaction_receipt(tx)
                 .await
                 .unwrap()
-                .map_or(true, |r| r.block_number.is_none())
+                .is_none_or(|r| r.block_number.is_none())
             {
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             }
 
             Ok(())
         },
-        async move { server.transaction(&snark).await },
+        async move { server.transaction(&proof).await },
     )
 }
 
-fn mint<'m, 't>(
+async fn mint<'m, 't>(
     rollup: &'m RollupContract,
     usdc: &'m USDCContract,
     server: &'t Server,
     address: Element,
     value: Element,
+    psi: Element,
 ) -> (
     Note,
     impl Future<Output = Result<(), contracts::Error>> + 'm,
     impl Future<Output = Result<TransactionResp, Error>> + 't,
 ) {
-    let note = Note::restore(address, Element::new(0), value, Element::new(0));
-
-    let (eth_tx, rpc_tx) = mint_with_note(rollup, usdc, server, note.clone());
+    let note = Note::new_with_psi(address, value, psi, bridged_polygon_usdc_note_kind());
+    let (eth_tx, rpc_tx) = mint_with_note(rollup, usdc, server, note.clone()).await;
 
     (note, eth_tx, rpc_tx)
 }
 
-fn burn<'m, 't>(
-    rollup: &'m RollupContract,
+async fn burn<'m, 't>(
     server: &'t Server,
-    note: &'m InputNote<MERKLE_TREE_DEPTH>,
+    note: &'m InputNote,
     to: &'m Address,
-    via_router: bool,
 ) -> (
     impl Future<Output = Result<(), contracts::Error>> + 'm,
     impl Future<Output = Result<TransactionResp, Error>> + 't,
 ) {
-    let utxo =
-        zk_circuits::data::Utxo::<MERKLE_TREE_DEPTH>::new_burn(note.clone(), note.recent_root());
-    let snark = cache_utxo_proof("burn", &utxo);
+    let input_notes = [note.clone(), InputNote::padding_note()];
+    let evm_address = convert_h160_to_element(to);
+    let utxo = zk_primitives::Utxo::new_burn(input_notes, evm_address);
+    let backend = CliBackend;
+    let proof = utxo.prove(&backend).await.unwrap();
 
     (
         async move {
-            let tx = if via_router {
-                let router = Address::from_str("4a679253410272dd5232b3ff7cf5dbb88f295319").unwrap();
-                let return_address =
-                    Address::from_str("0000000000000000000000000000000000000001").unwrap();
-                let usdc_address = rollup.usdc().await.unwrap();
-
-                let mut router_calldata =
-                    keccak256(b"burnToAddress(address,address,uint256)")[0..4].to_vec();
-                router_calldata.extend_from_slice(&web3::ethabi::encode(&[
-                    usdc_address.into_token(),
-                    to.into_token(),
-                    convert_element_to_h256(&note.value()).into_token(),
-                ]));
-
-                let msg = web3::ethabi::encode(&[
-                    Token::Address(router),
-                    Token::Bytes(router_calldata.clone()),
-                    Token::Address(return_address),
-                ]);
-
-                let mut msg_hash = keccak256(&msg);
-                // Bn256 can't fit the full hash, so we remove the first 3 bits
-                msg_hash[0] &= 0x1f; // 0b11111
-
-                let burn = BurnTo {
-                    notes: [note.note().clone()],
-                    secret_key: note.secret_key(),
-                    to_address: Element::from_be_bytes(msg_hash),
-                    kind: Element::ONE,
-                };
-
-                rollup
-                    .burn_to_router(
-                        &Element::ONE,
-                        &Element::from_be_bytes(msg_hash),
-                        &burn.evm_proof(ParameterSet::Nine).unwrap(),
-                        &note.nullifer(),
-                        &note.value(),
-                        &note.source(),
-                        &burn.signature(note.note()),
-                        &router,
-                        &router_calldata,
-                        &return_address,
-                    )
-                    .await?
-            } else {
-                let burn = {
-                    let notes = [note.note().clone()];
-                    let secret_key = note.secret_key();
-                    let to_address = convert_h160_to_element(to);
-                    Burn {
-                        notes,
-                        secret_key,
-                        to_address,
-                    }
-                };
-
-                rollup
-                    .burn(
-                        to,
-                        &burn.evm_proof(ParameterSet::Nine).unwrap(),
-                        &note.nullifer(),
-                        &note.value(),
-                        &note.source(),
-                        &burn.signature(note.note()),
-                    )
-                    .await?
-            };
-
-            while rollup
-                .client
-                .client()
-                .eth()
-                .transaction_receipt(tx)
-                .await
-                .unwrap()
-                .map_or(true, |r| r.block_number.is_none())
-            {
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            }
-
+            // We don't need to send an ETH transaction for burn anymore
             Ok(())
         },
-        async move { server.transaction(&snark).await },
+        async move { server.transaction(&proof).await },
     )
 }
 
 async fn rollup_contract(addr: Address, eth_node: &EthNode) -> RollupContract {
-    let client = contracts::Client::new(&eth_node.rpc_url(), None);
+    let client = contracts::Client::new(&eth_node.rpc_url(), None).with_latest_nonce();
     RollupContract::load(
         client,
+        1337,
         &hex::encode(addr.as_bytes()),
         SecretKey::from_str("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")
             .unwrap(),
@@ -804,36 +746,11 @@ async fn usdc_contract(rollup: &RollupContract, eth_node: &EthNode) -> USDCContr
     let client = contracts::Client::new(&eth_node.rpc_url(), None);
     USDCContract::load(
         client,
+        1337,
         &hex::encode(usdc_addr.as_bytes()),
         SecretKey::from_str("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")
             .unwrap(),
     )
     .await
     .unwrap()
-}
-
-fn cache_proof(name: &str, f: impl FnOnce() -> SnarkWitness) -> SnarkWitness {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/cache/{name}.proof"));
-
-    if path.exists() {
-        let proof = std::fs::read(&path).unwrap();
-        return SnarkWitness::from_bytes(&proof).unwrap();
-    }
-
-    let proof = f();
-    std::fs::write(&path, proof.to_bytes().unwrap()).unwrap();
-
-    proof
-}
-
-fn hash_utxo(utxo: &zk_circuits::data::Utxo<MERKLE_TREE_DEPTH>) -> [u8; 32] {
-    let utxo_hash = sha3::Sha3_256::digest(serde_json::to_string(&utxo).unwrap().as_bytes());
-    utxo_hash.into()
-}
-
-fn cache_utxo_proof(name: &str, utxo: &zk_circuits::data::Utxo<MERKLE_TREE_DEPTH>) -> SnarkWitness {
-    cache_proof(
-        &format!("utxo-{}-{}", name, hex::encode(hash_utxo(utxo))),
-        || SnarkWitness::V1(utxo.snark(CircuitKind::Utxo).unwrap().to_witness()),
-    )
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "support_messages" ADD COLUMN "is_internal" BOOLEAN NOT NULL DEFAULT FALSE;

@@ -117,8 +117,7 @@ impl ApprovalContent {
 
     fn hash(&self) -> CryptoHash {
         let mut hasher = Keccak256::new();
-        let mut height_bytes = [0u8; 32];
-        U256::from(self.target_height).to_big_endian(&mut height_bytes);
+        let height_bytes = U256::from(self.target_height).to_big_endian();
         hasher.update(height_bytes);
         hasher.update(match &self.inner {
             ApprovalInner::Endorsement(h) => h.inner(),

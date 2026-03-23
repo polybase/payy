@@ -5,10 +5,15 @@
 //! via the [SyncWorkerChannel].
 //! The main entry point is [SyncWorker::run].
 
-use std::{collections::HashSet, sync::Arc};
+// lint-long-file-override allow-max-lines=700
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use block_store::{BlockListOrder, StoreList};
 use contracts::RollupContract;
+use element::Element;
 use libp2p::PeerId;
 use parking_lot::Mutex;
 use prover::smirk_metadata::SmirkMetadata;
@@ -16,13 +21,15 @@ use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
 use crate::{
+    Error as NodeError, NodeShared, PersistentMerkleTree,
+    block::Block,
     cache::BlockCache,
     network::{
         NetworkEvent, SnapshotAccept, SnapshotChunk, SnapshotChunkFast, SnapshotChunkSlow,
-        SnapshotKind, SnapshotRequest,
+        SnapshotKind, SnapshotOffer as NetworkSnapshotOffer, SnapshotRequest,
     },
+    node::Mode,
     types::{BlockHeight, SnapshotId},
-    NodeShared,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -34,13 +41,13 @@ pub enum Error {
     Send(&'static str),
 
     #[error("node error: {0}")]
-    NodeError(#[from] Box<crate::Error>),
+    Node(#[from] Box<NodeError>),
 
     #[error("smirk collision error: {0}")]
-    SmirkCollisionError(#[from] smirk::CollisionError),
+    SmirkCollision(#[from] smirk::CollisionError),
 
     #[error("smirk storage error: {0}")]
-    SmirkStorageError(#[from] smirk::storage::Error),
+    SmirkStorage(#[from] smirk::storage::Error),
 
     #[error("tokio join error: {0}")]
     TokioJoin(#[from] tokio::task::JoinError),
@@ -48,7 +55,7 @@ pub enum Error {
 
 pub enum Message {
     OutOfSync(OutOfSync),
-    SnapshotOffer(SnapshotOffer),
+    SnapshotOffer(SyncSnapshotOffer),
     SnapshotChunk(PeerId, SnapshotChunk),
 }
 
@@ -59,7 +66,7 @@ pub struct OutOfSync {
 }
 
 /// Same as [crate::network::NetworkEvent::SnapshotOffer]
-pub struct SnapshotOffer {
+pub struct SyncSnapshotOffer {
     pub peer: PeerId,
     pub snapshot_id: SnapshotId,
 }
@@ -81,7 +88,10 @@ impl SyncWorkerChannel {
     /// Handled by [SyncWorker::handle_snapshot_offer].
     pub fn snapshot_offer(&self, peer: PeerId, snapshot_id: SnapshotId) -> Result<(), Error> {
         self.0
-            .send(Message::SnapshotOffer(SnapshotOffer { peer, snapshot_id }))
+            .send(Message::SnapshotOffer(SyncSnapshotOffer {
+                peer,
+                snapshot_id,
+            }))
             .map_err(|_| Error::ChannelWasClosed)
     }
 
@@ -95,14 +105,14 @@ impl SyncWorkerChannel {
 
 pub struct SyncWorker {
     node: Arc<NodeShared>,
-    rollup_contract: RollupContract,
+    rollup_contract: Option<RollupContract>,
     /// The number of blocks to request in a snapshot chunk.
     chunk_size: u64,
     /// Only request fast sync if the node is this many blocks behind.
     fast_sync_threshold: u64,
     /// Duration after which we stop waiting for a snapshot offer/chunk.
     timeout: std::time::Duration,
-    node_mode: crate::node::Mode,
+    node_mode: Mode,
     /// A channel for receiving sync network messages.
     channel: mpsc::UnboundedReceiver<Message>,
     /// We need the channel sender to send messages to ourselves,
@@ -116,11 +126,11 @@ impl SyncWorker {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         node: Arc<NodeShared>,
-        rollup_contract: RollupContract,
+        rollup_contract: Option<RollupContract>,
         chunk_size: u64,
         fast_sync_threshold: u64,
         timeout: std::time::Duration,
-        node_mode: crate::node::Mode,
+        node_mode: Mode,
         channel: mpsc::UnboundedReceiver<Message>,
         channel_sender: SyncWorkerChannel,
     ) -> Self {
@@ -174,8 +184,11 @@ impl SyncWorker {
 
         let far_enough_to_try_fast_sync =
             max_seen_height.0 - self.node.height().0 > self.fast_sync_threshold;
-        if self.node_mode.is_prover() && far_enough_to_try_fast_sync {
-            match self.rollup_contract.block_height().await {
+        if self.node_mode.is_prover()
+            && far_enough_to_try_fast_sync
+            && let Some(rollup_contract) = &self.rollup_contract
+        {
+            match rollup_contract.block_height().await {
                 Ok(contract_height) => {
                     let contract_height = BlockHeight(contract_height);
                     if contract_height > to_height {
@@ -227,7 +240,7 @@ impl SyncWorker {
     async fn wait_for_snapshot_offer(
         &mut self,
         snapshot_id: SnapshotId,
-    ) -> Result<SnapshotOffer, Error> {
+    ) -> Result<SyncSnapshotOffer, Error> {
         while let Some(msg) = self.channel.recv().await {
             match msg {
                 Message::SnapshotOffer(so) if so.snapshot_id == snapshot_id => return Ok(so),
@@ -242,7 +255,7 @@ impl SyncWorker {
         &mut self,
         kind: SnapshotKind,
         to_height: BlockHeight,
-        SnapshotOffer { peer, snapshot_id }: SnapshotOffer,
+        SyncSnapshotOffer { peer, snapshot_id }: SyncSnapshotOffer,
     ) -> Result<(), Error> {
         let from_height = self.node.height() + BlockHeight(1);
 
@@ -286,7 +299,7 @@ impl SyncWorker {
                 Message::SnapshotChunk(sc_peer, sc)
                     if sc_peer == peer && sc.snapshot_id() == snapshot_id =>
                 {
-                    return Ok((peer, sc))
+                    return Ok((peer, sc));
                 }
                 _ => {}
             }
@@ -370,53 +383,9 @@ impl SyncWorker {
             return Ok(());
         };
 
-        let block_elements = block
-            .content
-            .state
-            .txns
-            .iter()
-            .flat_map(|txn| txn.leaves())
-            .filter(|l| !l.is_zero())
-            .collect::<HashSet<_>>();
-
         {
             let mut tree = self.node.notes_tree().write();
-            let elements = HashSet::from_iter(elements.iter())
-                .difference(
-                    &tree
-                        .tree()
-                        .elements()
-                        .map(|(e, _)| e)
-                        .collect::<HashSet<_>>(),
-                )
-                .copied()
-                .copied()
-                .collect::<Vec<_>>();
-            if tree.tree().root_hash_with(&elements) != block.content.state.root_hash {
-                error!("Fast snapshot chunk root hash mismatch");
-                return Ok(());
-            }
-
-            let mut batch = smirk::Batch::new();
-            let mut block_elements_left_to_find = block_elements.clone();
-            for element in elements {
-                if block_elements.contains(&element) {
-                    block_elements_left_to_find.remove(&element);
-                    continue;
-                }
-
-                batch.insert(element, SmirkMetadata::inserted_in(0))?;
-            }
-
-            if !block_elements_left_to_find.is_empty() {
-                error!(
-                    ?block_elements_left_to_find,
-                    "Fast snapshot chunk missing elements"
-                );
-                return Ok(());
-            }
-
-            tree.insert_batch(batch)?;
+            Self::apply_fast_snapshot_chunk(&mut tree, &block, &elements)?;
             self.node
                 .block_cache
                 .lock()
@@ -426,6 +395,98 @@ impl SyncWorker {
         self.node.receive_proposal(*block).map_err(Box::new)?;
         self.node.ticker.tick();
 
+        Ok(())
+    }
+
+    fn apply_fast_snapshot_chunk(
+        tree: &mut PersistentMerkleTree,
+        block: &Block,
+        elements: &[Element],
+    ) -> Result<(), Error> {
+        // Elements for the last block in the chunk
+        let mut last_block_elements = HashMap::<
+            Element,
+            // true = add
+            // false = remove
+            bool,
+        >::new();
+        for utxo in block.content.state.txns.iter() {
+            for e in &utxo.public_inputs.input_commitments {
+                last_block_elements.insert(*e, false);
+            }
+            for e in &utxo.public_inputs.output_commitments {
+                last_block_elements.insert(*e, true);
+            }
+        }
+
+        // Build sets for diffing
+        let elements_set: HashSet<_> = elements.iter().copied().collect();
+        let tree_elements_set: HashSet<_> = tree.tree().elements().map(|(e, _)| *e).collect();
+
+        // New elements (present in `elements` but not in the tree)
+        let new_elements = elements_set
+            .difference(&tree_elements_set)
+            .copied()
+            .collect::<Vec<_>>();
+
+        // Missing elements (present in the tree but not in `elements`)
+        let missing_elements = tree_elements_set
+            .difference(&elements_set)
+            .copied()
+            .collect::<Vec<_>>();
+
+        // Validate root hash with both insertions and removals
+        if tree.tree().root_hash_with(&new_elements, &missing_elements)
+            != block.content.state.root_hash
+        {
+            error!("Fast snapshot chunk root hash mismatch");
+            return Ok(());
+        }
+
+        let mut batch = smirk::Batch::new();
+        let mut block_elements_left_to_find = last_block_elements.clone();
+
+        // Apply insertions that are not part of the last block (the last block
+        // will be applied separately via receive_proposal)
+        for element in new_elements {
+            if element == Element::ZERO {
+                continue;
+            }
+            if let Some(is_add) = last_block_elements.get(&element)
+                && *is_add
+            {
+                // This element is expected to be added by the last block; skip now.
+                block_elements_left_to_find.remove(&element);
+                continue;
+            }
+            batch.insert(element, SmirkMetadata::inserted_in(0))?;
+        }
+
+        // Apply removals that are not part of the last block (the last block
+        // will remove its inputs separately via receive_proposal)
+        for element in missing_elements {
+            if element == Element::ZERO {
+                continue;
+            }
+            if let Some(is_add) = last_block_elements.get(&element)
+                && !*is_add
+            {
+                // This element is expected to be removed by the last block; skip now.
+                block_elements_left_to_find.remove(&element);
+                continue;
+            }
+            batch.remove(element)?;
+        }
+
+        if !block_elements_left_to_find.is_empty() {
+            error!(
+                ?block_elements_left_to_find,
+                "Fast snapshot chunk missing elements"
+            );
+            return Ok(());
+        }
+
+        tree.insert_batch(batch)?;
         Ok(())
     }
 }
@@ -447,7 +508,7 @@ pub(crate) async fn handle_snapshot_request(
 
     info!(?snapshot_id, "Sending snapshot offer");
 
-    let offer = crate::network::SnapshotOffer { snapshot_id };
+    let offer = NetworkSnapshotOffer { snapshot_id };
     node.send(peer, NetworkEvent::SnapshotOffer(offer)).await;
 
     Ok(())
@@ -497,7 +558,7 @@ async fn send_snapshot_chunk_slow(
         .fetch_blocks(from_height..to_height, BlockListOrder::LowestToHighest)
         .into_iterator()
         .map(|r| r.map(|bf| bf.into_block()))
-        .collect::<Result<Vec<_>, crate::Error>>()
+        .collect::<Result<Vec<_>, NodeError>>()
         .map_err(Box::new)?;
 
     // Get the latest current pending block
@@ -512,12 +573,10 @@ async fn send_snapshot_chunk_slow(
     // Send snapshot chunk
     node.send(
         peer,
-        NetworkEvent::SnapshotChunk(crate::network::SnapshotChunk::Slow(
-            crate::network::SnapshotChunkSlow {
-                snapshot_id,
-                chunk: blocks,
-            },
-        )),
+        NetworkEvent::SnapshotChunk(SnapshotChunk::Slow(SnapshotChunkSlow {
+            snapshot_id,
+            chunk: blocks,
+        })),
     )
     .await;
 
@@ -552,15 +611,17 @@ async fn send_snapshot_chunk_fast(
     // Send snapshot chunk
     node.send(
         peer,
-        NetworkEvent::SnapshotChunk(crate::network::SnapshotChunk::Fast(
-            crate::network::SnapshotChunkFast {
-                snapshot_id,
-                block: block.map(|b| Box::new(b.into_block())),
-                elements,
-            },
-        )),
+        NetworkEvent::SnapshotChunk(SnapshotChunk::Fast(SnapshotChunkFast {
+            snapshot_id,
+            block: block.map(|b| Box::new(b.into_block())),
+            elements,
+        })),
     )
     .await;
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "sync_test.rs"]
+mod sync_test;

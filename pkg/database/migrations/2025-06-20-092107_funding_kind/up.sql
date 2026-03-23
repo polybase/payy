@@ -1,0 +1,1 @@
+ALTER TABLE "ramps_transactions" ADD COLUMN "funding_kind" TEXT NOT NULL DEFAULT 'CRYPTO';

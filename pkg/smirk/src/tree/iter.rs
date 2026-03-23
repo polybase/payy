@@ -1,11 +1,14 @@
+use crate::Tree;
+use element::Element;
 use std::collections::btree_map;
-
-use crate::{Element, Tree};
 
 #[derive(Debug, Clone)]
 pub struct Elements<'a, V> {
     inner: btree_map::Iter<'a, Element, V>,
 }
+
+/// Backwards-compatible alias for the historical iterator type.
+pub type Iter<'a, V> = Elements<'a, V>;
 
 impl<'a, V> Iterator for Elements<'a, V> {
     type Item = (&'a Element, &'a V);
@@ -25,6 +28,7 @@ impl<const DEPTH: usize, V, C> Tree<DEPTH, V, C> {
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// let tree: Tree<64, _> = smirk! { 1, 2, 3 };
     ///
     /// let vec: Vec<(&Element, &())> = tree.elements().collect();
@@ -38,7 +42,7 @@ impl<const DEPTH: usize, V, C> Tree<DEPTH, V, C> {
     #[inline]
     #[must_use]
     #[doc(alias = "iter")]
-    pub fn elements(&self) -> Elements<V> {
+    pub fn elements(&self) -> Iter<'_, V> {
         let inner = self.entries.iter();
         Elements { inner }
     }
@@ -64,30 +68,6 @@ impl<const N: usize, V, C> IntoIterator for Tree<N, V, C> {
     fn into_iter(self) -> Self::IntoIter {
         let inner = self.entries.into_iter();
         IntoIter { inner }
-    }
-}
-
-/// An [`Iterator`] over [`Element`]s and values
-#[derive(Debug, Clone)]
-pub struct Iter<'a, V> {
-    inner: btree_map::Iter<'a, Element, V>,
-}
-
-impl<'a, V> Iterator for Iter<'a, V> {
-    type Item = (&'a Element, &'a V);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
-    }
-}
-
-impl<const N: usize, V, C> Tree<N, V, C> {
-    /// Get an iterator over elements and values
-    #[must_use]
-    pub fn iter(&self) -> Iter<V> {
-        Iter {
-            inner: self.entries.iter(),
-        }
     }
 }
 

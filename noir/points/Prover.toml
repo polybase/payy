@@ -1,0 +1,45 @@
+notes = [
+  { kind = "1", value = "0", address = "0x22d68b303a6a3d416959fb363795548966049a655418ebd9eb6a818fd6d2e27b", psi = "1" },
+  { kind = "1", value = "20", address = "0x22d68b303a6a3d416959fb363795548966049a655418ebd9eb6a818fd6d2e27b", psi = "2" },
+  { kind = "1", value = "30", address = "0x22d68b303a6a3d416959fb363795548966049a655418ebd9eb6a818fd6d2e27b", psi = "3" },
+  { kind = "1", value = "40", address = "0x22d68b303a6a3d416959fb363795548966049a655418ebd9eb6a818fd6d2e27b", psi = "4" },
+  { kind = "1", value = "50", address = "0x22d68b303a6a3d416959fb363795548966049a655418ebd9eb6a818fd6d2e27b", psi = "5" },
+  { kind = "1", value = "60", address = "0x22d68b303a6a3d416959fb363795548966049a655418ebd9eb6a818fd6d2e27b", psi = "6" },
+  { kind = "1", value = "70", address = "0x22d68b303a6a3d416959fb363795548966049a655418ebd9eb6a818fd6d2e27b", psi = "7" },
+  { kind = "1", value = "80", address = "0x22d68b303a6a3d416959fb363795548966049a655418ebd9eb6a818fd6d2e27b", psi = "8" },
+  { kind = "1", value = "90", address = "0x22d68b303a6a3d416959fb363795548966049a655418ebd9eb6a818fd6d2e27b", psi = "9" },
+  { kind = "1", value = "100", address = "0x22d68b303a6a3d416959fb363795548966049a655418ebd9eb6a818fd6d2e27b", psi = "10" },
+]
+
+address = "0x22d68b303a6a3d416959fb363795548966049a655418ebd9eb6a818fd6d2e27b"
+timestamp = "10000000"
+hash = "0x1eaf0543373e80534a6a23ac36255b0802aa1097c939ee3ec0e96e1d68039cc3"
+value = "540"
+
+# Secret keys for the 10 notes
+secret_keys = [
+  "101", # Example secret key
+  "101",
+  "101",
+  "101",
+  "101",
+  "101",
+  "101",
+  "101",
+  "101",
+  "101",
+]
+
+# Commitments for each note
+commitments = [
+  "0x0",
+  "0x0fcaad040e498822c43805739e53d9a6fa576c40aed38e31ae02d6dfa9a54b88",
+  "0x2e30e8bb2f8162b2ce950fad97fff1a0d64dfe2d202386465d70fa9848c8cf9c",
+  "0x1ab3cf2501cd9ec6b40337b96af6bde6486013e961b2bad18db43703ee038ada",
+  "0x1ebffcefd622ceaba4f90ce03c74fe9809b00f1ca065fbbc1df0f5f349f80e27",
+  "0x070ab62bf6bf696d35d14e1214487009ff024076fc69793ddedd7ad5b218c983",
+  "0x06862fddb7464511ce8ea3b914e638c67c17de8c9be1cf229a0824d61ac4c7e0",
+  "0x180ba66322bbeb5be54e361928ab60cab5fd402c8581098b9cbf7a95f07be42b",
+  "0x2a22e66e7846b696b2114639778f81d85cc4ede2e35265bd822ad044515a5a0b",
+  "0x22363ee0343e629e7448809691b87256286a27a2c0296e8ec78206ac0e791c42",
+]

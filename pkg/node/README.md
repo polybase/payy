@@ -2,7 +2,7 @@
 
 Primary client for Solid blockchain.
 
-Before running node, deploy contracts in the `eth` directory and set rollup-contract-addr to the address of the deployed rollup contract.
+Before running the node, deploy contracts in the `eth` directory and ensure the `chains` section of your configuration includes the deployed rollup contract and RPC endpoint for that chain. Each chain can customize its confirmation depth with the `safe-eth-height-offset` field. The legacy `--eth-rpc-url` and `--rollup-contract-addr` flags still override the first configured chain for convenience.
 
 ### Single validators
 
@@ -86,7 +86,7 @@ Query parameters:
 `/v0/blocks`
 
 Query parameters:
-- `limit`, max 100, default 10
+- `limit`, max 256, default 10
 - `cursor`, same as for transactions
 - `order`, either `"LowestToHighest"` or `"HighestToLowest"`
 - `skip_empty`, if true, skips blocks with no transactions

@@ -1,0 +1,13 @@
+[package]
+name = "test-spy-macros"
+version = "1.0.0"
+edition = "2024"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = { workspace = true }
+proc-macro2 = { workspace = true }
+syn = { workspace = true, features = ["full", "extra-traits"] }
+workspace-hack.workspace = true

@@ -1,0 +1,13 @@
+[package]
+name = "serde_yaml"
+version = "0.9.36"
+edition = "2024"
+description = "Shim crate that re-exports serde_yaml_ng for the workspace"
+license = "MIT OR Apache-2.0"
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+serde_yaml_ng = { workspace = true }
+workspace-hack.workspace = true

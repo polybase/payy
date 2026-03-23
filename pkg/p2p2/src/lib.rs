@@ -1,4 +1,4 @@
-#![feature(once_cell)]
+// #![feature(once_cell)]
 #![deny(clippy::disallowed_methods)]
 
 mod behaviour;

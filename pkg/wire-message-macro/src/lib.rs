@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::{quote, quote_spanned};
-use syn::{parse_macro_input, spanned::Spanned, Data, DeriveInput};
+use syn::{Data, DeriveInput, parse_macro_input, spanned::Spanned};
 
 #[proc_macro_attribute]
 pub fn wire_message(

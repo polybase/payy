@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Originally copied from https://github.com/scroll-tech/scroll/blob/ff380141a8cbcc214dc65f17ffa44faf4be646b6/contracts/src/libraries/verifier/ZkEvmVerifierV1.sol
 
-pragma solidity 0.8.20;
+pragma solidity ^0.8.20;
 
 import "./Verifier.sol";
 

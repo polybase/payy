@@ -1,6 +1,5 @@
 use crate::network::{NetworkEvent, SnapshotAccept, SnapshotOffer, SnapshotRequest};
-use crate::node::NodeShared;
-use eyre::Context;
+use crate::{NodeShared, Result};
 use libp2p::PeerId;
 use p2p2::Network;
 use std::sync::Arc;
@@ -12,7 +11,9 @@ pub fn network_handler(
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         loop {
-            let Some((network_peer_id, event)) = network.next().await else { continue };
+            let Some((network_peer_id, event)) = network.next().await else {
+                continue;
+            };
             tracing::debug!(network_peer_id = ?network_peer_id, event = ?event, "network event");
 
             if let Err(e) = handle_event(&node, network_peer_id, event).await {
@@ -22,57 +23,42 @@ pub fn network_handler(
     })
 }
 
-async fn handle_event(
-    node: &NodeShared,
-    peer: PeerId,
-    event: NetworkEvent,
-) -> color_eyre::Result<()> {
-    use NetworkEvent as NE;
-
+async fn handle_event(node: &NodeShared, peer: PeerId, event: NetworkEvent) -> Result<()> {
     match event {
-        NE::Approval(approval) => node
-            .receive_accept(&approval)
-            .await
-            .context("Accept failed")?,
+        NetworkEvent::Approval(approval) => node.receive_accept(&approval).await?,
 
-        NE::Block(block) => {
-            node.receive_proposal(block)
-                .context("Failed to process block")?;
+        NetworkEvent::Block(block) => {
+            node.receive_proposal(block)?;
             node.ticker.tick();
         }
 
-        NE::Transaction(txn) => node
-            .receive_transaction(txn)
-            .await
-            .context("Transaction failed")?,
+        NetworkEvent::Transaction(txn) => node.receive_transaction(txn).await?,
 
-        NE::SnapshotRequest(SnapshotRequest {
+        NetworkEvent::SnapshotRequest(SnapshotRequest {
             snapshot_id,
             from_height,
             to_height,
             kind,
-        }) => node
-            .receive_snapshot_request(peer, snapshot_id, from_height, to_height, kind)
-            .await
-            .context("Snapshot request failed")?,
+        }) => {
+            node.receive_snapshot_request(peer, snapshot_id, from_height, to_height, kind)
+                .await?
+        }
 
-        NE::SnapshotOffer(SnapshotOffer { snapshot_id }) => node
-            .receive_snapshot_offer(peer, snapshot_id)
-            .context("Snapshot offer failed")?,
+        NetworkEvent::SnapshotOffer(SnapshotOffer { snapshot_id }) => {
+            node.receive_snapshot_offer(peer, snapshot_id)?;
+        }
 
-        NE::SnapshotChunk(sc) => node
-            .receive_snapshot_chunk(peer, sc)
-            .context("Snapshot chunk failed")?,
+        NetworkEvent::SnapshotChunk(sc) => node.receive_snapshot_chunk(peer, sc)?,
 
-        NE::SnapshotAccept(SnapshotAccept {
+        NetworkEvent::SnapshotAccept(SnapshotAccept {
             snapshot_id,
             from_height,
             to_height,
             kind,
-        }) => node
-            .receive_snapshot_accept(peer, snapshot_id, from_height, to_height, kind)
-            .await
-            .context("Snapshot accept failed")?,
+        }) => {
+            node.receive_snapshot_accept(peer, snapshot_id, from_height, to_height, kind)
+                .await?
+        }
     }
 
     Ok(())

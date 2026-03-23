@@ -1,0 +1,27 @@
+[package]
+name = "guild-client-http"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+guild-interface = { workspace = true }
+client-http = { workspace = true }
+client-http-longpoll = { workspace = true }
+http-interface = { workspace = true }
+rpc = { workspace = true }
+element = { workspace = true }
+ramps-interface = { workspace = true }
+zk-circuits = { workspace = true }
+zk-primitives = { workspace = true }
+contextful = { workspace = true }
+
+async-trait = { workspace = true }
+chrono = { workspace = true }
+reqwest = { workspace = true }
+parking_lot = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+workspace-hack.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }

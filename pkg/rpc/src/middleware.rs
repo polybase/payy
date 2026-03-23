@@ -1,12 +1,41 @@
-use std::future::{ready, Ready};
+use std::future::{Ready, ready};
 
-use crate::error::HTTPError;
+use crate::error::{HTTPError, Severity};
 use actix_web::{
-    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
     Error, ResponseError,
+    dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready},
 };
 use futures_util::future::LocalBoxFuture;
-use tracing::error;
+use tracing::{error, warn};
+
+fn log_http_error(severity: &Severity, err: &HTTPError, path: &str, method: &str) {
+    match severity {
+        Severity::Warn => {
+            warn!(
+                path,
+                method,
+                ?err,
+                code = err.code.to_string(),
+                data = ?err.data,
+                report = err.report(),
+                is_request_error = true, // for filtering in sentry_layer
+                "HTTP Error"
+            );
+        }
+        Severity::Error => {
+            error!(
+                path,
+                method,
+                ?err,
+                code = err.code.to_string(),
+                data = ?err.data,
+                report = err.report(),
+                is_request_error = true, // for filtering in sentry_layer
+                "HTTP Error"
+            );
+        }
+    }
+}
 
 pub struct Middleware;
 
@@ -57,19 +86,16 @@ where
 
                             // send 5XX errors to Sentry
                             if status_code >= 500 {
-                                sentry::capture_error(&err);
+                                let mut e = sentry::event_from_error(&err);
+                                // invert the errors for better error naming
+                                e.exception.values.reverse();
+                                // inject the url path and method
+                                e.tags.insert("path".into(), path.clone());
+                                e.tags.insert("method".into(), method.clone());
+                                sentry::capture_event(e);
                             }
 
-                            error!(
-                                path,
-                                method,
-                                ?err,
-                                code = err.code.to_string(),
-                                data = ?err.data,
-                                report = err.report(),
-                                is_request_error = true, // for filtering in sentry_layer
-                                "HTTP Error"
-                            );
+                            log_http_error(&err.severity, err, &path, &method);
                         } else {
                             error!(path, method, ?err, "Unhandled server error");
                         }

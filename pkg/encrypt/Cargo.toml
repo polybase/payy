@@ -1,0 +1,11 @@
+[package]
+name = "encrypt"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+thiserror = { workspace = true }
+crypto_secretbox = { workspace = true }
+x25519-dalek = { workspace = true }
+workspace-hack.workspace = true

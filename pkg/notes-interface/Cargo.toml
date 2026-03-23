@@ -1,0 +1,35 @@
+[package]
+name = "notes-interface"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+diesel = [
+  "dep:diesel",
+  "dep:database",
+  "database/diesel",
+  "element/diesel",
+]
+
+[dependencies]
+async-trait = { workspace = true }
+chrono = { workspace = true }
+contextful = { workspace = true }
+database = { workspace = true, optional = true, default-features = false }
+diesel = { workspace = true, optional = true, features = ["postgres"] }
+element = { workspace = true }
+hash = { workspace = true }
+rand = { workspace = true }
+rpc = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+strum = { workspace = true }
+thiserror = { workspace = true }
+unimock = { workspace = true }
+uuid = { workspace = true }
+zk-primitives = { workspace = true }
+workspace-hack.workspace = true
+
+[dev-dependencies]
+serde_json = { workspace = true }

@@ -5,7 +5,7 @@ use doomslug::ApprovalContent;
 use primitives::tick_worker::TickWorkerTick;
 use tracing::{error, warn};
 
-use crate::{types::BlockHeight, Mode, NodeSharedArc};
+use crate::{Mode, NodeSharedArc, types::BlockHeight};
 
 #[async_trait]
 impl TickWorkerTick for NodeSharedArc {
@@ -17,14 +17,24 @@ impl TickWorkerTick for NodeSharedArc {
         let target_height = height + BlockHeight(1);
 
         // Check if I am the single validator
-        if !node.is_validator_for_height(target_height) {
+        let is_validator = match node.is_validator_for_height(target_height) {
+            Ok(value) => value,
+            Err(err) => {
+                error!(?err, "Unable to determine validator status");
+                // Retry soon to avoid busy-looping on configuration errors.
+                return Some(Instant::now() + Duration::from_secs(5));
+            }
+        };
+
+        if !is_validator {
             // This block may mean we can commit some proposals
             loop {
                 let next = node.block_cache.lock().get_next_commit_block();
+
                 let Some(block) = next else {
                     break;
                 };
-                if let Err(err) = node.validate_block(&block) {
+                if let Err(err) = node.validate_block(&block).await {
                     error!(?err, ?block, "Error validating block");
                     node.block_cache.lock().remove(&block.hash());
                     continue;

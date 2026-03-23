@@ -1,8 +1,6 @@
 use primitives::peer::PeerIdSigner;
 
 fn main() {
-    color_eyre::install().unwrap();
-
     let peer_signer = PeerIdSigner::default();
     println!("Secret key:");
     println!("  0x{}", peer_signer.to_hex());

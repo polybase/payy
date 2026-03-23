@@ -1,0 +1,107 @@
+name: Setup sccache
+description: Authenticates to GCS or S3, installs sccache, and sets environment variables for sccache
+
+inputs:
+  backend:
+    description: 'The backend to use: gcs or s3'
+    required: true
+    default: 'gcs'
+  sccache_bucket:
+    description: 'The bucket name for GCS or S3'
+    required: false
+    default: 'polybase-sccache-eu'
+  sccache_key_prefix:
+    description: 'The key prefix'
+    required: false
+    default: 'rust-cache/'
+  sccache_gcs_sa_key_base64:
+    description: 'The GCS service account key in base64, required for GCS backend'
+    required: false
+  sccache_s3_region:
+    description: 'The S3 region, required for S3 backend (or auto if endpoint is set)'
+    required: false
+  sccache_s3_access_key_id:
+    description: 'The S3 access key ID, required for S3 backend'
+    required: false
+  sccache_s3_secret_access_key:
+    description: 'The S3 secret access key, required for S3 backend'
+    required: false
+  sccache_s3_endpoint:
+    description: 'The S3 endpoint URL for generic S3 (e.g., https://s3.example.com or minio:9000)'
+    required: false
+  sccache_s3_use_ssl:
+    description: 'Use SSL for S3 endpoint (true/false)'
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Install sccache
+      uses: ./.github/actions/install-sccache
+
+    - name: Set sccache env vars
+      shell: bash
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        backend="${{ inputs.backend }}"
+        bucket="${{ inputs.sccache_bucket }}"
+        prefix="${{ inputs.sccache_key_prefix }}"
+        if [ "$backend" = "gcs" ]; then
+          echo "SCCACHE_GCS_BUCKET=$bucket" >> $GITHUB_ENV
+          echo "SCCACHE_GCS_KEY_PREFIX=$prefix" >> $GITHUB_ENV
+          echo "SCCACHE_GCS_RW_MODE=READ_WRITE" >> $GITHUB_ENV
+          base64 -d <<< "${{ inputs.sccache_gcs_sa_key_base64 }}" > /tmp/sccache-gcs-sa-key.json
+          chmod 660 /tmp/sccache-gcs-sa-key.json
+          echo "SCCACHE_GCS_KEY_PATH=/tmp/sccache-gcs-sa-key.json" >> $GITHUB_ENV
+        elif [ "$backend" = "s3" ]; then
+          echo "SCCACHE_BUCKET=$bucket" >> $GITHUB_ENV
+          echo "SCCACHE_S3_KEY_PREFIX=$prefix" >> $GITHUB_ENV
+          region="${{ inputs.sccache_s3_region }}"
+          if [ -n "${{ inputs.sccache_s3_endpoint }}" ] && [ -z "$region" ]; then
+            region="auto"
+          fi
+          echo "SCCACHE_REGION=$region" >> $GITHUB_ENV
+          if [ -n "${{ inputs.sccache_s3_endpoint }}" ]; then
+            echo "SCCACHE_ENDPOINT=${{ inputs.sccache_s3_endpoint }}" >> $GITHUB_ENV
+          fi
+          echo "SCCACHE_S3_USE_SSL=${{ inputs.sccache_s3_use_ssl }}" >> $GITHUB_ENV
+          echo "AWS_ACCESS_KEY_ID=${{ inputs.sccache_s3_access_key_id }}" >> $GITHUB_ENV
+          echo "AWS_SECRET_ACCESS_KEY=${{ inputs.sccache_s3_secret_access_key }}" >> $GITHUB_ENV
+        else
+          echo "Unsupported backend: $backend" >&2
+          exit 1
+        fi
+
+    - name: Set docker vars
+      shell: bash
+      run: |
+        backend="${{ inputs.backend }}"
+        bucket="${{ inputs.sccache_bucket }}"
+        prefix="${{ inputs.sccache_key_prefix }}"
+        echo "SCCACHE_BUILD_ARGS<<EOF" >> $GITHUB_ENV
+        if [ "$backend" = "gcs" ]; then
+          echo "SCCACHE_GCS_BUCKET=$bucket" >> $GITHUB_ENV
+          echo "SCCACHE_GCS_KEY_PREFIX=$prefix" >> $GITHUB_ENV
+        elif [ "$backend" = "s3" ]; then
+          echo "SCCACHE_BUCKET=$bucket" >> $GITHUB_ENV
+          echo "SCCACHE_S3_KEY_PREFIX=$prefix" >> $GITHUB_ENV
+          region="${{ inputs.sccache_s3_region }}"
+          if [ -n "${{ inputs.sccache_s3_endpoint }}" ] && [ -z "$region" ]; then
+            region="auto"
+          fi
+          echo "SCCACHE_REGION=$region" >> $GITHUB_ENV
+          if [ -n "${{ inputs.sccache_s3_endpoint }}" ]; then
+            echo "SCCACHE_ENDPOINT=${{ inputs.sccache_s3_endpoint }}" >> $GITHUB_ENV
+          fi
+          echo "SCCACHE_S3_USE_SSL=${{ inputs.sccache_s3_use_ssl }}" >> $GITHUB_ENV
+        fi
+        echo "EOF" >> $GITHUB_ENV
+        echo "SCCACHE_BUILD_SECRETS<<EOF" >> $GITHUB_ENV
+        if [ "$backend" = "gcs" ]; then
+          echo "gcs_sa_key_base64=${{ inputs.sccache_gcs_sa_key_base64 }}" >> $GITHUB_ENV
+        elif [ "$backend" = "s3" ]; then
+          echo "aws_access_key_id=${{ inputs.sccache_s3_access_key_id }}" >> $GITHUB_ENV
+          echo "aws_secret_access_key=${{ inputs.sccache_s3_secret_access_key }}" >> $GITHUB_ENV
+        fi
+        echo "EOF" >> $GITHUB_ENV

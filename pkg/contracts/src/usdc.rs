@@ -1,18 +1,20 @@
-use crate::error::Result;
+// lint-long-file-override allow-max-lines=300
 use crate::Client;
+use crate::error::Result;
+use crate::util::calculate_domain_separator;
 use ethereum_types::U64;
 use rustc_hex::FromHex;
 use secp256k1::{Message, SECP256K1};
 use sha3::{Digest, Keccak256};
 use testutil::eth::EthNode;
 use web3::{
-    contract::{tokens::Tokenize, Contract},
+    contract::{Contract, tokens::Tokenize},
     signing::{Key, SecretKey, SecretKeyRef},
     transports::Http,
-    types::{Address, H256, U256},
+    types::{Address, FilterBuilder, H256, U256},
 };
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct USDCContract {
     client: Client,
     contract: Contract<Http>,
@@ -46,28 +48,35 @@ impl USDCContract {
         }
     }
 
-    pub fn at_height(mut self, block_height: Option<u64>) -> Self {
-        self.block_height = block_height.map(|x| x.into());
-        self
+    pub fn at_height(&self, block_height: u64) -> Self {
+        Self {
+            block_height: Some(U64::from(block_height)),
+            ..self.clone()
+        }
     }
 
     pub fn address(&self) -> Address {
         self.address
     }
 
-    pub async fn load(client: Client, usdc_contract_addr: &str, signer: SecretKey) -> Result<Self> {
+    pub fn client(&self) -> &Client {
+        &self.client
+    }
+
+    pub async fn load(
+        client: Client,
+        chain_id: u128,
+        usdc_contract_addr: &str,
+        signer: SecretKey,
+    ) -> Result<Self> {
         let contract_json = include_str!("../../../eth/artifacts/contracts/IUSDC.sol/IUSDC.json");
         let contract = client.load_contract_from_str(usdc_contract_addr, contract_json)?;
-        let domain_separator = client
-            .query::<H256, _, _, _>(
-                &contract,
-                "DOMAIN_SEPARATOR",
-                (),
-                None,
-                Default::default(),
-                None,
-            )
-            .await?;
+        let domain_separator = calculate_domain_separator(
+            "USD Coin",
+            "2",
+            U256::from(chain_id),
+            usdc_contract_addr.parse()?,
+        );
         Ok(Self::new(
             client,
             contract,
@@ -81,7 +90,7 @@ impl USDCContract {
         let usdc_addr = "5fbdb2315678afecb367f032d93f642f64180aa3";
 
         let client = Client::from_eth_node(eth_node);
-        Self::load(client, usdc_addr, signer).await
+        Self::load(client, 1337, usdc_addr, signer).await
     }
 
     pub async fn call(&self, func: &str, params: impl Tokenize + Clone) -> Result<H256> {
@@ -227,6 +236,35 @@ impl USDCContract {
             )
             .await?;
         Ok(balance)
+    }
+
+    /// Check if an EIP-3009 authorization has been used by scanning the AuthorizationUsed event.
+    /// Many USDC implementations emit: AuthorizationUsed(address indexed authorizer, bytes32 indexed nonce)
+    /// Returns the transaction hash if found.
+    #[tracing::instrument(err, ret, skip(self))]
+    pub async fn authorization_used_txn(
+        &self,
+        authorizer: Address,
+        nonce: H256,
+    ) -> Result<Option<H256>> {
+        // keccak256("AuthorizationUsed(address,bytes32)")
+        let topic0 = H256::from_slice(&Keccak256::digest(b"AuthorizationUsed(address,bytes32)"));
+        let authorizer_h = H256::from(authorizer);
+
+        let filter = FilterBuilder::default()
+            .address(vec![self.address])
+            .from_block(web3::types::BlockNumber::Earliest)
+            .to_block(web3::types::BlockNumber::Latest)
+            .topics(
+                Some(vec![topic0]),
+                Some(vec![authorizer_h]),
+                Some(vec![nonce]),
+                None,
+            )
+            .build();
+
+        let logs = self.client.logs(filter).await?;
+        Ok(logs.into_iter().filter_map(|l| l.transaction_hash).next())
     }
 
     /// Approve contract to spend USDC on behalf of the user

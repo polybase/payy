@@ -1,9 +1,10 @@
 [package]
 name = "testutil"
 version = "1.3.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 once_cell = { workspace = true }
 reqwest = { workspace = true }
 tokio = { workspace = true }
+workspace-hack.workspace = true

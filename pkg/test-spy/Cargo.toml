@@ -1,0 +1,16 @@
+[package]
+name = "test-spy"
+version = "1.0.0"
+edition = "2024"
+
+[lib]
+
+[dependencies]
+test-spy-macros = { workspace = true }
+parking_lot = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+workspace-hack.workspace = true
+
+[dev-dependencies]
+async-trait = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros"] }

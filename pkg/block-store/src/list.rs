@@ -1,3 +1,4 @@
+// lint-long-file-override allow-max-lines=300
 use std::{marker::PhantomData, ops::RangeBounds};
 
 use primitives::{block_height::BlockHeight, pagination::CursorChoice};
@@ -5,8 +6,8 @@ use rocksdb::DB;
 use wire_message::WireMessage;
 
 use crate::{
-    keys::{Key, KeyBlock, KeyNonEmptyBlock, ListableKey, StoreValue},
     Block, BlockListOrder, BlockStore, Error, Result,
+    keys::{Key, KeyBlock, KeyNonEmptyBlock, ListableKey, StoreValue},
 };
 
 pub trait StoreList {
@@ -80,7 +81,7 @@ where
     fn map<NewMapped, F: FnMut(Self::Item) -> NewMapped + Send>(
         self,
         map: F,
-    ) -> MappedList<F, NewMapped, Self> {
+    ) -> impl StoreList<Item = NewMapped> {
         MappedList {
             list: self,
             map,
@@ -114,7 +115,7 @@ where
     fn map<NewItem, NF: FnMut(Self::Item) -> NewItem + Send>(
         self,
         map: NF,
-    ) -> MappedList<NF, NewItem, Self> {
+    ) -> impl StoreList<Item = NewItem> {
         MappedList {
             map,
             list: self,

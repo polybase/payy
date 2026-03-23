@@ -1,25 +1,18 @@
 [package]
 name = "smirk"
 version = "1.3.0"
-edition = "2021"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-zk-primitives = { workspace = true }
+element = { workspace = true }
+hash = { workspace = true }
 
 bitvec = { workspace = true }
-ethnum = { workspace = true }
-ff = { workspace = true }
-halo2_gadgets = { workspace = true }
-halo2_proofs = { workspace = true }
-halo2curves = { workspace = true }
-poseidon-circuit = { workspace = true }
-proptest = { workspace = true, optional = true }
+proptest = { workspace = true }
 rand = { workspace = true }
-rand_chacha = { workspace = true }
-rocksdb = { workspace = true, optional = true }
-serde = { workspace = true, optional = true, features = ["derive"] }
+rocksdb = { workspace = true }
 thiserror = { workspace = true }
 borsh = { workspace = true }
 wire-message = { workspace = true }
@@ -27,24 +20,34 @@ strum = { workspace = true }
 rayon = { workspace = true }
 dashmap = { workspace = true }
 tracing = { workspace = true }
-
+workspace-hack.workspace = true
 
 [dev-dependencies]
-proptest = { workspace = true }
 serde_json = { workspace = true }
 test-strategy = { workspace = true }
 tempdir = { workspace = true }
 benchy = { workspace = true }
-zk-primitives = { workspace = true, features = ["test-api"] }
+hash = { workspace = true, features = ["test-api"] }
 expect-test = { workspace = true }
+node-client-http = { workspace = true }
+primitives = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+reqwest = { workspace = true }
 
 [features]
-default = ["serde", "storage"]
-
-storage = ["dep:rocksdb"]
-serde = ["dep:serde", "zk-primitives/serde", "zk-primitives/proptest"]
 slow-storage-tests = []
 
 [[bench]]
 name = "storage_load"
 harness = false
+
+[[bench]]
+name = "root_hash_with"
+harness = false
+
+[[bench]]
+name = "insert_batch_mainnet"
+harness = false
+
+[package.metadata.cargo-machete]
+ignored = ["strum"]

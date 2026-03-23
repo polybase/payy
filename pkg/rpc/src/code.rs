@@ -1,52 +1,25 @@
 use actix_web::http::StatusCode;
-use derive_more::Display;
+use serde::{Deserialize, Serialize};
+use strum_macros::{Display, EnumString};
 
-#[derive(Debug, Display)]
+#[derive(Debug, Clone, Copy, Display, EnumString, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum ErrorCode {
-    #[display(fmt = "bad-request")]
     BadRequest,
-
-    #[display(fmt = "invalid-argument")]
     InvalidArgument,
-
-    #[display(fmt = "failed-precondition")]
     FailedPrecondition,
-
-    #[display(fmt = "out-of-range")]
     OutOfRange,
-
-    #[allow(unused)]
-    #[display(fmt = "unauthenticated")]
     Unauthenticated,
-
-    #[display(fmt = "permission-denied")]
     PermissionDenied,
-
-    #[display(fmt = "not-found")]
     NotFound,
-
-    #[display(fmt = "aborted")]
     Aborted,
-
-    #[display(fmt = "already-exists")]
     AlreadyExists,
-
-    #[display(fmt = "resource-exhausted")]
     ResourceExhausted,
-
-    #[display(fmt = "cancelled")]
     Cancelled,
-
-    #[display(fmt = "payload-too-large")]
     PayloadTooLarge,
-
-    #[display(fmt = "unavailable")]
     Unavailable,
-
-    #[display(fmt = "internal")]
     Internal,
-
-    #[display(fmt = "deadline-exceeded")]
     DeadlineExceeded,
 }
 

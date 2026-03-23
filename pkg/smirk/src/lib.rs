@@ -8,7 +8,6 @@
 #![allow(clippy::single_match_else)]
 #![allow(clippy::from_iter_instead_of_collect)]
 #![deny(missing_docs)]
-#![feature(once_cell)] // TODO: remove this once we can get to a more recent rustc version
 
 //! # Smirk (**S**parse **M**e**RK**le tree)
 //!
@@ -19,6 +18,7 @@
 //!
 //! ```rust
 //! # use smirk::*;
+//! # use element::Element;
 //! // the tree is generic over the depth, 64 is a good default
 //! let mut tree = Tree::<64, String>::new();
 //!
@@ -55,14 +55,16 @@
 //! A Smirk tree is represented by a binary tree with a fixed depth controlled by a const generic
 //! parameter `DEPTH`. Each node of depth `DEPTH` have two children of depth `DEPTH - 1`, except
 //! for the case of a node with depth `1`, which either contains an [`Element`], or is empty, which
-//! is represented by [`Element::NULL_HASH`].
+//! is represented by [`element::Element::NULL_HASH`].
 //!
 //! However, especially if `DEPTH` is small, there may be two elements with the same `DEPTH - 1`
 //! least significant bits, meaning they would occupy the same slot. This is a collision, and the
 //! second [`Element`] will fail to insert.
 //!
-//! Because [`Element::NULL_HASH`] is a valid value at any point in the tree, it is considered to
+//! Because [`element::Element::NULL_HASH`] is a valid value at any point in the tree, it is considered to
 //! collide with every value, and cannot be inserted into the tree ever.
+//!
+//! [`Element`]: element::Element
 
 /// APIs relating to batched inserts into [`Tree`]s and [`Persistent`]s
 ///
@@ -74,11 +76,9 @@ mod hash;
 pub mod hash_cache;
 mod macros;
 /// APIs relating to persistence of a [`Tree`]
-#[cfg(feature = "storage")]
 pub mod storage;
 mod tree;
 
 pub use batch::Batch;
 pub use hash::empty_tree_hash;
 pub use tree::{Collision, CollisionError, Path, Tree};
-pub use zk_primitives::*;

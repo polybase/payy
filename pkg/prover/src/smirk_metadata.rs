@@ -2,7 +2,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 /// The block number of the block that a particular [`Element`] was inserted into a [`Tree`]
 ///
-/// [`Element`]: smirk::Element
+/// [`Element`]: element::Element
 /// [`Tree`]: smirk::Tree
 #[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
 #[non_exhaustive]

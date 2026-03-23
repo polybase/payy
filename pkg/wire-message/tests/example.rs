@@ -1,6 +1,6 @@
 #![allow(clippy::disallowed_names)]
 use borsh::{BorshDeserialize, BorshSerialize};
-use wire_message::{wire_message, Error, WireMessage};
+use wire_message::{Error, WireMessage, wire_message};
 
 #[wire_message]
 enum ExampleMessage {

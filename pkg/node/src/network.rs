@@ -1,10 +1,10 @@
 use crate::types::BlockHeight;
-use crate::utxo::UtxoProof;
 use crate::{block::Block, types::SnapshotId};
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 use doomslug::Approval;
-use smirk::Element;
+use element::Element;
+use zk_primitives::UtxoProof;
 
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub enum NetworkEvent {
