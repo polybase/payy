@@ -81,6 +81,8 @@ jobs:
         uses: ./.github/actions/setup-sccache
         with:
           sccache_gcs_sa_key_base64: "${{ secrets.SCCACHE_GCS_SA_KEY_BASE64 }}"
+          sccache_bucket: ${{ vars.SCCACHE_GCS_BUCKET }}
+          backend: gcs
 
       - name: Log in to Docker Hub
         env:
