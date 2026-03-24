@@ -1,0 +1,17 @@
+[package]
+name = "aggregator-interface"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+barretenberg-interface = { workspace = true }
+contextful = { workspace = true }
+element = { workspace = true }
+node-interface = { workspace = true }
+zk-primitives = { workspace = true }
+
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+unimock = { workspace = true }
+workspace-hack.workspace = true

@@ -1,0 +1,15 @@
+[package]
+name = "barretenberg-api-server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = { workspace = true, features = ["macros"] }
+barretenberg-api-interface = { workspace = true }
+barretenberg-interface = { workspace = true }
+contextful = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+workspace-hack.workspace = true

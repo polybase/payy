@@ -1,7 +1,6 @@
-use crate::{
-    hash_cache::{HashCache, NoopHashCache},
-    Element,
-};
+// lint-long-file-override allow-max-lines=300
+use crate::hash_cache::{HashCache, NoopHashCache};
+use element::Element;
 use std::collections::BTreeMap;
 
 mod batch;
@@ -11,15 +10,14 @@ mod iter;
 mod known_hashes;
 mod path;
 mod raw_api;
+mod remove;
 mod tree_repr;
 
 pub use error::{Collision, CollisionError};
-pub use iter::{Elements, IntoIter, Iter};
 pub use path::Path;
 
 pub(crate) use error::StructName;
 
-#[cfg(any(test, feature = "proptest"))]
 pub mod proptest;
 
 /// A sparse Merkle tree
@@ -29,6 +27,7 @@ pub mod proptest;
 ///
 /// ```rust
 /// # use smirk::*;
+/// # use element::Element;
 /// let mut tree = Tree::<64, i32>::new();
 ///
 /// tree.insert(Element::new(1), 123);
@@ -37,13 +36,14 @@ pub mod proptest;
 ///
 /// assert!(tree.contains_element(&Element::new(1)));
 ///
-/// for (element, value) in tree.iter() {
+/// for (element, value) in tree.into_iter() {
 ///     println!("the tree contains {value} at element {element}");
 /// }
 /// ```
 #[derive(Debug, Clone)]
 pub struct Tree<const DEPTH: usize, V, C = NoopHashCache> {
     /// The tree-like representation
+    #[expect(clippy::struct_field_names)]
     tree: tree_repr::Node,
     entries: BTreeMap<Element, V>,
     cache: C,
@@ -73,6 +73,7 @@ impl<const DEPTH: usize, V, C> Tree<DEPTH, V, C> {
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// let tree = Tree::<64, i32>::new();
     /// assert!(tree.is_empty());
     /// ```
@@ -93,6 +94,7 @@ impl<const DEPTH: usize, V, C> Tree<DEPTH, V, C> {
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// let tree = Tree::<64, i32>::new();
     /// assert!(tree.is_empty());
     /// ```
@@ -110,6 +112,7 @@ impl<const DEPTH: usize, V, C> Tree<DEPTH, V, C> {
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// # use smirk::hash_cache::*;
     /// let tree = Tree::<64, i32, NoopHashCache>::new();
     /// let cache = tree.cache();
@@ -126,6 +129,7 @@ impl<const DEPTH: usize, V, C> Tree<DEPTH, V, C> {
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// let mut tree = Tree::<64, i32>::new();
     ///
     /// assert_eq!(tree.len(), 0);
@@ -146,6 +150,7 @@ impl<const DEPTH: usize, V, C> Tree<DEPTH, V, C> {
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// let mut tree = Tree::<64, i32>::new();
     ///
     /// assert_eq!(tree.is_empty(), true);
@@ -164,6 +169,7 @@ impl<const DEPTH: usize, V, C> Tree<DEPTH, V, C> {
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// let tree: Tree<64, _> = smirk! { 1, 2, 3 };
     ///
     /// assert_eq!(tree.contains_element(&Element::new(1)), true);
@@ -184,6 +190,7 @@ impl<const DEPTH: usize, V, C> Tree<DEPTH, V, C> {
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// let mut tree = Tree::<64, i32>::new();
     /// let hash_1 = tree.root_hash();
     ///
@@ -213,8 +220,9 @@ where
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// let mut tree = Tree::<64, ()>::new();
-    /// let hash_with_1 = tree.root_hash_with(&[Element::new(1)]);
+    /// let hash_with_1 = tree.root_hash_with(&[Element::new(1)], &[]);
     ///
     /// tree.insert(Element::new(1), ());
     ///
@@ -223,8 +231,12 @@ where
     #[inline]
     #[must_use]
     #[tracing::instrument(skip(self))]
-    pub fn root_hash_with(&self, extra_elements: &[Element]) -> Element {
+    pub fn root_hash_with(
+        &self,
+        insert_elements: &[Element],
+        remove_elements: &[Element],
+    ) -> Element {
         self.tree
-            .hash_with::<DEPTH, C>(self.cache(), extra_elements.to_vec())
+            .hash_with::<DEPTH, C>(self.cache(), insert_elements, remove_elements)
     }
 }

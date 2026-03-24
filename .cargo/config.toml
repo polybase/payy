@@ -1,0 +1,10 @@
+[build]
+
+# https://docs.rs/tracing/latest/tracing/field/index.html#using-valuable
+rustflags = ["--cfg", "tracing_unstable"]
+
+[env]
+TS_RS_EXPORT_DIR = { value = "app/packages/payy/src/ts-rs-bindings", relative = true }
+
+[alias]
+xtask = "run --bin xtask -q --"

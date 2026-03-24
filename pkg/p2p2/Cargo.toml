@@ -1,9 +1,10 @@
 [package]
 name = "p2p2"
 version = "1.3.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
+
 async-trait = { workspace = true }
 figment = { workspace = true }
 futures = { workspace = true }
@@ -11,13 +12,12 @@ futures-util = { workspace = true }
 libp2p = { workspace = true }
 parking_lot = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
 borsh = { workspace = true }
 wire-message = { workspace = true }
 strum = { workspace = true }
 whitelist-ips = { workspace = true }
+workspace-hack.workspace = true

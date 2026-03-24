@@ -2,6 +2,7 @@
 pragma solidity 0.8.20;
 
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./IUSDC.sol";
 
 interface IAcross {
@@ -24,10 +25,12 @@ interface IAcross {
 contract AcrossWithAuthorization {
     event Deposited(address indexed depositor, bytes32 indexed nonce);
 
-    address across;
+    address public immutable owner;
+    address public immutable across;
 
-    constructor(address _across) {
+    constructor(address _across, address _owner) {
         across = _across;
+        owner = _owner;
     }
 
     function DOMAIN_SEPARATOR() public view returns (bytes32) {
@@ -47,7 +50,7 @@ contract AcrossWithAuthorization {
 
     bytes32 constant DEPOSIT_V3_WITH_AUTHORIZATION_TYPE_HASH =
         keccak256(
-            "DepositV3WithAuthorization(uint256 validAfter,uint256 validBefore,bytes32 nonce,address depositor,address recipient,address inputToken,address outputToken,uint256 inputAmount,uint256 outputAmount,uint256 destinationChainId,address exclusiveRelayer,uint32 quoteTimestamp,uint32 fillDeadline,uint32 exclusivityDeadline,bytes message)"
+            "DepositV3WithAuthorization(uint256 validAfter,uint256 validBefore,bytes32 nonce,address depositor,address recipient,address inputToken,address outputToken,uint256 inputAmount,uint256 outputAmount,uint256 feeAmount,uint256 destinationChainId,address exclusiveRelayer,uint32 quoteTimestamp,uint32 fillDeadline,uint32 exclusivityDeadline,bytes message)"
         );
 
     function depositV3WithAuthorization(
@@ -68,6 +71,7 @@ contract AcrossWithAuthorization {
         address outputToken,
         uint256 inputAmount,
         uint256 outputAmount,
+        uint256 feeAmount,
         uint256 destinationChainId,
         address exclusiveRelayer,
         uint32 quoteTimestamp,
@@ -87,6 +91,7 @@ contract AcrossWithAuthorization {
                 outputToken,
                 inputAmount,
                 outputAmount,
+                feeAmount,
                 destinationChainId,
                 exclusiveRelayer,
                 quoteTimestamp,
@@ -104,7 +109,7 @@ contract AcrossWithAuthorization {
         IUSDC(inputToken).receiveWithAuthorization(
             depositor,
             address(this),
-            inputAmount,
+            inputAmount + feeAmount,
             validAfter,
             validBefore,
             nonce,
@@ -131,5 +136,10 @@ contract AcrossWithAuthorization {
         );
 
         emit Deposited(depositor, nonce);
+    }
+
+    function withdrawFees(address token, uint256 amount) external {
+        require(msg.sender == owner, "Only owner");
+        IERC20(token).transfer(owner, amount);
     }
 }

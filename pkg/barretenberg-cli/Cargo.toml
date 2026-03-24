@@ -1,0 +1,13 @@
+[package]
+name = "barretenberg-cli"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+barretenberg-interface = { workspace = true }
+flate2 = { workspace = true }
+tempfile = { workspace = true }
+tracing = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+workspace-hack.workspace = true

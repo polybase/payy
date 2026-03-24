@@ -1,5 +1,5 @@
+use constants::MERKLE_TREE_DEPTH;
 use testutil::eth::EthNode;
-use zk_circuits::constants::MERKLE_TREE_DEPTH;
 
 use crate::rpc::ServerConfig;
 

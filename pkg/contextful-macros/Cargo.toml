@@ -1,0 +1,15 @@
+[package]
+name = "contextful-macros"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Derive macros for contextful"
+repository = "https://github.com/polybase/zk-rollup"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = { workspace = true }
+syn = { workspace = true, features = ["full"] }
+workspace-hack.workspace = true

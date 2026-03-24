@@ -1,18 +1,19 @@
+// lint-long-file-override allow-max-lines=300
 use crate::{
+    Error,
     behaviour::{Behaviour, BehaviourEvent},
     command::Command,
     error::Result,
     protocol::{PolyProtocol, Request, Response},
     transport::create_transport,
-    Error,
 };
 use borsh::{BorshDeserialize, BorshSerialize};
 use futures_util::StreamExt;
 use libp2p::{
+    Multiaddr, PeerId,
     identity::Keypair,
     request_response,
-    swarm::{keep_alive, SwarmBuilder, SwarmEvent},
-    Multiaddr, PeerId,
+    swarm::{SwarmBuilder, SwarmEvent, keep_alive},
 };
 use parking_lot::Mutex;
 use std::{
@@ -21,7 +22,7 @@ use std::{
     marker::PhantomData,
 };
 use std::{net::IpAddr, sync::Arc};
-use tokio::{select, sync::mpsc, sync::oneshot, sync::Mutex as AsyncMutex};
+use tokio::{select, sync::Mutex as AsyncMutex, sync::mpsc, sync::oneshot};
 use tracing::{debug, error, info};
 
 pub struct Network<NetworkEvent>

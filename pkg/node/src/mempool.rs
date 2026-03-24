@@ -1,3 +1,4 @@
+// lint-long-file-override allow-max-lines=400
 use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::Hash;
@@ -5,9 +6,17 @@ use std::sync::Arc;
 use std::vec;
 use tokio::sync::oneshot;
 
+use crate::Error;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AddError<C> {
+    Conflict(C),
+    DuplicateKey,
+}
+
 struct MempoolTxn<Txn, Change, ChanOkVal> {
     txn: Txn,
-    sender: Option<oneshot::Sender<Result<ChanOkVal, crate::Error>>>,
+    sender: Option<oneshot::Sender<Result<ChanOkVal, Error>>>,
     changes: Vec<Change>,
 }
 
@@ -54,32 +63,47 @@ where
     /// Add a transaction to the mempool, only adds key/txn if the key
     /// doesn't already exist in the mempool. This is used when other nodes
     /// send us a txn they have received from a client
-    pub fn add(&self, key: K, txn: V, changes: Vec<C>) {
-        self._add(key, txn, changes, None);
+    pub fn add(&self, key: K, txn: V, changes: Vec<C>) -> std::result::Result<(), AddError<C>> {
+        self._add(key, txn, changes, None)
     }
 
-    /// Add a transaction to the mempool and wait for it to be committed. This will only
-    /// be called where the txn is directly submitted to this node from a client
-    // TODO: handle duplicate add_wait, so we properly await
-    pub async fn add_wait(&self, key: K, txn: V, changes: Vec<C>) -> Result<CV, crate::Error> {
-        let (send, recv) = oneshot::channel::<Result<CV, crate::Error>>();
-        self._add(key, txn, changes, Some(send));
-
-        recv.await.expect("recv error")
+    /// Add a transaction to the mempool and obtain a receiver that resolves once the
+    /// transaction is committed.
+    // TODO: consider surfacing richer context for conflicts if needed
+    pub fn add_with_listener(
+        &self,
+        key: K,
+        txn: V,
+        changes: Vec<C>,
+    ) -> std::result::Result<oneshot::Receiver<Result<CV, Error>>, AddError<C>> {
+        let (send, recv) = oneshot::channel::<Result<CV, Error>>();
+        match self._add(key, txn, changes, Some(send)) {
+            Ok(()) => Ok(recv),
+            Err(err) => Err(err),
+        }
     }
 
-    /// Internal add function, used by both add and add_wait
+    /// Internal add function, used by both `add` and `add_with_listener`
     fn _add(
         &self,
         key: K,
         txn: V,
         changes: Vec<C>,
-        sender: Option<oneshot::Sender<Result<CV, crate::Error>>>,
-    ) {
+        sender: Option<oneshot::Sender<Result<CV, Error>>>,
+    ) -> std::result::Result<(), AddError<C>> {
         let mut state = self.state.lock();
 
+        if let Some(conflict) = changes.iter().find(|change| {
+            state
+                .txns
+                .values()
+                .any(|txn| txn.changes.iter().any(|existing| existing == *change))
+        }) {
+            return Err(AddError::Conflict(conflict.clone()));
+        }
+
         if state.txns.contains_key(&key) {
-            return;
+            return Err(AddError::DuplicateKey);
         }
 
         state.txns.entry(key.clone()).or_insert(MempoolTxn {
@@ -90,19 +114,21 @@ where
 
         // Add the key to the pool
         state.pool.push_back(key);
+
+        Ok(())
     }
 
     /// Commit a given transaction with key, removing it from the mempool
     /// and resolving any waiting futures (from add_txn_wait)
     #[allow(clippy::type_complexity)]
-    pub fn commit(&self, lease: L, keys_with_results: Vec<(&K, Result<CV, crate::Error>)>) {
+    pub fn commit(&self, lease: L, keys_with_results: Vec<(&K, Result<CV, Error>)>) {
         let mut state = self.state.lock();
 
         for (key, result) in keys_with_results {
-            if let Some(mem_txn) = state.txns.remove(key) {
-                if let Some(sender) = mem_txn.sender {
-                    let _ = sender.send(result);
-                }
+            if let Some(mem_txn) = state.txns.remove(key)
+                && let Some(sender) = mem_txn.sender
+            {
+                let _ = sender.send(result);
             }
 
             if let Some(lease) = state.leased.get_mut(&lease) {
@@ -155,11 +181,7 @@ where
             let key = if let Some(k) = k { k } else { key.clone() };
 
             // Add it to the lease
-            state
-                .leased
-                .entry(lease.clone())
-                .or_insert(HashSet::new())
-                .insert(key);
+            state.leased.entry(lease.clone()).or_default().insert(key);
         }
     }
 
@@ -189,7 +211,7 @@ where
             state
                 .leased
                 .entry(lease.clone())
-                .or_insert(HashSet::new())
+                .or_default()
                 .insert(key.clone());
 
             conflict_check.extend(changes);
@@ -222,7 +244,7 @@ mod tests {
     #[test]
     fn test_add_txn() {
         let mempool = Mp::default();
-        mempool.add("key1".to_string(), 42, vec![]);
+        mempool.add("key1".to_string(), 42, vec![]).unwrap();
 
         {
             let state = mempool.state.lock();
@@ -230,7 +252,10 @@ mod tests {
             assert_eq!(state.txns.get("key1").unwrap().txn, 42);
         }
 
-        mempool.add("key1".to_string(), 24, vec![]);
+        assert_eq!(
+            mempool.add("key1".to_string(), 24, vec![]),
+            Err(AddError::DuplicateKey)
+        );
 
         {
             let state = mempool.state.lock();
@@ -252,11 +277,11 @@ mod tests {
         let rt = Runtime::new().unwrap();
 
         let mempool2 = mempool.clone();
-        rt.spawn(async move {
-            mempool2
-                .add_wait("key1".to_string(), 42, vec![])
-                .await
+        let handle = rt.spawn(async move {
+            let receiver = mempool2
+                .add_with_listener("key1".to_string(), 42, vec![])
                 .unwrap();
+            receiver.await.unwrap().unwrap();
         });
 
         sleep(Duration::from_millis(100));
@@ -266,29 +291,32 @@ mod tests {
             assert_eq!(state.txns.len(), 1);
             assert_eq!(state.txns.get("key1").unwrap().txn, 42);
         }
+
+        mempool.commit(1, vec![(&"key1".to_string(), Ok(()))]);
+        rt.block_on(handle).unwrap();
     }
 
     #[test]
     fn test_commit_txn() {
         let mempool = Mp::default();
-        mempool.add("key1".into(), 42, vec![]);
-        mempool.add("key2".into(), 24, vec![]);
+        mempool.add("key1".into(), 42, vec![]).unwrap();
+        mempool.add("key2".into(), 24, vec![]).unwrap();
 
         mempool.commit(1, vec![(&"key1".to_string(), Ok(()))]);
 
         let state = mempool.state.lock();
         assert_eq!(state.txns.len(), 1);
         assert_eq!(state.pool.len(), 1);
-        assert!(state.txns.get("key1").is_none());
+        assert!(!state.txns.contains_key("key1"));
         assert_eq!(state.txns.get("key2").unwrap().txn, 24);
     }
 
     #[test]
     fn test_lease_batch() {
         let mempool = Mp::default();
-        mempool.add("key1".to_string(), 42, vec![]);
-        mempool.add("key2".to_string(), 24, vec![]);
-        mempool.add("key3".to_string(), 15, vec![]);
+        mempool.add("key1".to_string(), 42, vec![]).unwrap();
+        mempool.add("key2".to_string(), 24, vec![]).unwrap();
+        mempool.add("key3".to_string(), 15, vec![]).unwrap();
 
         let batch = mempool.lease_batch(2, 2);
         assert_eq!(batch.len(), 2);
@@ -310,25 +338,28 @@ mod tests {
     #[test]
     fn test_lease_with_duplicate_changes() {
         let mempool = Mp::default();
-        mempool.add("key1".to_string(), 42, vec![1, 2, 3]);
-        mempool.add("key2".to_string(), 24, vec![3, 4, 5]);
-        mempool.add("key3".to_string(), 15, vec![6, 7, 8]);
+        mempool.add("key1".to_string(), 42, vec![1, 2, 3]).unwrap();
+        assert!(matches!(
+            mempool.add("key2".to_string(), 24, vec![3, 4, 5]),
+            Err(AddError::Conflict(3))
+        ));
+        mempool.add("key3".to_string(), 15, vec![6, 7, 8]).unwrap();
 
         let batch = mempool.lease_batch(2, 3);
         assert_eq!(batch.len(), 2);
 
         {
             let state = mempool.state.lock();
-            assert_eq!(state.pool.len(), 1);
+            assert_eq!(state.pool.len(), 0);
         }
     }
 
     #[test]
     fn test_partial_commit_followed_by_lease() {
         let mempool = Mp::default();
-        mempool.add("key1".to_string(), 1, vec![1]);
-        mempool.add("key2".to_string(), 2, vec![2]);
-        mempool.add("key3".to_string(), 3, vec![3]);
+        mempool.add("key1".to_string(), 1, vec![1]).unwrap();
+        mempool.add("key2".to_string(), 2, vec![2]).unwrap();
+        mempool.add("key3".to_string(), 3, vec![3]).unwrap();
 
         let batch = mempool.lease_batch(2, 3);
         assert_eq!(batch.len(), 3);

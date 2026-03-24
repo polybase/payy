@@ -4,7 +4,7 @@ use expect_test::expect_file;
 use tempdir::TempDir;
 use test_strategy::proptest;
 
-use crate::{batch, Batch};
+use crate::{Batch, batch};
 
 use super::*;
 
@@ -75,32 +75,37 @@ fn insert_batch_works(batch_1: Batch<64, i32>, mut batch_2: Batch<64, i32>) {
     let (_dir1, path) = setup_path();
     let mut persistent = Persistent::<64, i32>::new(&path).unwrap();
 
-    for element in batch_1.elements() {
-        batch_2.remove(element);
+    for element in batch_1.insert_elements() {
+        batch_2.remove(element).unwrap();
     }
 
-    let batch_1_elements: HashSet<_> = batch_1.elements().collect();
-    let batch_2_elements: HashSet<_> = batch_2.elements().collect();
+    let batch_1_elements: HashSet<_> = batch_1.insert_elements().collect();
+    let batch_2_elements: HashSet<_> = batch_2.remove_elements().collect();
 
     persistent.insert_batch(batch_1).unwrap();
-    persistent.insert_batch(batch_2).unwrap();
 
     drop(persistent);
 
-    let loaded = Persistent::<64, i32>::load(&path).unwrap();
+    let mut loaded = Persistent::<64, i32>::load(&path).unwrap();
 
     for element in batch_1_elements {
         assert!(loaded.tree().contains_element(&element));
     }
 
+    loaded.insert_batch(batch_2).unwrap();
+
+    drop(loaded);
+
+    let loaded = Persistent::<64, i32>::load(&path).unwrap();
+
     for element in batch_2_elements {
-        assert!(loaded.tree().contains_element(&element));
+        assert!(!loaded.tree().contains_element(&element));
     }
 }
 
 macro_rules! expect_storage_known_hashes {
     ($persistent:expr, hashes: $expected_hashes:expr) => {{
-        use crate::storage::load::{entries, RocksbEntry};
+        use crate::storage::load::{RocksbEntry, entries};
 
         let known_hashes_in_db = entries::<()>($persistent.db())
             .collect::<Result<Vec<_>, _>>()
@@ -126,9 +131,9 @@ fn insert_batch_hash_test() {
     expect_storage_known_hashes!(
         persistent,
         hashes:
-            expect_test::expect![[r#"
+            expect_test::expect![[r"
             []
-        "#]]
+        "]]
     );
 
     let batch = batch! { 1, 2, 3 };

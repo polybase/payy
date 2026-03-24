@@ -1,6 +1,5 @@
 #![deny(clippy::disallowed_methods)]
-#![feature(once_cell)] // this feature is fine beause it's since been stabilized
-#![feature(bound_map)] // this feature is fine beause it's since been stabilized
+#![allow(clippy::result_large_err)]
 
 mod block;
 mod cache;
@@ -21,7 +20,6 @@ mod utxo;
 pub use crate::block::Block;
 pub use crate::errors::*;
 pub use crate::node::*;
-pub use crate::rpc::routes::{configure_routes, State};
+pub use crate::rpc::routes::{State, configure_routes};
 pub use crate::rpc::server::create_rpc_server;
 pub use crate::rpc::stats::TxnStats;
-pub use crate::utxo::UtxoProof;

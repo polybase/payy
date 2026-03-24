@@ -1,3 +1,4 @@
+// lint-long-file-override allow-max-lines=300
 use std::{
     path::PathBuf,
     process::Command,
@@ -104,7 +105,7 @@ impl EthNode {
             match reqwest::Client::new().execute(req).await {
                 Ok(res) if res.status().is_success() => return Ok(()),
                 Ok(res) if is_last_retry => {
-                    return Err(format!("Failed to get health: {}", res.status()).into())
+                    return Err(format!("Failed to get health: {}", res.status()).into());
                 }
                 Ok(_) => {}
                 Err(err) if is_last_retry => return Err(err.into()),

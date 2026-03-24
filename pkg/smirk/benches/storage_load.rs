@@ -1,8 +1,10 @@
 use std::{hint::black_box, process::Command};
 
-use benchy::{benchmark, BenchmarkRun};
+use benchy::{BenchmarkRun, benchmark};
+use element::Element;
+use hash::hash_merge;
 use rand::thread_rng;
-use smirk::{hash_merge, storage::Persistent, Batch, Element};
+use smirk::{Batch, storage::Persistent};
 use tempdir::TempDir;
 
 fn make_batch(n: usize) -> Batch<160, ()> {
@@ -31,13 +33,10 @@ pub fn hash_merge_1_000_000(b: &mut BenchmarkRun) {
         }
     });
 
-    b.metrics
-        .insert("hash_count".into(), zk_primitives::hash_count());
+    b.metrics.insert("hash_count".into(), hash::hash_count());
 
-    b.metrics.insert(
-        "hash_element_count".into(),
-        zk_primitives::hash_element_count(),
-    );
+    b.metrics
+        .insert("hash_element_count".into(), hash::hash_element_count());
 }
 
 #[benchmark]
@@ -63,13 +62,10 @@ pub fn hash_merge_1_000_000_cached(b: &mut BenchmarkRun) {
         }
     });
 
-    b.metrics
-        .insert("hash_count".into(), zk_primitives::hash_count());
+    b.metrics.insert("hash_count".into(), hash::hash_count());
 
-    b.metrics.insert(
-        "hash_element_count".into(),
-        zk_primitives::hash_element_count(),
-    );
+    b.metrics
+        .insert("hash_element_count".into(), hash::hash_element_count());
 }
 
 #[benchmark]
@@ -83,13 +79,10 @@ pub fn create_tree(b: &mut BenchmarkRun) {
         black_box(tree);
     });
 
-    b.metrics
-        .insert("hash_count".into(), zk_primitives::hash_count());
+    b.metrics.insert("hash_count".into(), hash::hash_count());
 
-    b.metrics.insert(
-        "hash_element_count".into(),
-        zk_primitives::hash_element_count(),
-    );
+    b.metrics
+        .insert("hash_element_count".into(), hash::hash_element_count());
 }
 
 #[benchmark]
@@ -115,13 +108,10 @@ pub fn storage_load(b: &mut BenchmarkRun) {
         black_box(tree);
     });
 
-    b.metrics
-        .insert("hash_count".into(), zk_primitives::hash_count());
+    b.metrics.insert("hash_count".into(), hash::hash_count());
 
-    b.metrics.insert(
-        "hash_element_count".into(),
-        zk_primitives::hash_element_count(),
-    );
+    b.metrics
+        .insert("hash_element_count".into(), hash::hash_element_count());
 }
 
 benchy::main!(

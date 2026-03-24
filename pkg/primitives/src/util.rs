@@ -5,7 +5,7 @@ use std::borrow::Cow;
 /// Truncate the given string in the middle, keeping `max_len/2` characters from
 /// the beginning and `max_len/2` characters from the end.
 /// If the string is smaller than `max_len`, it is returned as is.
-pub fn middle_truncate(s: &str, max_len: usize) -> Cow<str> {
+pub fn middle_truncate(s: &str, max_len: usize) -> Cow<'_, str> {
     if s.len() <= max_len {
         Cow::Borrowed(s)
     } else {

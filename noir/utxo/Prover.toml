@@ -1,0 +1,22 @@
+input_notes = [
+  { note = { kind = "1", value = "10", address = "0x22d68b303a6a3d416959fb363795548966049a655418ebd9eb6a818fd6d2e27b", psi = "1" }, secret_key = "101" },
+  { note = { kind = "1", value = "5", address = "0x22d68b303a6a3d416959fb363795548966049a655418ebd9eb6a818fd6d2e27b", psi = "2" }, secret_key = "101" },
+]
+
+# 8 inputs
+output_notes = [
+  { kind = "1", value = "1", address = "0x22d68b303a6a3d416959fb363795548966049a655418ebd9eb6a818fd6d2e27b", psi = "3" },
+  { kind = "1", value = "14", address = "0x22d68b303a6a3d416959fb363795548966049a655418ebd9eb6a818fd6d2e27b", psi = "4" },
+]
+
+pmessage4 = "0"
+
+# 4 inputs
+commitments = [
+  "0x1617cc49459fde170cacb26a2c9b5906c255d5bc049ef778d3f39ab6e549939a",
+  "0x27d184a81a508d4f328f5c8f39b3991783905abd487dd75a6e8b3a13453d1249",
+  "0x1b47736b2edce8b3ff918ff6c1aa4ea184a13cf279bc60433968fc08aadd2dfc",
+  "0x27bf84f87eb466701223a356a6827adb80c18c36de765c9d4ce791b67ff43bbb",
+]
+
+messages = ["1", "0", "0", "0", "0", "0"]

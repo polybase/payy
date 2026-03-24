@@ -1,0 +1,19 @@
+{
+  "name": "cloud-cache",
+  "version": "1.0.0",
+  "description": "GitHub Action to restore and save a cache directory from/to cloud storage (GCS or S3)",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@actions/core": "^1.10.1",
+    "@aws-sdk/client-s3": "^3.650.1",
+    "@google-cloud/storage": "^7.12.1"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@vercel/ncc": "^0.38.3"
+  }
+}

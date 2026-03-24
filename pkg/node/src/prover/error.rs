@@ -1,14 +1,18 @@
 use super::db;
 
+use element::Element;
 use primitives::block_height::BlockHeight;
-use zk_primitives::Element;
+
+use crate::errors::Error as NodeError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("failed to peek the next commit")]
     FailedToPeekNextCommit,
 
-    #[error("prover tree root hash does not match block state root hash, prover tree root hash: {prover_tree}, block state root hash: {block_tree}")]
+    #[error(
+        "prover tree root hash does not match block state root hash, prover tree root hash: {prover_tree}, block state root hash: {block_tree}"
+    )]
     ProverTreeRootDoesNotMatchBlockStateRoot {
         prover_tree: Element,
         block_tree: Element,
@@ -30,7 +34,7 @@ pub enum Error {
     Db(#[from] db::Error),
 
     #[error("node error")]
-    Node(#[from] crate::errors::Error),
+    Node(#[from] NodeError),
 
     #[error("contract error")]
     Contract(#[from] contracts::Error),

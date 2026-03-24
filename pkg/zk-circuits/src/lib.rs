@@ -1,39 +1,14 @@
-#![allow(clippy::assign_op_pattern)]
-#![deny(clippy::disallowed_methods)]
-#![feature(once_cell)]
-
-pub mod aggregate_agg;
-pub mod aggregate_utxo;
-mod burn;
-mod burn_to;
-pub mod chips;
-pub mod compliance;
-pub mod constants;
-pub mod evm_verifier;
-pub(crate) mod fr;
-pub mod insert;
-pub mod mint;
-pub mod points;
-pub mod proof;
-pub mod proof_format;
-pub(crate) mod signature;
+pub mod circuits;
+pub mod execute;
+pub mod prove;
+pub mod traits;
 pub mod util;
-mod utxo;
+pub mod verify;
 
-mod error;
+pub use barretenberg_interface::BbBackend;
+pub use barretenberg_interface::error::{Error, Result};
+pub use circuits::Proof;
+pub use circuits::generated::{AggAggCircuit, AggFinalCircuit, AggUtxoCircuit};
+pub use traits::{Circuit, Prove, Verify};
 
-#[cfg(feature = "test")]
-pub mod test;
-
-/// Simple data types used as inputs to the proofs
-pub mod data;
-
-mod keys;
-mod params;
-
-pub(crate) use crate::chips::aggregation::snark::Snark;
-pub use constants::{UTXO_INPUTS, UTXO_OUTPUTS};
-pub use keys::CircuitKind;
-
-pub use error::{Error, Result};
-pub use zk_primitives::Base;
+pub use circuits::generated::agg_utxo::VERIFICATION_KEY_HASH as AGG_UTXO_VERIFICATION_KEY_HASH;

@@ -1,0 +1,15 @@
+[package]
+name = "wallet-primitives"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+element = { workspace = true }
+encrypt = { workspace = true }
+zk-primitives = { workspace = true }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha3 = { workspace = true }
+thiserror = { workspace = true }
+workspace-hack.workspace = true

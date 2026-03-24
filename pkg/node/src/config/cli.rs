@@ -27,7 +27,7 @@ pub struct CliArgs {
     pub rpc_laddr: Option<String>,
 
     /// P2P listen address
-    #[arg(long)]
+    #[arg(long, env = "POLY_P2P_LADDR")]
     pub p2p_laddr: Option<Multiaddr>,
 
     /// Peers to dial

@@ -1,4 +1,4 @@
-use crate::{tree, Batch, Collision, CollisionError};
+use crate::{Batch, Collision, CollisionError, tree};
 
 impl<const DEPTH: usize, V> Batch<DEPTH, V> {
     /// Merge `other` into `self`
@@ -8,7 +8,7 @@ impl<const DEPTH: usize, V> Batch<DEPTH, V> {
     ///
     /// If there are collisions, they will be returned in a [`Vec`]
     ///
-    /// [`Element`]: crate::Element
+    /// [`Element`]: element::Element
     pub fn merge(mut self, other: Self) -> Result<Self, CollisionError> {
         let colliding_lsbs = self.lsbs.iter().filter(|lsb| other.lsbs.contains(lsb));
 
@@ -41,9 +41,9 @@ impl<const DEPTH: usize, V> Batch<DEPTH, V> {
 
 #[cfg(test)]
 mod tests {
+    use element::Element;
     use proptest::prop_assert_eq;
     use test_strategy::proptest;
-    use zk_primitives::Element;
 
     use crate::batch;
 
@@ -70,8 +70,8 @@ mod tests {
             4 => "bar",
         };
 
-        let mut entries: Vec<_> = c.entries().collect();
-        let mut expected_entries: Vec<_> = expected.entries().collect();
+        let mut entries: Vec<_> = c.insert_entries().to_vec();
+        let mut expected_entries: Vec<_> = expected.insert_entries().to_vec();
 
         entries.sort_by_key(|tuple| tuple.0);
         expected_entries.sort_by_key(|tuple| tuple.0);
@@ -81,13 +81,16 @@ mod tests {
 
     #[proptest]
     fn merge_batches(batch1: Batch<64, Element>, batch2: Batch<64, Element>) {
-        let expected_elements: Vec<_> = batch1.elements().chain(batch2.elements()).collect();
+        let expected_elements: Vec<_> = batch1
+            .insert_elements()
+            .chain(batch2.insert_elements())
+            .collect();
 
         let result = batch1.merge(batch2);
         proptest::prop_assume!(result.is_ok());
         let merged = result.unwrap();
 
-        let elements: Vec<_> = merged.elements().collect();
+        let elements: Vec<_> = merged.insert_elements().collect();
 
         prop_assert_eq!(elements, expected_elements);
     }

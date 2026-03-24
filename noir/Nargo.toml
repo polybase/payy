@@ -1,0 +1,15 @@
+[workspace]
+members = [
+  "utxo",
+  "agg_utxo",
+  "agg_agg",
+  "agg_final",
+  "signature",
+  "points",
+  "migrate",
+  "poseidon_alt",
+  "evm/erc20_transfer",
+  "evm/mint",
+  "evm/burn",
+  "evm/transfer",
+]

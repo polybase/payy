@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
+use contextful::ResultContextExt as _;
 use libp2p::PeerId;
 use tracing::{info, instrument};
 
 use crate::{
+    NodeShared, Result,
     network::{SnapshotChunk, SnapshotKind},
     types::{BlockHeight, SnapshotId},
-    NodeShared, Result,
 };
 
 use super::sync;
@@ -20,7 +21,9 @@ impl NodeShared {
         snapshot_id: SnapshotId,
     ) -> Result<()> {
         info!("Received snapshot offer");
-        self.sync_worker.snapshot_offer(peer, snapshot_id)?;
+        self.sync_worker
+            .snapshot_offer(peer, snapshot_id)
+            .context("process incoming snapshot offer from peer")?;
 
         Ok(())
     }
@@ -29,7 +32,9 @@ impl NodeShared {
     #[instrument(skip(self))]
     pub(crate) fn receive_snapshot_chunk(&self, peer: PeerId, sc: SnapshotChunk) -> Result<()> {
         info!("Received snapshot chunk");
-        self.sync_worker.snapshot_chunk(peer, sc)?;
+        self.sync_worker
+            .snapshot_chunk(peer, sc)
+            .context("process incoming snapshot chunk from peer")?;
 
         Ok(())
     }
@@ -46,7 +51,8 @@ impl NodeShared {
     ) -> Result<()> {
         info!("Received snapshot request");
         sync::handle_snapshot_request(self, peer, snapshot_id, from_height, to_height, kind)
-            .await?;
+            .await
+            .context("handle snapshot request from peer")?;
 
         Ok(())
     }
@@ -71,7 +77,8 @@ impl NodeShared {
             to_height,
             kind,
         )
-        .await?;
+        .await
+        .context("handle snapshot accept from peer")?;
 
         Ok(())
     }

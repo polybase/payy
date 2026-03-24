@@ -1,13 +1,13 @@
 use crate::error::HTTPError;
-use actix_web::http::header::LAST_MODIFIED;
+pub use actix_web::http::header::LAST_MODIFIED;
 use actix_web::{HttpResponse, Responder};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, SecondsFormat, Utc};
 use eyre::Result;
 use serde::Serialize;
 use std::future::Future;
 use std::time::Duration;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PollData<T> {
     Modified {
         data: T,
@@ -45,7 +45,7 @@ where
                 return Ok(PollData::Modified {
                     data,
                     modified_at: Some(modified_at),
-                })
+                });
             }
             Ok(None) => {}
             Err(e) => return Err(e),
@@ -75,7 +75,10 @@ impl<T: Serialize> Responder for PollData<T> {
             PollData::Modified { data, modified_at } => {
                 let mut res = HttpResponse::Ok();
                 if let Some(modified_at) = modified_at {
-                    res.insert_header((LAST_MODIFIED, modified_at.to_rfc2822()));
+                    res.insert_header((
+                        LAST_MODIFIED,
+                        modified_at.to_rfc3339_opts(SecondsFormat::Micros, true),
+                    ));
                     res.insert_header((
                         "Last-Modified-Unix",
                         modified_at.timestamp_micros().to_string(),

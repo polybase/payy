@@ -16,7 +16,6 @@ artifacts/contracts/AggregateVerifierV1.sol
 artifacts/contracts/BurnVerifierV1.sol
 artifacts/contracts/BurnVerifierV2.sol
 artifacts/contracts/IUSDC.sol/IUSDC.d.ts
-artifacts/contracts/IUSDC.sol/IUSDC.dbg.json
 artifacts/contracts/IUSDC.sol/artifacts.d.ts
 artifacts/contracts/MintVerifierV1.sol
 artifacts/contracts/Verifier.sol

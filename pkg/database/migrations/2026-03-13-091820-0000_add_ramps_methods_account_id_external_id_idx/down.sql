@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_ramps_methods_account_id_external_id;

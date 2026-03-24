@@ -1,8 +1,8 @@
 use ::proptest::{arbitrary::StrategyFor, prelude::*, strategy::Map};
 
 use crate::{
-    hash_cache::{HashCache, NoopHashCache, SimpleHashCache},
     Batch, Tree,
+    hash_cache::{HashCache, NoopHashCache, SimpleHashCache},
 };
 
 impl<const DEPTH: usize, V, C> Arbitrary for Tree<DEPTH, V, C>

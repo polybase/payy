@@ -1,4 +1,4 @@
-use super::{error, State};
+use super::{State, error};
 use actix_web::web;
 use rpc::error::HttpResult;
 use serde::Serialize;
@@ -18,9 +18,11 @@ pub async fn get_health(state: web::Data<State>) -> HttpResult<web::Json<HealthR
         return Err(error::Error::OutOfSync)?;
     }
 
-    if state.node.last_commit_time().map_or(true, |x| {
-        x.elapsed().as_secs() > state.health_check_commit_interval_sec
-    }) {
+    if state
+        .node
+        .last_commit_time()
+        .is_none_or(|x| x.elapsed().as_secs() > state.health_check_commit_interval_sec)
+    {
         return Err(error::Error::OutOfSync)?;
     }
 

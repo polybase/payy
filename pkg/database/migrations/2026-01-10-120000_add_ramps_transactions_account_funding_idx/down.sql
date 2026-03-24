@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS ramps_transactions_account_funding_idx;

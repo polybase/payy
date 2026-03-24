@@ -2,8 +2,8 @@ use wire_message::WireMessage;
 
 use super::Result;
 use crate::{
-    keys::{self, BlockListOrder, StoreKey},
     Block, BlockStore, Error, StoreList,
+    keys::{self, BlockListOrder, StoreKey},
 };
 
 pub(crate) const LATEST_VERSION: u32 = 1;
@@ -13,6 +13,7 @@ where
     B: Block + WireMessage,
     B::Txn: WireMessage,
 {
+    #[tracing::instrument(skip(self))]
     pub fn migrate(&self) -> super::Result<()> {
         loop {
             let version = self.store_version()?;

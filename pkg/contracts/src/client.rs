@@ -1,23 +1,38 @@
+// lint-long-file-override allow-max-lines=700
 use std::{future::Future, time::Duration};
 
-use crate::Result;
+use contextful::ResultContextExt;
+
+use crate::{Error, Result};
 use ethereum_types::{Address, H256, U64};
 use testutil::eth::EthNode;
 use tokio::time::interval;
 use web3::{
-    contract::{tokens::Tokenize, Contract, Options},
+    Web3,
+    contract::{Contract, Options, tokens::Tokenize},
     ethabi,
     signing::SecretKey,
     transports::Http,
-    types::{Transaction, U256},
-    Web3,
+    types::{Transaction, TransactionReceipt, U256},
 };
+
+/// Configuration for different types of transaction confirmation requirements.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConfirmationType {
+    /// Wait for transaction inclusion only (equivalent to current behavior).
+    Latest,
+    /// Wait for transaction inclusion plus N additional blocks for safety.
+    LatestPlus(u64),
+    /// Wait for transaction to be in a finalized block (chain-specific finality).
+    Finalised,
+}
 
 #[derive(Debug, Clone)]
 pub struct Client {
     client: Web3<Http>,
     minimum_gas_price: Option<U256>,
     pub use_latest_for_nonce: bool,
+    rpc_url: String,
 }
 
 impl Client {
@@ -29,6 +44,7 @@ impl Client {
             client,
             minimum_gas_price,
             use_latest_for_nonce: false,
+            rpc_url: rpc.to_string(),
         }
     }
 
@@ -65,15 +81,63 @@ impl Client {
         &self.client
     }
 
+    pub fn rpc_url(&self) -> &str {
+        &self.rpc_url
+    }
+
+    pub fn with_latest_nonce(mut self) -> Self {
+        self.use_latest_for_nonce = true;
+        self
+    }
+
+    pub async fn get_latest_block_height(&self) -> Result<U64> {
+        let block_number = self.client.eth().block_number().await?;
+        Ok(block_number)
+    }
+
     pub async fn fast_gas_price(&self) -> Result<U256, web3::Error> {
         let gas_price: U256 =
             retry_on_network_failure(move || self.client.eth().gas_price()).await?;
-        let fast_gas_price = gas_price * 2;
+        let ten_percent = gas_price / 10;
+        let fast_gas_price = gas_price + ten_percent;
 
         match self.minimum_gas_price {
             Some(minimum_gas_price) if fast_gas_price < minimum_gas_price => Ok(minimum_gas_price),
             _ => Ok(fast_gas_price),
         }
+    }
+
+    /// Returns the current chain id with network-failure retries.
+    pub async fn chain_id(&self) -> Result<U256, web3::Error> {
+        retry_on_network_failure(move || self.client.eth().chain_id()).await
+    }
+
+    /// Returns the current chain id using the contracts error type.
+    pub async fn chain_id_contracts(&self) -> Result<U256> {
+        let chain_id = self.chain_id().await.context("fetch chain id")?;
+        Ok(chain_id)
+    }
+
+    /// Returns the latest block number with network-failure retries.
+    pub async fn block_number(&self) -> Result<U64, web3::Error> {
+        retry_on_network_failure(move || self.client.eth().block_number()).await
+    }
+
+    /// Returns the latest block number with instant network-failure retries.
+    pub async fn block_number_with_fast_retries(&self) -> Result<U64, web3::Error> {
+        retry_on_network_failure_instant(move || self.client.eth().block_number()).await
+    }
+
+    /// Fetch logs for a given filter with network-failure retries.
+    pub async fn logs(
+        &self,
+        filter: web3::types::Filter,
+    ) -> Result<Vec<web3::types::Log>, web3::Error> {
+        retry_on_network_failure({
+            let filter = filter.clone();
+            move || self.client.eth().logs(filter)
+        })
+        .await
     }
 
     #[tracing::instrument(err, ret, skip(self))]
@@ -169,28 +233,121 @@ impl Client {
     /// Wait for a transaction to be confirmed and returns the block number.
     ///
     /// Times out if a transaction has been unknown (not in mempool) for 60 seconds.
+    ///
+    /// The confirmation type determines when the transaction is considered confirmed:
+    /// - `Latest`: Returns immediately when transaction is included in any block
+    /// - `LatestPlus(n)`: Waits for transaction block + n additional confirmations
+    /// - `Finalised`: Waits for transaction to be in a finalized block
     #[tracing::instrument(err, skip(self))]
-    pub async fn wait_for_confirm(&self, txn_hash: H256, interval_period: Duration) -> Result<U64> {
-        let unknown_timeout = std::time::Instant::now() + Duration::from_secs(60);
-
+    pub async fn wait_for_confirm(
+        &self,
+        txn_hash: H256,
+        interval_period: Duration,
+        confirmation_type: ConfirmationType,
+    ) -> Result<U64> {
         let mut interval = interval(interval_period);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
+        // First, wait for transaction to be included in a block
+        let transaction_block_number = self
+            .wait_for_transaction_inclusion(txn_hash, &mut interval)
+            .await?;
+
+        // Now apply confirmation type logic
+        match confirmation_type {
+            ConfirmationType::Latest => {
+                tracing::debug!(
+                    ?txn_hash,
+                    block_number = ?transaction_block_number,
+                    "Transaction confirmed with Latest confirmation type"
+                );
+                Ok(transaction_block_number)
+            }
+            ConfirmationType::LatestPlus(additional_blocks) => {
+                self.wait_for_additional_confirmations(
+                    txn_hash,
+                    transaction_block_number,
+                    additional_blocks,
+                    &mut interval,
+                )
+                .await?;
+                Ok(transaction_block_number)
+            }
+            ConfirmationType::Finalised => {
+                self.wait_for_finalized_confirmation(
+                    txn_hash,
+                    transaction_block_number,
+                    &mut interval,
+                )
+                .await?;
+                Ok(transaction_block_number)
+            }
+        }
+    }
+
+    /// Wait for a transaction receipt.
+    ///
+    /// Polls at the given interval. Returns Error::UnknownTransaction if the transaction is dropped.
+    pub async fn wait_for_receipt(
+        &self,
+        tx_hash: H256,
+        poll_interval: Duration,
+        timeout: Duration,
+    ) -> Result<TransactionReceipt> {
+        let start = std::time::Instant::now();
+
+        loop {
+            let receipt =
+                retry_on_network_failure(|| self.client.eth().transaction_receipt(tx_hash)).await?;
+
+            if let Some(receipt) = receipt {
+                return Ok(receipt);
+            }
+
+            let transaction = retry_on_network_failure(|| {
+                self.client
+                    .eth()
+                    .transaction(web3::types::TransactionId::Hash(tx_hash))
+            })
+            .await?;
+
+            if transaction.is_none() {
+                return Err(Error::UnknownTransaction(tx_hash));
+            }
+
+            if start.elapsed() > timeout {
+                return Err(Error::Timeout);
+            }
+
+            tokio::time::sleep(poll_interval).await;
+        }
+    }
+
+    /// Wait for a transaction to be included in a block.
+    /// Returns the block number when the transaction is included.
+    /// Times out if the transaction has been unknown for 60 seconds.
+    async fn wait_for_transaction_inclusion(
+        &self,
+        txn_hash: H256,
+        interval: &mut tokio::time::Interval,
+    ) -> Result<U64> {
+        let unknown_timeout = std::time::Instant::now() + Duration::from_secs(60);
 
         loop {
             interval.tick().await;
 
-            let tx = retry_on_network_failure(move || {
+            let txn = retry_on_network_failure(move || {
                 self.client
                     .eth()
                     .transaction(web3::types::TransactionId::Hash(txn_hash))
             })
             .await?;
 
-            match tx {
+            match txn {
                 None => {
                     // Transaction doesn't exist / is unknown
                     if std::time::Instant::now() > unknown_timeout {
-                        return Err(crate::Error::UnknownTransaction(txn_hash));
+                        return Err(Error::UnknownTransaction(txn_hash));
                     }
                 }
                 Some(Transaction {
@@ -202,15 +359,104 @@ impl Client {
                     block_number: Some(block_number),
                     ..
                 }) => {
-                    // Transaction is confirmed
+                    // Transaction is included in a block
                     return Ok(block_number);
                 }
             }
         }
     }
+
+    /// Wait for additional block confirmations after transaction inclusion.
+    /// Waits until the latest block number is >= transaction_block + additional_blocks.
+    async fn wait_for_additional_confirmations(
+        &self,
+        txn_hash: H256,
+        transaction_block_number: U64,
+        additional_blocks: u64,
+        interval: &mut tokio::time::Interval,
+    ) -> Result<()> {
+        tracing::debug!(
+            ?txn_hash,
+            block_number = ?transaction_block_number,
+            additional_blocks,
+            "Waiting for additional block confirmations"
+        );
+
+        let required_block_number = transaction_block_number + U64::from(additional_blocks);
+
+        loop {
+            interval.tick().await;
+
+            let latest_block =
+                retry_on_network_failure(|| self.client.eth().block_number()).await?;
+
+            if latest_block >= required_block_number {
+                tracing::debug!(
+                    ?txn_hash,
+                    transaction_block = ?transaction_block_number,
+                    latest_block = ?latest_block,
+                    "Transaction confirmed with required additional blocks"
+                );
+                return Ok(());
+            }
+
+            tracing::trace!(
+                ?txn_hash,
+                transaction_block = ?transaction_block_number,
+                latest_block = ?latest_block,
+                required_block = ?required_block_number,
+                "Waiting for additional confirmations"
+            );
+        }
+    }
+
+    /// Wait for the transaction's block to be finalized.
+    /// Waits until the finalized block number is >= transaction_block_number.
+    async fn wait_for_finalized_confirmation(
+        &self,
+        txn_hash: H256,
+        transaction_block_number: U64,
+        interval: &mut tokio::time::Interval,
+    ) -> Result<()> {
+        tracing::debug!(
+            ?txn_hash,
+            block_number = ?transaction_block_number,
+            "Waiting for finalized block confirmation"
+        );
+
+        loop {
+            interval.tick().await;
+
+            let finalized_block = retry_on_network_failure(|| {
+                self.client.eth().block(web3::types::BlockId::Number(
+                    web3::types::BlockNumber::Finalized,
+                ))
+            })
+            .await?;
+
+            if let Some(finalized_block) = finalized_block
+                && let Some(finalized_number) = finalized_block.number
+                && finalized_number >= transaction_block_number
+            {
+                tracing::debug!(
+                    ?txn_hash,
+                    transaction_block = ?transaction_block_number,
+                    finalized_block = ?finalized_number,
+                    "Transaction confirmed in finalized block"
+                );
+                return Ok(());
+            }
+
+            tracing::trace!(
+                ?txn_hash,
+                transaction_block = ?transaction_block_number,
+                "Waiting for block to be finalized"
+            );
+        }
+    }
 }
 
-trait IsNetworkFailure {
+pub(crate) trait IsNetworkFailure {
     fn is_network_failure(&self) -> bool;
 }
 
@@ -229,17 +475,11 @@ impl IsNetworkFailure for web3::contract::Error {
     }
 }
 
-/// Retries 4 times for a maximum of 16s.
-async fn retry_on_network_failure<T, E: IsNetworkFailure, Fut: Future<Output = Result<T, E>>>(
+async fn retry_internal<T, E: IsNetworkFailure, Fut: Future<Output = std::result::Result<T, E>>>(
     f: impl FnOnce() -> Fut + Clone,
-) -> Result<T, E> {
-    const DELAYS: &[Duration] = &[
-        Duration::from_secs(1),
-        Duration::from_secs(5),
-        Duration::from_secs(10),
-    ];
-
-    for (i, delay) in DELAYS
+    delays: &[Duration],
+) -> std::result::Result<T, E> {
+    for (i, delay) in delays
         .iter()
         .chain(std::iter::once(&Duration::ZERO))
         .enumerate()
@@ -247,7 +487,7 @@ async fn retry_on_network_failure<T, E: IsNetworkFailure, Fut: Future<Output = R
         let res = (f.clone())().await;
 
         if res.as_ref().is_err_and(|err| err.is_network_failure()) {
-            let was_last_try = i == DELAYS.len();
+            let was_last_try = i == delays.len();
             if was_last_try {
                 return res;
             }
@@ -261,12 +501,42 @@ async fn retry_on_network_failure<T, E: IsNetworkFailure, Fut: Future<Output = R
     unreachable!()
 }
 
+/// Retries 4 times for a maximum of ~16s on transport-level failures.
+pub(crate) async fn retry_on_network_failure<
+    T,
+    E: IsNetworkFailure,
+    Fut: Future<Output = std::result::Result<T, E>>,
+>(
+    f: impl FnOnce() -> Fut + Clone,
+) -> std::result::Result<T, E> {
+    const DELAYS: &[Duration] = &[
+        Duration::from_secs(1),
+        Duration::from_secs(5),
+        Duration::from_secs(10),
+    ];
+    retry_internal(f, DELAYS).await
+}
+
+/// Retries 4 times with minimal delay on transport-level failures.
+pub(crate) async fn retry_on_network_failure_instant<
+    T,
+    E: IsNetworkFailure,
+    Fut: Future<Output = std::result::Result<T, E>>,
+>(
+    f: impl FnOnce() -> Fut + Clone,
+) -> std::result::Result<T, E> {
+    const DELAYS: &[Duration] = &[Duration::ZERO; 3];
+    retry_internal(f, DELAYS).await
+}
+
 #[cfg(test)]
 mod tests {
-    use std::sync::{atomic::AtomicU16, Arc};
+    use std::sync::{Arc, atomic::AtomicU16};
 
     use web3::error::Error;
     use web3::error::TransportError;
+
+    use super::ConfirmationType;
 
     #[tokio::test]
     async fn test_retry_on_network_failure() {
@@ -310,5 +580,91 @@ mod tests {
             assert!(result.is_ok(), "{result:?}");
             assert!(elapsed < std::time::Duration::from_millis(1), "{elapsed:?}");
         }
+    }
+
+    #[tokio::test]
+    async fn test_retry_on_network_failure_instant() {
+        let gen_result = |succeed_at_call_count| async move {
+            let call_count = Arc::new(AtomicU16::new(0));
+
+            super::retry_on_network_failure_instant(move || {
+                let call_count = Arc::clone(&call_count);
+                async move {
+                    let call_count =
+                        call_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                    if call_count == succeed_at_call_count {
+                        Ok(())
+                    } else {
+                        Err(Error::Transport(TransportError::Code(call_count)))
+                    }
+                }
+            })
+            .await
+        };
+
+        {
+            // Never succeed, but should fail fast
+            let start = std::time::Instant::now();
+            let result = gen_result(u16::MAX).await;
+            let elapsed = start.elapsed();
+
+            assert!(
+                matches!(&result, Err(Error::Transport(TransportError::Code(4)))),
+                "{result:?}"
+            );
+            // 4 attempts * 0s sleep ~= 0s. Allow some buffer for scheduling.
+            assert!(
+                elapsed < std::time::Duration::from_millis(50),
+                "{elapsed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_confirmation_type_eq() {
+        assert_eq!(ConfirmationType::Latest, ConfirmationType::Latest);
+        assert_eq!(
+            ConfirmationType::LatestPlus(5),
+            ConfirmationType::LatestPlus(5)
+        );
+        assert_eq!(ConfirmationType::Finalised, ConfirmationType::Finalised);
+
+        assert_ne!(ConfirmationType::Latest, ConfirmationType::LatestPlus(0));
+        assert_ne!(
+            ConfirmationType::LatestPlus(5),
+            ConfirmationType::LatestPlus(10)
+        );
+        assert_ne!(ConfirmationType::Latest, ConfirmationType::Finalised);
+    }
+
+    #[test]
+    fn test_confirmation_type_clone() {
+        let latest = ConfirmationType::Latest;
+        let latest_cloned = latest.clone();
+        assert_eq!(latest, latest_cloned);
+
+        let latest_plus = ConfirmationType::LatestPlus(42);
+        let latest_plus_cloned = latest_plus.clone();
+        assert_eq!(latest_plus, latest_plus_cloned);
+
+        let finalised = ConfirmationType::Finalised;
+        let finalised_cloned = finalised.clone();
+        assert_eq!(finalised, finalised_cloned);
+    }
+
+    #[test]
+    fn test_confirmation_type_debug() {
+        let latest = ConfirmationType::Latest;
+        let latest_debug = format!("{latest:?}");
+        assert!(latest_debug.contains("Latest"));
+
+        let latest_plus = ConfirmationType::LatestPlus(20);
+        let latest_plus_debug = format!("{latest_plus:?}");
+        assert!(latest_plus_debug.contains("LatestPlus"));
+        assert!(latest_plus_debug.contains("20"));
+
+        let finalised = ConfirmationType::Finalised;
+        let finalised_debug = format!("{finalised:?}");
+        assert!(finalised_debug.contains("Finalised"));
     }
 }

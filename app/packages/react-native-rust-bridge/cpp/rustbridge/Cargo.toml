@@ -1,0 +1,11 @@
+# Destination-only placeholder for Cargo tooling in the synced repo.
+[package]
+name = "rustbridge"
+version = "0.0.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+ts-rs = []

@@ -1,3 +1,4 @@
+// lint-long-file-override allow-max-lines=400
 use std::{
     marker::PhantomData,
     ops::{Bound, RangeBounds},
@@ -8,20 +9,15 @@ use primitives::{block_height::BlockHeight, pagination::CursorChoice};
 use rocksdb::DB;
 use wire_message::WireMessage;
 
-use crate::{list::List, Block, Error, Result};
+use crate::{Block, Error, Result, list::List};
 
 pub(crate) trait StoreKey: Clone {
     fn to_key(&self) -> Key;
-    fn from_key(key: Key) -> Option<Self>
-    where
-        Self: Sized;
-
     fn serialize_to(&self, to: &mut Vec<u8>);
     fn deserialize(bytes: &[u8]) -> Result<Self>;
 }
 
 pub(crate) trait StoreValue {
-    fn serialize(&self) -> Result<Vec<u8>>;
     fn deserialize(bytes: &[u8]) -> Result<Self>
     where
         Self: Sized;
@@ -31,10 +27,6 @@ impl<T> StoreValue for T
 where
     T: WireMessage,
 {
-    fn serialize(&self) -> Result<Vec<u8>> {
-        Ok(self.to_bytes()?)
-    }
-
     fn deserialize(bytes: &[u8]) -> Result<Self> {
         Ok(Self::from_bytes(bytes)?)
     }
@@ -113,12 +105,6 @@ where
 
         let (reverse_results, order) = match cursor {
             None | Some(CursorChoice::After(_)) => (false, order),
-            // Without this, if entities 1, 2, 3 exist and indexed order is LowToHigh,
-            // Before(3) would return entity 1, instead of entity 2.
-            // The list call would look like this: `self.list(..3, LowToHigh)`,
-            // so we need to reverse the order, for the first .next() to return 2 instead of 1.
-            // TODO: will this also work with keys whose indexed order is HighToLow?
-            // We don't have any right now.
             Some(CursorChoice::Before(_)) => (true, order.reverse()),
         };
 
@@ -127,9 +113,6 @@ where
             .take(limit)
             .collect::<Result<Vec<(Key, Value)>>>()?;
 
-        // If the cursor is Before, we need to reverse the results, otherwise in the example above
-        // the first .next() would return 2, and the next 1, which does not match
-        // the expected LowToHigh order.
         if reverse_results {
             results.reverse();
         }
@@ -147,6 +130,42 @@ pub enum Key {
     TxnByHash([u8; 32]),
     StoreVersion,
     NonEmptyBlock(KeyNonEmptyBlock),
+    LockedElement([u8; 32]),
+    ElementHistory((element::Element, ElementHistoryKind)),
+    MintHash(element::Element),
+}
+
+// TODO: this might be confusing,
+// when a note is created, it will appear as "Output" history.
+// Maybe rename?
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ElementHistoryKind {
+    Input,
+    Output,
+}
+
+impl ElementHistoryKind {
+    fn to_byte(self) -> u8 {
+        match self {
+            ElementHistoryKind::Input => 0,
+            ElementHistoryKind::Output => 1,
+        }
+    }
+
+    fn from_byte(byte: u8) -> Option<Self> {
+        match byte {
+            0 => Some(ElementHistoryKind::Input),
+            1 => Some(ElementHistoryKind::Output),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn ordering_weight(&self) -> u8 {
+        match self {
+            ElementHistoryKind::Output => 0,
+            ElementHistoryKind::Input => 1,
+        }
+    }
 }
 
 impl Key {
@@ -159,6 +178,9 @@ impl Key {
             Self::TxnByHash(_) => 4,
             Self::StoreVersion => 5,
             Self::NonEmptyBlock(_) => 6,
+            Self::LockedElement(_) => 7,
+            Self::ElementHistory(_) => 8,
+            Self::MintHash(_) => 9,
         }
     }
 
@@ -180,6 +202,16 @@ impl Key {
             Self::StoreVersion => {}
             Self::NonEmptyBlock(block_number) => {
                 block_number.serialize_to(&mut out);
+            }
+            Self::LockedElement(locked_element) => {
+                out.extend_from_slice(locked_element);
+            }
+            Self::ElementHistory((element, kind)) => {
+                out.extend_from_slice(&element.to_be_bytes());
+                out.extend_from_slice(&[kind.to_byte()]);
+            }
+            Self::MintHash(mint_hash) => {
+                out.extend_from_slice(&mint_hash.to_be_bytes());
             }
         }
 
@@ -207,6 +239,24 @@ impl Key {
             }
             5 => Ok(Self::StoreVersion),
             6 => KeyNonEmptyBlock::deserialize(bytes).map(Self::NonEmptyBlock),
+            7 => {
+                let mut locked_element = [0u8; 32];
+                locked_element.copy_from_slice(&bytes[0..32]);
+                Ok(Self::LockedElement(locked_element))
+            }
+            8 => {
+                let element_arr: &[u8; 32] =
+                    bytes[0..32].try_into().map_err(|_| Error::InvalidKey)?;
+                let element = element::Element::from_be_bytes(*element_arr);
+                let kind = ElementHistoryKind::from_byte(bytes[32]).unwrap();
+                Ok(Self::ElementHistory((element, kind)))
+            }
+            9 => {
+                let mint_hash_arr: &[u8; 32] =
+                    bytes[0..32].try_into().map_err(|_| Error::InvalidKey)?;
+                let mint_hash = element::Element::from_be_bytes(*mint_hash_arr);
+                Ok(Self::MintHash(mint_hash))
+            }
             _ => Err(Error::InvalidKey),
         }
     }
@@ -224,13 +274,6 @@ pub struct KeyBlock(pub(crate) BlockHeight);
 impl StoreKey for KeyBlock {
     fn to_key(&self) -> Key {
         Key::Block(self.clone())
-    }
-
-    fn from_key(key: Key) -> Option<Self> {
-        match key {
-            Key::Block(kb) => Some(kb),
-            _ => None,
-        }
     }
 
     fn serialize_to(&self, to: &mut Vec<u8>) {
@@ -297,13 +340,6 @@ impl KeyNonEmptyBlock {
 impl StoreKey for KeyNonEmptyBlock {
     fn to_key(&self) -> Key {
         Key::NonEmptyBlock(KeyNonEmptyBlock(self.0))
-    }
-
-    fn from_key(key: Key) -> Option<Self> {
-        match key {
-            Key::NonEmptyBlock(key) => Some(key),
-            _ => None,
-        }
     }
 
     fn serialize_to(&self, to: &mut Vec<u8>) {

@@ -1,0 +1,37 @@
+[package]
+name = "guild-interface"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+contracts = { workspace = true }
+contextful = { workspace = true }
+currency = { workspace = true }
+data = { workspace = true }
+element = { workspace = true }
+notes-interface = { workspace = true }
+primitives = { workspace = true }
+rpc = { workspace = true }
+rpc-error-convert = { workspace = true }
+zk-primitives = { workspace = true }
+ramps-interface = { workspace = true }
+
+chrono = { workspace = true }
+ethereum-types = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+kyc = { workspace = true }
+workspace-hack.workspace = true
+
+[features]
+ts-rs = [
+  "element/ts-rs",
+  "primitives/ts-rs",
+  "zk-primitives/ts-rs",
+  "currency/ts-rs",
+  "kyc/ts-rs",
+  "data/ts-rs",
+  "ramps-interface/ts-rs",
+]

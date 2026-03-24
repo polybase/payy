@@ -1,0 +1,15 @@
+[package]
+name = "barretenberg-api-bin"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = { workspace = true }
+barretenberg-api-server = { workspace = true }
+barretenberg-cli = { workspace = true }
+barretenberg-interface = { workspace = true }
+clap = { workspace = true }
+rpc = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+workspace-hack.workspace = true

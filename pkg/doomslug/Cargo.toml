@@ -1,7 +1,7 @@
 [package]
 name = "doomslug"
 version = "1.3.0"
-edition = "2021"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -10,12 +10,8 @@ primitives = { workspace = true }
 
 tracing = { workspace = true }
 chrono = { workspace = true }
-once_cell = { workspace = true }
 borsh = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
-rand = { workspace = true }
-hex = { workspace = true }
-sha2 = { workspace = true }
 sha3 = { workspace = true }
-uint = { workspace = true }
+workspace-hack.workspace = true

@@ -2,7 +2,7 @@ use super::protocol::PolyProtocol;
 use borsh::{BorshDeserialize, BorshSerialize};
 use libp2p::{
     request_response,
-    swarm::{behaviour::toggle::Toggle, keep_alive, NetworkBehaviour},
+    swarm::{NetworkBehaviour, behaviour::toggle::Toggle, keep_alive},
 };
 
 #[derive(NetworkBehaviour)]

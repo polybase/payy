@@ -1,10 +1,9 @@
 use std::collections::HashSet;
 
-use zk_primitives::{Element, Lsb};
+use element::{Element, Lsb};
 
-use crate::{tree, Collision, CollisionError};
+use crate::{Collision, CollisionError, tree};
 
-#[cfg(any(test, feature = "proptest"))]
 mod proptest;
 
 mod merge;
@@ -19,6 +18,7 @@ mod merge;
 #[must_use = "a `Batch` does nothing unless inserted"]
 pub struct Batch<const DEPTH: usize, V> {
     pub(crate) entries: Vec<(Element, V)>,
+    pub(crate) remove_entries: Vec<Element>,
     /// The LSBs of the elements that have been inserted, for efficient checking of new entries
     pub(crate) lsbs: HashSet<Lsb>,
 }
@@ -27,6 +27,7 @@ impl<const DEPTH: usize, V> Default for Batch<DEPTH, V> {
     fn default() -> Self {
         Self {
             entries: Vec::new(),
+            remove_entries: Vec::new(),
             lsbs: HashSet::new(),
         }
     }
@@ -37,6 +38,7 @@ impl<const DEPTH: usize, V> Batch<DEPTH, V> {
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// let mut batch = Batch::<64, String>::new();
     ///
     /// batch.insert(Element::new(1), String::from("hello"));
@@ -46,6 +48,7 @@ impl<const DEPTH: usize, V> Batch<DEPTH, V> {
     /// Alternatively, you can use the [`batch!`] macro for a more concise syntax:
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// let batch: Batch<64, _> = batch! {
     ///     1 => String::from("hello"),
     ///     2 => String::from("world"),
@@ -61,6 +64,7 @@ impl<const DEPTH: usize, V> Batch<DEPTH, V> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             entries: Vec::with_capacity(capacity),
+            remove_entries: Vec::new(),
             lsbs: HashSet::with_capacity(capacity),
         }
     }
@@ -68,7 +72,7 @@ impl<const DEPTH: usize, V> Batch<DEPTH, V> {
     /// Check whether this batch is empty
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
+        self.entries.is_empty() && self.remove_entries.is_empty()
     }
 
     /// Insert a key-value pair into this [`Batch`]
@@ -79,7 +83,7 @@ impl<const DEPTH: usize, V> Batch<DEPTH, V> {
     /// Note that, unlike [`Tree::insert`], no hashing takes place when inserting into a [`Batch`],
     /// so performance is very good
     ///
-    /// [least significant bits]: zk_primitives::Lsb
+    /// [least significant bits]: element::Lsb
     /// [`Tree::insert`]: crate::Tree::insert
     pub fn insert(&mut self, element: Element, value: V) -> Result<(), CollisionError> {
         let lsb = element.lsb(DEPTH - 1);
@@ -106,46 +110,67 @@ impl<const DEPTH: usize, V> Batch<DEPTH, V> {
         Ok(())
     }
 
-    #[cfg(test)]
-    pub(crate) fn remove(&mut self, element: Element) {
+    /// An element to be removed from the tree that this batch will be applied to.
+    pub fn remove(&mut self, element: Element) -> Result<(), CollisionError> {
         let lsb = element.lsb(DEPTH - 1);
 
-        self.entries.retain(|(e, _)| *e != element);
-        self.lsbs.remove(&lsb);
+        if self.lsbs.contains(&lsb) {
+            let in_tree = self.find_element_with_lsb(element.lsb(DEPTH - 1)).unwrap();
+
+            let collision = Collision {
+                in_tree,
+                inserted: element,
+                depth: DEPTH,
+                struct_name: tree::StructName::Batch,
+            };
+
+            return Err(CollisionError {
+                collisions: vec![collision],
+            });
+        }
+
+        self.lsbs.insert(lsb);
+        self.remove_entries.push(element);
+
+        Ok(())
     }
 
-    /// Get an iterator over the elements that have been inserted into this [`Batch`]
-    pub fn elements(&self) -> impl Iterator<Item = Element> + '_ {
+    /// Get an iterator over the elements that should be inserted into a tree
+    pub fn insert_elements(&self) -> impl Iterator<Item = Element> + '_ {
         self.entries.iter().map(|(element, _)| element).copied()
     }
-
-    /// Get an iterator over the values that have been inserted into this [`Batch`]
-    pub fn values(&self) -> impl Iterator<Item = &V> + '_ {
-        self.entries.iter().map(|(_, v)| v)
+    /// Get an iterator over the elements that should be removed from a tree
+    pub fn remove_elements(&self) -> impl Iterator<Item = Element> + '_ {
+        self.remove_entries.iter().copied()
     }
 
-    /// Get an iterator over the entries that have been inserted into this [`Batch`]
-    pub fn entries(&self) -> impl Iterator<Item = &(Element, V)> + '_ {
-        self.entries.iter()
+    /// Returns the insert entries of this batch
+    #[must_use]
+    pub fn insert_entries(&self) -> &[(Element, V)] {
+        &self.entries
     }
 
     pub(crate) fn find_element_with_lsb(&self, lsb: Lsb) -> Option<Element> {
-        self.elements().find(|e| e.lsb(DEPTH - 1) == lsb)
+        self.insert_elements()
+            .chain(self.remove_elements())
+            .find(|e| e.lsb(DEPTH - 1) == lsb)
     }
 
     /// Create a [`Batch`] from an [`Iterator`] over tuples of [`Element`]s and values
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// let batch = Batch::<64, _>::from_entries([
     ///     (Element::new(1), 123),
     ///     (Element::new(2), 234),
     ///     (Element::new(3), 345),
-    /// ]);
+    /// ], []);
     /// ```
-    pub fn from_entries<I>(entries: I) -> Result<Self, CollisionError>
+    pub fn from_entries<I, RI>(entries: I, remove_entries: RI) -> Result<Self, CollisionError>
     where
         I: IntoIterator<Item = (Element, V)>,
+        RI: IntoIterator<Item = Element>,
     {
         let mut batch = Self::new();
 
@@ -153,25 +178,10 @@ impl<const DEPTH: usize, V> Batch<DEPTH, V> {
             batch.insert(element, value)?;
         }
 
-        Ok(batch)
-    }
+        for element in remove_entries {
+            batch.remove(element)?;
+        }
 
-    /// Create a [`Batch`] from an [`Iterator`] of [`Element`]s, using the [`Default`]
-    /// implementation for the values
-    ///
-    /// ```rust
-    /// # use smirk::*;
-    /// let batch = Batch::<64, ()>::from_elements([
-    ///     Element::new(1),
-    ///     Element::new(2),
-    ///     Element::new(3),
-    /// ]);
-    /// ```
-    pub fn from_elements<I>(entries: I) -> Result<Self, CollisionError>
-    where
-        I: IntoIterator<Item = Element>,
-        V: Default,
-    {
-        Self::from_entries(entries.into_iter().map(|element| (element, V::default())))
+        Ok(batch)
     }
 }

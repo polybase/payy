@@ -1,0 +1,27 @@
+[package]
+name = "kyc"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+diesel = ["dep:diesel"]
+ts-rs = ["dep:ts-rs"]
+
+[dependencies]
+
+currency = { workspace = true }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+phonenumber = { workspace = true }
+strum = { workspace = true }
+base64 = { workspace = true }
+
+diesel = { workspace = true, optional = true }
+ts-rs = { workspace = true, optional = true }
+workspace-hack.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true }

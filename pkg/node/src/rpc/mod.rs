@@ -7,3 +7,4 @@ mod http_error;
 pub mod routes;
 pub mod server;
 pub mod stats;
+pub mod stats_today;

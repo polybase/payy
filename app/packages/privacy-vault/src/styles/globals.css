@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: 'Steradian';
+  src: url('../assets/fonts/Steradian-Rg.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Steradian';
+  src: url('../assets/fonts/Steradian-Md.otf') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Steradian';
+  src: url('../assets/fonts/Steradian-Bd.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Steradian';
+  src: url('../assets/fonts/Steradian-Blk.otf') format('opentype');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --primary: 224 255 50;
+  --background: 17 17 17;
+  --text: 255 255 255;
+  --border-accent: 224 255 50;
+  --gray-900: 36 36 36;
+  --gray-800: 64 64 64;
+  --surface: #171717;
+  --surface-strong: #1f1f1f;
+  --text-muted: #b5b5b5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Steradian', 'Open Sans', 'Source Sans Pro', Arial, Helvetica, sans-serif;
+  background-color: rgb(var(--background));
+  color: rgb(var(--text));
+  border-top: 2px solid rgb(var(--border-accent));
+  letter-spacing: -0.01em;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+}

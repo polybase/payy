@@ -1,22 +1,25 @@
 import hre from 'hardhat'
 import { readFile } from 'fs/promises'
 
-export async function deployBin(binFile: string): Promise<`0x${string}`> {
-  const bin = (await readFile(`contracts/${binFile}`)).toString().trimEnd()
-
-  // console.log('Deploying contract of size: ', bin.length / 2, 'bytes')
+export async function deployBytecode(bytecode: string): Promise<`0x${string}`> {
+  const normalized = bytecode.startsWith('0x') ? bytecode : `0x${bytecode}`
 
   const [owner] = await hre.viem.getWalletClients()
-  const verifierTx = await owner.deployContract({
+  const deployTx = await owner.deployContract({
     account: owner.account,
-    bytecode: `0x${bin}`,
+    bytecode: normalized,
     abi: []
   })
 
   const publicClient = await hre.viem.getPublicClient()
-  const verifierAddr = (await publicClient.waitForTransactionReceipt({ hash: verifierTx })).contractAddress
+  const deployedAddr = (await publicClient.waitForTransactionReceipt({ hash: deployTx })).contractAddress
 
-  if (verifierAddr === null || verifierAddr === undefined) throw new Error('Verifier address not found')
+  if (deployedAddr === null || deployedAddr === undefined) throw new Error('Verifier address not found')
 
-  return verifierAddr
+  return deployedAddr
+}
+
+export async function deployBin(binFile: string): Promise<`0x${string}`> {
+  const bin = (await readFile(`contracts/${binFile}`)).toString().trimEnd()
+  return deployBytecode(bin)
 }

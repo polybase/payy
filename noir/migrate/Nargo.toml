@@ -1,0 +1,10 @@
+[package]
+name = "migrate"
+type = "bin"
+authors = [""]
+compiler_version = ">=0.36.0"
+
+[dependencies]
+common = { path = "../common" }
+poseidon_alt = { path = "../poseidon_alt" }
+poseidon = { tag = "v0.1.1", git = "https://github.com/noir-lang/poseidon" }

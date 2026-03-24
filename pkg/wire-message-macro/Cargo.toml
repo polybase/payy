@@ -1,12 +1,13 @@
 [package]
 name = "wire-message-macro"
 version = "1.3.0"
-edition = "2021"
+edition = "2024"
 
 [lib]
 proc-macro = true
 
 [dependencies]
-quote = "1"
-proc-macro2 = "1"
-syn = { version = "2", features = ["full"] }
+quote = { workspace = true }
+proc-macro2 = { workspace = true }
+syn = { workspace = true, features = ["full"] }
+workspace-hack.workspace = true

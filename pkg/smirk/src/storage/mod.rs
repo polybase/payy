@@ -1,12 +1,10 @@
-use core::fmt::Debug;
-use std::path::Path;
-
+use crate::{Tree, batch as batch_macro, hash_cache::SimpleHashCache};
 use borsh::{BorshDeserialize, BorshSerialize};
-use rocksdb::DB;
-
+use core::fmt::Debug;
+use element::Element;
 pub use error::Error;
-
-use crate::{hash_cache::SimpleHashCache, Element, Tree};
+use rocksdb::DB;
+use std::path::Path;
 
 mod batch;
 mod error;
@@ -21,6 +19,7 @@ mod tests;
 ///
 /// ```rust
 /// # use smirk::*;
+/// # use element::Element;
 /// # use smirk::storage::*;
 /// # let dir = tempdir::TempDir::new("smirk_doctest").unwrap();
 /// # let path = dir.path().join("db");
@@ -35,6 +34,7 @@ impl<const DEPTH: usize, V> Persistent<DEPTH, V> {
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// # use smirk::storage::*;
     /// # let dir = tempdir::TempDir::new("smirk_doctest").unwrap();
     /// # let path = dir.path().join("db");
@@ -54,6 +54,7 @@ impl<const DEPTH: usize, V> Persistent<DEPTH, V> {
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// # use smirk::storage::*;
     /// # let dir = tempdir::TempDir::new("smirk_doctest").unwrap();
     /// # let path = dir.path().join("db");
@@ -66,6 +67,7 @@ impl<const DEPTH: usize, V> Persistent<DEPTH, V> {
     /// let persistent = Persistent::<64, i32>::load(&path).unwrap();
     /// assert_eq!(persistent.tree().get(Element::ONE), Some(&123));
     /// ```
+    #[tracing::instrument(skip_all)]
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, Error>
     where
         V: BorshDeserialize + BorshSerialize + Debug + Clone + Send + Sync + 'static,
@@ -80,6 +82,7 @@ impl<const DEPTH: usize, V> Persistent<DEPTH, V> {
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// # use smirk::storage::*;
     /// # let dir = tempdir::TempDir::new("smirk_doctest").unwrap();
     /// # let path = dir.path().join("db");
@@ -118,6 +121,7 @@ impl<const DEPTH: usize, V> Persistent<DEPTH, V> {
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// # use smirk::storage::*;
     /// # let dir = tempdir::TempDir::new("smirk_doctest").unwrap();
     /// # let path = dir.path().join("db");
@@ -139,7 +143,7 @@ impl<const DEPTH: usize, V> Persistent<DEPTH, V> {
     where
         V: BorshSerialize + BorshDeserialize + Send + Sync + 'static + Clone,
     {
-        self.insert_batch(crate::batch! { element => value })
+        self.insert_batch(batch_macro! { element => value })
     }
 
     /// Store all computed hashes from the in-memory tree into rocksdb

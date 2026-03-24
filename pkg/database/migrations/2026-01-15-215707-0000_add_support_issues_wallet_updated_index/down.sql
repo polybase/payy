@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_support_issues_wallet_updated_desc;

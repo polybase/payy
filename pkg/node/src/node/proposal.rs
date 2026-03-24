@@ -1,17 +1,22 @@
+// lint-long-file-override allow-max-lines=300
 use std::{sync::Arc, time::Instant};
 
+use contextful::ResultContextExt as _;
 use doomslug::ApprovalValidated;
 use primitives::hash::CryptoHash;
-use smirk::Element;
 use tracing::{info, instrument, warn};
 
 use crate::{
-    block::{Block, BlockContent, BlockHeader, BlockState}, network::NetworkEvent, node::block_format::BlockMetadata, types::BlockHeight, BlockFormat, Error, Mode, NodeShared, Result
+    BlockFormat, Error, Mode, NodeShared, Result,
+    block::{Block, BlockContent, BlockHeader, BlockState},
+    network::NetworkEvent,
+    node::block_format::BlockMetadata,
+    types::BlockHeight,
 };
 
 impl NodeShared {
     #[instrument(skip(self))]
-   pub(crate) fn commit_proposal(&self, block: Block) -> Result<()> {
+    pub(crate) fn commit_proposal(&self, block: Block) -> Result<()> {
         let state = &block.content.state;
         let height = block.content.header.height;
 
@@ -32,31 +37,37 @@ impl NodeShared {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        for txn in &block.content.state.txns {
+        for utxo_proof in &block.content.state.txns {
             info!(
-                hash = format!("0x{}", txn.hash()),
-                recent_root = format!("0x{:x}", txn.recent_root),
-                mb_hash = format!("0x{:x}", txn.mb_hash),
-                mb_value = format!("0x{:x}", txn.mb_value),
-                input_leaves = ?txn.input_leaves.iter().map(|l| format!("0x{l:x}")).collect::<Vec<_>>(),
-                output_leaves = ?txn.output_leaves.iter().map(|l| format!("0x{l:x}")).collect::<Vec<_>>(),
+                hash = format!("0x{}", utxo_proof.hash()),
+                kind = ?utxo_proof.kind(),
+                kind_messages = ?utxo_proof.kind_messages(),
+                messages =  ?utxo_proof.public_inputs.messages.iter().map(|l| format!("0x{l:x}")).collect::<Vec<_>>(),
+                input_leaves = ?utxo_proof.public_inputs.input_commitments.iter().map(|l| format!("0x{l:x}")).collect::<Vec<_>>(),
+                output_leaves = ?utxo_proof.public_inputs.output_commitments.iter().map(|l| format!("0x{l:x}")).collect::<Vec<_>>(),
                 "Committing transaction"
             )
         }
 
-        // Validate leaves before commit
-        let leaves = state
+        // Input commitments (to be removed from the tree)
+        let block_input_commitments = state
             .txns
             .iter()
-            .flat_map(|txn| txn.leaves())
-            .filter(|e| *e != Element::ZERO);
+            .flat_map(|utxo_proof| utxo_proof.public_inputs.input_commitments)
+            .filter(|l: &_| !l.is_zero())
+            .collect::<Vec<_>>();
 
-        let skip_validation = self.config.bad_blocks.contains(&height);
-        {
-            for leaf in leaves {
-                if !skip_validation && self.notes_tree.read().tree().contains_element(&leaf) {
-                    panic!("Double-spend detected. This should never happen, this should have been caught before commit");
-                }
+        // Input notes should be in the tree
+        for input_commitment in block_input_commitments {
+            if !self
+                .notes_tree
+                .read()
+                .tree()
+                .contains_element(&input_commitment)
+            {
+                panic!(
+                    "Double-spend detected -> input note NOT in tree. This should never happen, this should have been caught before commit"
+                );
             }
         }
 
@@ -64,30 +75,35 @@ impl NodeShared {
         // If we exit after commiting to block store,
         // but before commiting to notes tree, we
         // can detect it by checking the previous block's root hash.
-        self.block_store.set(
-            &BlockFormat::V2(block.clone(), BlockMetadata {
-                timestamp_unix_s: Some(commit_time.timestamp() as u64)
-            }),
-        )?;
+        self.block_store
+            .set(&BlockFormat::V2(
+                block.clone(),
+                BlockMetadata {
+                    timestamp_unix_s: Some(commit_time.timestamp() as u64),
+                },
+            ))
+            .context("persist committed block metadata to block store")?;
 
-        Self::apply_block_to_tree(&mut self.notes_tree.write(), state, height, skip_validation)?;
+        Self::apply_block_to_tree(&mut self.notes_tree.write(), state, height)?;
 
         let block = Arc::new(block);
 
         // Commit changes in mempool (releasing unused txns and removing used ones). This will
         // also release all requests that were waiting for these txns to be committed.
-        self.mempool
-            .commit(height, keys.iter().map(|k| (k, Ok(Arc::clone(&block)))).collect());
+        self.mempool.commit(
+            height,
+            keys.iter().map(|k| (k, Ok(Arc::clone(&block)))).collect(),
+        );
 
         // Notify any commit listeners
         let listeners = &mut self.state.lock().listeners;
         listeners.retain(|tx| tx.send(Arc::clone(&block)).is_ok());
 
         Ok(())
-    } 
+    }
 
-   #[instrument(skip(self))]
-   pub fn receive_proposal(&self, block: Block) -> Result<()> {
+    #[instrument(skip(self))]
+    pub fn receive_proposal(&self, block: Block) -> Result<()> {
         if self.config.mode == Mode::Validator {
             panic!("This function should not be called by the validator");
         }
@@ -114,8 +130,7 @@ impl NodeShared {
         // Notify the worker
 
         Ok(())
-    } 
-
+    }
 
     #[instrument(skip_all, fields(height))]
     pub(crate) async fn create_proposal(
@@ -148,15 +163,28 @@ impl NodeShared {
             utxos.into_iter().map(|(_, utxo)| utxo).collect::<Vec<_>>()
         };
 
-        let leaves = txns.iter().flat_map(|utxo| utxo.leaves()).filter(|leaf| leaf != &Element::ZERO).collect::<Vec<_>>();
+        let insert_leaves = txns
+            .iter()
+            .flat_map(|utxo| utxo.public_inputs.output_commitments)
+            .filter(|l| !l.is_zero())
+            .collect::<Vec<_>>();
+        let remove_leaves = txns
+            .iter()
+            .flat_map(|utxo| utxo.public_inputs.input_commitments)
+            .filter(|l| !l.is_zero())
+            .collect::<Vec<_>>();
 
-        let new_root_hash = match leaves.is_empty() {
+        let new_root_hash = match insert_leaves.is_empty() && remove_leaves.is_empty() {
             true => {
                 // Root is unchanged
                 self.notes_tree.read().tree().root_hash()
-            },
+            }
             false => {
-                self.notes_tree.read().tree().root_hash_with(&leaves)
+                // TODO_NOIR: we also need to remove some elements from the tree too
+                self.notes_tree
+                    .read()
+                    .tree()
+                    .root_hash_with(&insert_leaves, &remove_leaves)
             }
         };
 
@@ -174,7 +202,7 @@ impl NodeShared {
         // Create a signed block
         let block = block_content.to_block(&self.local_peer);
 
-        let validate_res = self.validate_block(&block);
+        let validate_res = self.validate_block(&block).await;
         match &validate_res {
             Ok(()) => {}
             Err(Error::LeafAlreadyInsertedInTheSameBlock {
@@ -216,44 +244,31 @@ impl NodeShared {
                     )],
                 );
             }
-            Err(Error::UtxoRootIsNotRecentEnough { utxo_recent_root, recent_roots, txn_hash }) => {
-                let utxo_recent_root = *utxo_recent_root;
-                let recent_roots = recent_roots.clone();
-                let txn_hash = *txn_hash;
 
-                self.mempool.commit(
-                    height,
-                    vec![(
-                        &txn_hash,
-                        Err(Error::UtxoRootIsNotRecentEnough {
-                            utxo_recent_root,
-                            recent_roots,
-                            txn_hash,
-                        }),
-                    )],
-                );
-            }
             Err(_err) => {
                 // One of the transactions failed, but we don't know which one.
                 // Send the same error to each of them.
                 let txn_iter = block.content.state.txns.iter();
-                let txn_errors = txn_iter
-                    .clone()
-                    .map(|_tx| 
-                        // This is not optimal, but it's required because Error is not clone-able.
-                        self.validate_block(&block)
-                    )
-                    .collect::<Vec<_>>();
-                let txn_keys = txn_iter
-                    .map(|tx| tx.hash())
-                    .collect::<Vec<_>>();
+                let mut txn_errors = Vec::new();
+                for _ in txn_iter.clone() {
+                    // This is not optimal, but it's required because Error is not clone-able.
+                    txn_errors.push(self.validate_block(&block).await);
+                }
+                let txn_keys = txn_iter.map(|tx| tx.hash()).collect::<Vec<_>>();
 
                 self.mempool.commit(
                     height,
                     txn_errors
                         .into_iter()
                         .enumerate()
-                        .map(|(i, err)| (&txn_keys[i], err.map(|_| unreachable!("We know the result is Err in this match branch"))))
+                        .map(|(i, err)| {
+                            (
+                                &txn_keys[i],
+                                err.map(|_| {
+                                    unreachable!("We know the result is Err in this match branch")
+                                }),
+                            )
+                        })
                         .collect::<Vec<_>>(),
                 );
             }
@@ -271,5 +286,5 @@ impl NodeShared {
         self.send_all(NetworkEvent::Block(block.clone())).await;
 
         Ok(block)
-    } 
+    }
 }

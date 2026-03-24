@@ -1,9 +1,10 @@
+// lint-long-file-override allow-max-lines=300
 use std::{ops::Range, path::Path};
 
 use borsh::BorshDeserialize;
+use element::Element;
 use prover::RollupInput;
 use wire_message::WireMessage;
-use zk_primitives::Element;
 
 use crate::types::BlockHeight;
 
@@ -85,6 +86,7 @@ pub(crate) struct LastSeenBlock {
 }
 
 #[derive(Debug, borsh::BorshSerialize, borsh::BorshDeserialize)]
+#[allow(clippy::large_enum_variant)]
 enum ValueV1 {
     LastSeenBlock(LastSeenBlock),
     Rollup(RollupInput),

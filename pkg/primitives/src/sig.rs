@@ -1,15 +1,17 @@
 use crate::{hash::CryptoHash, peer::Address};
 use borsh::{BorshDeserialize, BorshSerialize};
 use secp256k1::{
-    ecdsa::{self, RecoveryId},
     Message, SECP256K1,
+    ecdsa::{self, RecoveryId},
 };
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
 
-const NETWORK: &str = "Polybase";
+const NETWORK: &str = "Payy";
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+)]
 #[serde(transparent)]
 pub struct Signature(#[serde(with = "hex::serde")] pub [u8; 65]);
 

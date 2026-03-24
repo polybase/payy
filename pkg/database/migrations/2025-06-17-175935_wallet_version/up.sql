@@ -1,0 +1,2 @@
+ALTER TABLE "wallets" ADD COLUMN "data" JSONB;
+ALTER TABLE "wallets" ADD COLUMN "version" INT2 NOT NULL DEFAULT 0;

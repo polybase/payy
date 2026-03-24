@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_ramps_accounts_provider_external;

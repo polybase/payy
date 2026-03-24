@@ -1,0 +1,7 @@
+CREATE TABLE "ip_data"(
+	"id" UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+	"ip" BPCHAR(39) NOT NULL,
+	"data" JSONB NOT NULL,
+	"added_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+

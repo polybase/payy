@@ -1,0 +1,53 @@
+name: Install sccache
+description: Installs sccache binary from release
+
+runs:
+  using: composite
+  steps:
+    - name: Install sccache
+      shell: bash
+      env:
+        SCCACHE_VERSION: 0.10.0
+      run: |
+        if command -v sccache >/dev/null 2>&1; then
+          sccache --version
+          exit 0
+        fi
+
+        case "$(uname -m)" in
+          x86_64|amd64)
+            sccache_arch="x86_64"
+            ;;
+          aarch64|arm64)
+            sccache_arch="aarch64"
+            ;;
+          *)
+            echo "Unsupported architecture: $(uname -m)" >&2
+            exit 1
+            ;;
+        esac
+
+        sccache_archive="sccache-v${SCCACHE_VERSION}-${sccache_arch}-unknown-linux-musl.tar.gz"
+        sccache_dir="sccache-v${SCCACHE_VERSION}-${sccache_arch}-unknown-linux-musl"
+        sccache_url="https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/${sccache_archive}"
+        tmp_dir="$(mktemp -d)"
+
+        cleanup() {
+          rm -rf "$tmp_dir"
+        }
+
+        trap cleanup EXIT
+
+        curl \
+          --fail \
+          --location \
+          --retry 5 \
+          --retry-all-errors \
+          --retry-delay 2 \
+          --retry-max-time 120 \
+          --output "$tmp_dir/$sccache_archive" \
+          "$sccache_url"
+
+        tar -xzf "$tmp_dir/$sccache_archive" -C "$tmp_dir"
+        install -m 755 "$tmp_dir/$sccache_dir/sccache" /usr/local/bin/sccache
+        sccache --version

@@ -1,6 +1,7 @@
-use crate::{hash::CryptoHash, sig::Signature};
+// lint-long-file-override allow-max-lines=300
+use crate::{hash::CryptoHash, sig::Signature, u256::U256};
 use borsh::{BorshDeserialize, BorshSerialize};
-use secp256k1::{Message, PublicKey, SecretKey, SECP256K1};
+use secp256k1::{Message, PublicKey, SECP256K1, SecretKey};
 use serde::{Deserialize, Deserializer, Serialize};
 use sha3::{Digest, Keccak256};
 use std::{fmt::Display, str::FromStr};
@@ -55,8 +56,8 @@ impl Address {
         self.0.to_vec()
     }
 
-    pub fn to_u256(&self) -> crate::u256::U256 {
-        crate::u256::U256::from_little_endian(&self.0)
+    pub fn to_u256(&self) -> U256 {
+        U256::from_little_endian(&self.0)
     }
 }
 
@@ -137,8 +138,8 @@ impl PeerIdSigner {
 
     pub fn sign(&self, msg: &CryptoHash) -> Signature {
         let mut hasher = Keccak256::new();
-        hasher.update(b"Polybase".len().to_be_bytes());
-        hasher.update(b"Polybase");
+        hasher.update(b"Payy".len().to_be_bytes());
+        hasher.update(b"Payy");
         hasher.update(msg.inner());
         let msg = Into::<[u8; 32]>::into(hasher.finalize());
         let msg = Message::from_digest(msg);

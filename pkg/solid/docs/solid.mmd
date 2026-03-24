@@ -1,0 +1,46 @@
+%% 
+%% This is the State Transition Diagram for the Solid Consensus Protocol generated using Mermaid (https://mermaid.js.org/).
+%%
+%% How to run and generate images locally:
+%%
+%% 1. Install `mermaid-cli` (https://github.com/mermaid-js/mermaid-cli)
+%% 2. Run `$ mmdc -i sold.mmd -o <output-file>.{svg|png}` 
+%%
+%% For instance:
+%%   $ mmdc -i sold.mmd -o solid.png
+%%
+stateDiagram-v2
+  state CheckStartState <<choice>>
+  state CheckProposalHeight <<choice>>
+  state CheckAcceptedByQuorum <<choice>>
+  state CheckHasPendingCommits <<choice>>
+
+
+  [*] --> CheckStartState: Starting state
+  CheckStartState --> Genesis: New node startup
+  CheckStartState --> WithLastConfirmedProposal: Has last confirmed proposal
+  Genesis --> NewRound
+  WithLastConfirmedProposal --> NewRound
+
+  NewRound --> Propose
+
+  state CheckDuplicateProposal <<choice>>
+  Propose --> CheckDuplicateProposal
+  CheckDuplicateProposal --> DuplicateProposal: proposal is duplicate
+  DuplicateProposal --> ResetTimeouts
+  ResetTimeouts --> SkipAndChooseNewLeader
+  SkipAndChooseNewLeader --> NewRound
+  CheckDuplicateProposal --> CheckProposalHeight: proposal is not duplicate
+  CheckProposalHeight --> Accept: height < proposal height
+
+
+  Accept --> CheckAcceptedByQuorum
+  CheckAcceptedByQuorum --> ResetTimeouts: proposal not accepted by majority of validators 
+  CheckAcceptedByQuorum --> Commit: proposal accepted by majority of validators
+
+  Commit --> CheckHasPendingCommits
+  CheckHasPendingCommits --> OutOfSync: if has pending commits
+  OutOfSync --> SyncWithNetwork
+  SyncWithNetwork --> NewRound
+  CheckHasPendingCommits --> IncrementHeight: if no pending commits
+  IncrementHeight --> NewRound

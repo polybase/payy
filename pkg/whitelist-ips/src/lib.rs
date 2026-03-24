@@ -6,12 +6,12 @@ use std::{
 };
 
 use libp2p::{
+    Multiaddr, PeerId,
     multiaddr::Protocol,
     swarm::{
-        dummy, CloseConnection, ConnectionDenied, ConnectionId, NetworkBehaviour, PollParameters,
-        THandler, THandlerInEvent, ToSwarm,
+        CloseConnection, ConnectionDenied, ConnectionId, NetworkBehaviour, PollParameters,
+        THandler, THandlerInEvent, ToSwarm, dummy,
     },
-    Multiaddr, PeerId,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -69,7 +69,9 @@ impl NetworkBehaviour for Behaviour {
 
         #[cfg(not(debug_assertions))]
         {
-            tracing::warn!("whitelist_ips::Behaviour::on_connection_handler_event called, which should be impossible")
+            tracing::warn!(
+                "whitelist_ips::Behaviour::on_connection_handler_event called, which should be impossible"
+            )
         }
     }
 

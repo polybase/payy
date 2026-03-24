@@ -1,0 +1,17 @@
+[package]
+name = "barretenberg-rs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+barretenberg-interface = { workspace = true }
+bb_rs = { workspace = true, optional = true }
+lazy_static = { workspace = true }
+async-trait = { workspace = true }
+contextful = { workspace = true }
+tokio = { workspace = true }
+workspace-hack.workspace = true
+
+[features]
+default = []
+max_params = []

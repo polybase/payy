@@ -1,32 +1,30 @@
 use std::{
     collections::HashMap,
     fmt::Debug,
-    sync::{atomic::AtomicBool, Arc},
+    sync::{Arc, atomic::AtomicBool},
 };
 
 use block_store::{BlockListOrder, StoreList};
 use chrono::{NaiveDate, Utc};
 use parking_lot::RwLock;
 
-use crate::{node, NodeShared};
+use crate::{NodeShared, node};
+
+use super::stats_today::TodayStats;
 
 pub struct TxnStats {
     node: Arc<NodeShared>,
     ready: Arc<AtomicBool>,
     last_7_days: Arc<RwLock<Vec<(chrono::NaiveDate, u64)>>>,
+    today: Arc<TodayStats>,
 }
 
 impl Debug for TxnStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let TxnStats {
-            node: _,
-            ready,
-            last_7_days,
-        } = self;
-
         f.debug_struct("TxnStats")
-            .field("ready", &ready)
-            .field("last_7_days", &last_7_days)
+            .field("ready", &self.ready)
+            .field("last_7_days", &self.last_7_days)
+            .field("today", &self.today)
             .finish()
     }
 }
@@ -34,8 +32,9 @@ impl Debug for TxnStats {
 impl TxnStats {
     pub fn new(node: Arc<NodeShared>) -> Self {
         Self {
-            node,
+            node: Arc::clone(&node),
             last_7_days: Arc::new(RwLock::new(Vec::new())),
+            today: Arc::new(TodayStats::new(node)),
             ready: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -88,6 +87,10 @@ impl TxnStats {
         Ok(())
     }
 
+    pub fn count_today_txns(&self) -> u64 {
+        self.today.count()
+    }
+
     pub async fn worker(self: Arc<Self>) -> Result<(), tokio::task::JoinError> {
         tokio::spawn(async move {
             loop {
@@ -122,5 +125,9 @@ impl TxnStats {
             }
         })
         .await
+    }
+
+    pub async fn today_stats_worker(self: Arc<Self>) -> Result<(), tokio::task::JoinError> {
+        tokio::spawn(async move { self.today.clone().run().await }).await
     }
 }

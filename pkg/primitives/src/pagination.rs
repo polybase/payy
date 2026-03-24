@@ -1,6 +1,9 @@
+// lint-long-file-override allow-max-lines=400
 use std::ops::Bound;
 
 use base64::Engine;
+#[cfg(feature = "ts-rs")]
+use ts_rs::TS;
 
 /// A wrapper around a value that serializes it using serde_json and then encodes it using base64
 #[derive(Debug, Clone, Copy)]
@@ -108,6 +111,8 @@ pub struct OpaqueCursor<Pos> {
 /// This type is meant to be used in client code,
 /// where the actual cursor types are not needed.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct OpaqueClientCursor {
     pub after: Option<String>,
     pub before: Option<String>,

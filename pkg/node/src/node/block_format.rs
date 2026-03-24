@@ -2,7 +2,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use primitives::block_height::BlockHeight;
 use wire_message::WireMessage;
 
-use crate::{block::Block, TxnFormat};
+use crate::{TxnFormat, block::Block};
 
 use super::txn_format::TxnMetadata;
 

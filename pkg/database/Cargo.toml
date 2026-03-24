@@ -1,0 +1,18 @@
+[package]
+name = "database"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+diesel = ["dep:diesel"]
+
+[dependencies]
+diesel = { workspace = true, optional = true, features = ["postgres"] }
+workspace-hack.workspace = true
+
+[dev-dependencies]
+contextful = { workspace = true }
+tokio = { workspace = true }
+tokio-postgres = { workspace = true, features = ["with-uuid-1"] }
+serial_test = { workspace = true }

@@ -1,8 +1,11 @@
-use color_eyre::Result;
-use ethereum_types::Address;
-use secp256k1::{PublicKey, SecretKey, SECP256K1};
-use sha3::{Digest, Keccak256};
 use std::str::FromStr;
+
+use contextful::ResultContextExt;
+use ethereum_types::Address;
+use secp256k1::{PublicKey, SECP256K1, SecretKey};
+use sha3::{Digest, Keccak256};
+
+use crate::Result;
 
 pub struct Wallet {
     secret_key: SecretKey,
@@ -14,7 +17,8 @@ impl Wallet {
     }
 
     pub fn new_from_str(secret_key: &str) -> Result<Self> {
-        let secret_key = SecretKey::from_str(secret_key)?;
+        let secret_key = SecretKey::from_str(secret_key)
+            .context("[contracts/wallet] parse secp256k1 secret key from hex input")?;
         Ok(Self { secret_key })
     }
 

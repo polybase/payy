@@ -1,0 +1,88 @@
+name: 'Cloud Cache'
+description: 'Restores and saves a directory to cloud storage as a cache (tar.zst compressed), using a primary key and fallback keys. Supports GCS and S3.'
+inputs:
+  provider:
+    description: 'Storage provider: gcs or s3'
+    required: false
+    default: 'gcs'
+  gcs-key:
+    description: 'Base64 encoded JSON service account key for GCS'
+    required: false
+  s3-access-key:
+    description: 'Access key for S3'
+    required: false
+  s3-secret-key:
+    description: 'Secret key for S3'
+    required: false
+  s3-endpoint:
+    description: 'Endpoint URL for S3 (for non-AWS S3-compatible services)'
+    required: false
+  s3-region:
+    description: 'Region for S3 (default: auto)'
+    required: false
+    default: 'auto'
+  bucket:
+    description: 'Bucket name (GCS or S3)'
+    required: true
+  prefix:
+    description: 'Prefix path in the bucket (optional)'
+    required: false
+    default: ''
+  primary-key:
+    description: 'Primary key for the cache (without .tar.zst extension)'
+    required: false
+    default: ''
+  primary-key-generator:
+    description: 'Shell script (bash) to generate the primary key, appending the key (without .tar.zst extension) to $PRIMARY_KEY'
+    required: false
+    default: ''
+  fallback-keys:
+    description: 'Comma-separated list of fallback keys to check (in order of priority, without .tar.zst extension)'
+    required: false
+    default: ''
+  fallback-key-generator:
+    description: 'Shell script (bash) to generate fallback keys dynamically, appending one key (without .tar.zst extension) per line to $FALLBACK_KEYS'
+    required: false
+    default: ''
+  local-path:
+    description: 'Local directory path to restore the cache to and save from'
+    required: true
+  skip-upload:
+    description: 'Skip the cache upload'
+    required: false
+    default: 'false'
+  skip-download:
+    description: 'Skip restoring (downloading) the cache'
+    required: false
+    default: 'false'
+  retries:
+    description: 'Total retry attempts per part (download/upload)'
+    required: false
+    default: '3'
+  retry-delay-ms:
+    description: 'Base backoff in ms for retries (jittered)'
+    required: false
+    default: '100'
+  download-part-count:
+    description: 'Target number of download parts when restoring (>=1)'
+    required: false
+    default: '128'
+  download-concurrency:
+    description: 'Max concurrent download parts'
+    required: false
+    default: '32'
+  upload-concurrency:
+    description: 'Max concurrent S3 upload parts (multipart)'
+    required: false
+    default: '32'
+outputs:
+  path:
+    description: 'Local directory path for the cache'
+  cache-hit:
+    description: 'True if exact cache hit on primary key'
+  restored:
+    description: 'True if a cache was restored (any key matched, downloaded and extracted)'
+runs:
+  using: 'node16'
+  main: 'dist/index.js'
+  post: 'dist/post/index.js'

@@ -1,0 +1,53 @@
+[package]
+name = "ramps-interface"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+diesel = [
+  "dep:diesel",
+  "dep:diesel-util",
+  "diesel-util/diesel",
+  "dep:database",
+  "database/diesel",
+  "element/diesel",
+  "network/diesel",
+  "kyc/diesel",
+  "currency/diesel",
+]
+ts-rs = [
+  "dep:ts-rs",
+  "currency/ts-rs",
+  "element/ts-rs",
+  "kyc/ts-rs",
+  "network/ts-rs",
+]
+
+[dependencies]
+async-trait = { workspace = true }
+currency = { workspace = true }
+database = { workspace = true, optional = true }
+element = { workspace = true }
+ethereum-types = { workspace = true }
+kyc = { workspace = true }
+network = { workspace = true }
+primitives = { workspace = true }
+rpc = { workspace = true }
+test-spy = { workspace = true }
+chrono = { workspace = true }
+contextful = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+rand = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+veil = { workspace = true }
+zk-primitives = { workspace = true }
+
+# Optional dependencies for feature flags
+diesel = { workspace = true, optional = true }
+diesel-util = { workspace = true, optional = true }
+ts-rs = { workspace = true, optional = true }
+workspace-hack.workspace = true

@@ -8,13 +8,13 @@ use rocksdb::WriteBatch;
 use wire_message::WireMessage;
 
 use crate::{
-    storage::format::{ValueFormat, ValueV2},
     Batch,
+    storage::format::{ValueFormat, ValueV2},
 };
 
 use super::{
-    format::{KeyFormat, KeyV2},
     Error, Persistent,
+    format::{KeyFormat, KeyV2},
 };
 
 impl<const DEPTH: usize, V> Persistent<DEPTH, V> {
@@ -22,6 +22,7 @@ impl<const DEPTH: usize, V> Persistent<DEPTH, V> {
     ///
     /// ```rust
     /// # use smirk::*;
+    /// # use element::Element;
     /// # use smirk::storage::*;
     /// # let dir = tempdir::TempDir::new("smirk_doctest").unwrap();
     /// # let path = dir.path().join("db");
@@ -42,7 +43,8 @@ impl<const DEPTH: usize, V> Persistent<DEPTH, V> {
             return Ok(());
         }
 
-        let new_kv_pairs: HashMap<_, _> = batch.entries().cloned().collect();
+        let new_kv_pairs: HashMap<_, _> = batch.insert_entries().iter().cloned().collect();
+        let removed_elements = batch.remove_elements().collect::<Vec<_>>();
 
         let hash_changes = Arc::new(Mutex::new(HashMap::new()));
         self.tree.insert_batch(
@@ -76,6 +78,12 @@ impl<const DEPTH: usize, V> Persistent<DEPTH, V> {
             // time
             let old_key = KeyFormat::V1(key);
             write_batch.delete(old_key.to_bytes().unwrap());
+        }
+
+        for key in removed_elements {
+            for k in [KeyFormat::V2(KeyV2::Element(key)), KeyFormat::V1(key)] {
+                write_batch.delete(k.to_bytes().unwrap());
+            }
         }
 
         for ((left, right), _) in hashes_to_remove {

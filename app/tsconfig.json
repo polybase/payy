@@ -1,0 +1,50 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "strict": true,
+    "jsx": "react-native",
+    "skipLibCheck": true,
+    "target": "es2021",
+    "lib": ["es2021"],
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "types": ["node"],
+    "typeRoots": ["./node_modules/@types", "./types"],
+    "paths": {
+      "@/*": ["packages/payy/src/*", "packages/link/src/*"],
+      "@/components/*": [
+        "packages/payy/src/components/*",
+        "packages/link/src/components/*"
+      ],
+      "@/hooks/*": ["packages/payy/src/hooks/*", "packages/link/src/hooks/*"]
+    }
+  },
+  "include": [
+    "types/**/*.d.ts",
+    "packages/payy/types.d.ts",
+    "packages/payy/types/**/*.d.ts",
+    "packages/payy/**/*",
+    "packages/commentator-mcp/src/types/env.d.ts",
+    "src",
+    "tests",
+    "**/*.ts",
+    "**/*.tsx"
+  ],
+  "exclude": [
+    "packages/link",
+    "packages/network",
+    "packages/privacy-vault",
+    "packages/commentator-mcp",
+    "node_modules",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "**/tests/**",
+    "**/__tests__/**"
+  ]
+}
