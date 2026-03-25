@@ -1,0 +1,183 @@
+name: Beam / Release
+
+on:
+  workflow_dispatch:
+    # GitHub does not support branch filters for manual dispatches.
+    # Jobs below explicitly gate releases to refs/heads/main.
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/beam.release.yml"
+      - "pkg/beam-cli/**"
+      - "scripts/install-beam.sh"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "rust-toolchain.toml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: beam-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  detect-version:
+    if: github.repository == 'polybase/payy' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      is_prerelease: ${{ steps.detect.outputs.is_prerelease }}
+      should_release: ${{ steps.detect.outputs.should_release }}
+      tag: ${{ steps.detect.outputs.tag }}
+      version: ${{ steps.detect.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect beam version change
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="$(awk -F' = ' '/^version = / { gsub(/"/, "", $2); print $2; exit }' pkg/beam-cli/Cargo.toml)"
+          tag="beam-v${version}"
+          if [[ "$version" == *-* ]]; then
+            is_prerelease=true
+          else
+            is_prerelease=false
+          fi
+
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=${is_prerelease}" >> "$GITHUB_OUTPUT"
+
+          # Beam release tags are immutable: never rebuild or republish an existing version.
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "Beam tag ${tag} already exists; skipping release publication."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+              echo "Manual beam releases are only allowed from refs/heads/main; skipping ${GITHUB_REF}."
+              echo "should_release=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          before="${{ github.event.before }}"
+          if [[ -z "$before" || "$before" == "0000000000000000000000000000000000000000" ]]; then
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git diff --quiet "$before" "${{ github.sha }}" -- pkg/beam-cli/Cargo.toml; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git show "${before}:pkg/beam-cli/Cargo.toml" > /tmp/beam-prev-cargo.toml 2>/dev/null; then
+            before_version="$(
+              awk -F' = ' '/^version = / { gsub(/"/, "", $2); print $2; exit }' /tmp/beam-prev-cargo.toml
+            )"
+
+            if [[ "$before_version" == "$version" ]]; then
+              echo "should_release=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "should_release=true" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "No previous pkg/beam-cli/Cargo.toml; treating as version changed."
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: detect-version
+    if: github.repository == 'polybase/payy' && github.ref == 'refs/heads/main' && needs.detect-version.outputs.should_release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: macos-14
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        run: rustup show
+
+      - name: Build beam release binary
+        run: cargo build --release --locked -p beam-cli --bin beam --target ${{ matrix.target }}
+
+      - name: Package release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp "target/${{ matrix.target }}/release/beam" "dist/beam-${{ matrix.target }}"
+
+      - name: Upload release asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: beam-${{ matrix.target }}
+          path: dist/beam-${{ matrix.target }}
+          if-no-files-found: error
+
+  release:
+    needs:
+      - detect-version
+      - build
+    if: github.repository == 'polybase/payy' && github.ref == 'refs/heads/main' && needs.detect-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Validate release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_assets=(
+            dist/beam-x86_64-unknown-linux-gnu
+            dist/beam-x86_64-apple-darwin
+            dist/beam-aarch64-apple-darwin
+          )
+
+          for asset in "${expected_assets[@]}"; do
+            if [[ ! -f "$asset" ]]; then
+              echo "Expected release asset missing or not a file: $asset" >&2
+              exit 1
+            fi
+          done
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.detect-version.outputs.tag }}
+          name: beam ${{ needs.detect-version.outputs.version }}
+          generate_release_notes: true
+          prerelease: ${{ needs.detect-version.outputs.is_prerelease == 'true' }}
+          files: |
+            dist/beam-x86_64-unknown-linux-gnu
+            dist/beam-x86_64-apple-darwin
+            dist/beam-aarch64-apple-darwin

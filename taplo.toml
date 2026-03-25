@@ -1,0 +1,63 @@
+# taplo.toml - TOML formatting configuration for the repository
+
+# Included files for formatting and validation
+include = [
+  "pkg/**/*.toml",
+  "app/packages/react-native-rust-bridge/cpp/rustbridge/**/*.toml",
+  "noir/**/*.toml",
+  ".cargo/**/*.toml",
+  ".config/**/*.toml",
+  ".github/**/*.toml",
+  "*.toml",
+]
+
+# Exclude generated workspace hack manifest from formatting
+exclude = ["pkg/workspace-hack/Cargo.toml"]
+
+# Global formatting rules
+[formatting]
+# Don't align entries (key = value) to the same column
+align_entries = false
+# Don't align comments to the same column
+align_comments = false
+# Allow trailing commas in arrays
+array_trailing_comma = true
+# Auto-expand arrays to multiple lines for better readability
+array_auto_expand = true
+# Don't auto-collapse arrays - keep them multi-line
+array_auto_collapse = false
+# Keep arrays compact when possible
+compact_arrays = true
+# Don't make inline tables compact
+compact_inline_tables = false
+# Don't make entries compact
+compact_entries = false
+# Maximum column width for formatting
+column_width = 100
+# Don't indent tables
+indent_tables = false
+# Don't indent entries
+indent_entries = false
+# Ensure trailing newline at end of file
+trailing_newline = true
+# Allow single blank lines between sections
+allowed_blank_lines = 1
+# Use 2 spaces for indentation
+indent_string = "  "
+# Don't reorder keys (preserve existing order)
+reorder_keys = false
+
+# Apply to all TOML files
+[[rule]]
+include = ["**/*.toml"]
+formatting = { reorder_keys = false }
+
+# Special rules for Cargo.toml files to preserve dependency order
+[[rule]]
+include = ["**/Cargo.toml"]
+formatting = { reorder_arrays = false }
+
+# Special rules for workspace root Cargo.toml
+[[rule]]
+include = ["Cargo.toml"]
+formatting = { reorder_keys = false, reorder_arrays = false }

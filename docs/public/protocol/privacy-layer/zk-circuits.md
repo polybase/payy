@@ -1,15 +1,14 @@
 # ZK Circuits
 
-There are three privacy ZK circuits:
+The [PrivacyBridge](../privacybridge.md) interface methods accept the following ZK circuits as proofs:
 
-1. [**Utxo proof**](https://github.com/polybase/payy/tree/next/noir/utxo) (client/Privacy Vault) - runs on the client or [Privacy Vault](../privacy-vault.md) and proves that a user has permission to spend an input note and generate an output note.
-2. [**Utxo aggregation and inclusion proof**](https://github.com/polybase/payy/tree/next/noir/agg_utxo) (prover) - aggregates Utxo proofs and verifies the new merkle root state
-3. [**Aggregation proof**](https://github.com/polybase/payy/tree/next/noir/agg_agg) (prover) - aggregates Utxo aggregation and inclusion proofs recursively to the required depth to include all Utxo proofs from a single block
-
-The privacy aggregation proof is then combined with the EVM Layer ZK verifier proof, ready for rollup submission to Ethereum.
+- [`transfer`](https://github.com/polybase/payy/tree/main/noir/evm/transfer) - internal transfer within the privacy pool
+- [`burn`](https://github.com/polybase/payy/tree/main/noir/evm/burn) - withdraw from the privacy pool
+- [`mint`](https://github.com/polybase/payy/tree/main/noir/evm/mint) - deposit into the privacy pool
+- [`erc20_transfer`](https://github.com/polybase/payy/tree/main/noir/evm/erc20_transfer) - ERC-20 transfer proof (transparent upgrade using an standard ERC-20 transfer signature)
 
 {% include "../../../../.gitbook/includes/zk-framework.md" %}
 
-The following diagram shows the ZK circuits used by the Privacy Layer:
+## Manual proof construction
 
-<figure><img src="../../.gitbook/assets/zk-circuits-privacy-rollup.png" alt=""><figcaption></figcaption></figure>
+When using the [@payy/client](../../build-on-payy/get-started.md), the client will construct the proofs for you. If you are constructing PrivacyBridge ZK proofs client-side without the Payy SDK, you must use [`@aztec/bb.js` version `3.0.0-manual.20251030`](https://www.npmjs.com/package/@aztec/bb.js/v/3.0.0-manual.20251030) for manual proof generation, with the above ZK circuits.

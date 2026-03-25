@@ -1,0 +1,14 @@
+FROM node:18-bookworm
+
+WORKDIR /eth
+
+COPY eth/package.json eth/yarn.lock ./
+
+RUN yarn install
+
+COPY eth/ ./
+COPY pkg/contracts /pkg/contracts
+
+EXPOSE 8545
+
+CMD ["sh", "-c", "yarn eth-node --hostname 0.0.0.0 & sleep 3 && yarn deploy:local && wait"]

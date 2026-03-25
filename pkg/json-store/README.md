@@ -8,7 +8,9 @@ A simple, thread-safe JSON store that persists data to JSON files with atomic op
 - **Generic Storage**: Store any type that implements `Serialize`, `Deserialize`, `Default`, `Clone`, `Send`, and `Sync`
 - **Async Support**: Built with `tokio` for async operations
 - **Auto-loading**: Automatically loads existing state on initialization
-- **Default Fallback**: Creates default state if file doesn't exist or is corrupted
+- **Missing-file Initialization**: Creates default state when the target file does not exist
+- **Recovering Defaults**: `JsonStore::new` falls back to `T::default()` when an existing file contains invalid JSON
+- **Optional Fail-closed Loading**: Callers can opt into an error when an existing file contains invalid JSON
 - **Thread-safe**: Uses `Arc<RwLock<T>>` for safe concurrent access
 - **Configurable Path**: Specify custom directory and filename
 
@@ -71,11 +73,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### `JsonStore::new(dir, filename)`
 
-Creates a new store instance. The directory will be created if it doesn't exist.
+Creates a new store instance. The directory will be created if it doesn't exist. If the file
+already exists but contains invalid JSON, `new` loads `T::default()` and leaves the invalid file
+untouched so callers can recover without failing startup.
 
 **Parameters:**
 - `dir`: Directory path where the JSON file will be stored
 - `filename`: Name of the JSON file
+
+**Returns:** `Result<JsonStore<T>, JsonStoreError>`
+
+### `JsonStore::new_with_invalid_json_behavior(dir, filename, behavior)`
+
+Creates a new store instance with explicit invalid-JSON handling. Use
+`InvalidJsonBehavior::UseDefault` to recover with `T::default()`, or
+`InvalidJsonBehavior::Error` to return `JsonStoreError::Deserialization`.
+
+**Parameters:**
+- `dir`: Directory path where the JSON file will be stored
+- `filename`: Name of the JSON file
+- `behavior`: How to handle existing files that contain invalid JSON
 
 **Returns:** `Result<JsonStore<T>, JsonStoreError>`
 
@@ -114,7 +131,8 @@ Returns the path to the JSON file.
 The crate defines `JsonStoreError` enum with the following variants:
 
 - `Io(std::io::Error)`: File system operations errors
-- `Serialization(serde_json::Error)`: JSON serialization/deserialization errors
+- `Serialization(serde_json::Error)`: JSON serialization errors while persisting data
+- `Deserialization { path, source }`: Invalid JSON in an existing file when the store is opened in error mode
 - `PathError(String)`: Path-related errors
 
 ## Atomic Operations

@@ -1,0 +1,90 @@
+FROM rust:1-bookworm AS builder
+ARG RUST_GIT_FETCH_CLI
+ARG SCCACHE_GCS_BUCKET
+ARG SCCACHE_GCS_KEY_PREFIX
+ENV CARGO_NET_GIT_FETCH_WITH_CLI=${RUST_GIT_FETCH_CLI:-false}
+
+RUN rustup component add rustfmt && \
+    apt update && apt install -y libglib2.0-dev libssl-dev libclang-dev python3 protobuf-compiler libprotobuf-dev
+
+# Conditional sccache setup: Only if bucket and key are provided
+RUN --mount=type=secret,id=gcs_sa_key_base64,required=false \
+    if [ -n "$SCCACHE_GCS_BUCKET" ] && [ -f /run/secrets/gcs_sa_key_base64 ]; then \
+    cat /run/secrets/gcs_sa_key_base64 | base64 -d > /gcs_key.json && \
+    wget https://github.com/mozilla/sccache/releases/download/v0.10.0/sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz && \
+    tar -xzf sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz && \
+    mv sccache-v0.10.0-x86_64-unknown-linux-musl/sccache /usr/local/cargo/bin/sccache && \
+    rm -rf sccache-v0.10.0-x86_64-unknown-linux-musl sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz && \
+    chmod +x /usr/local/cargo/bin/sccache; \
+    fi
+ENV SCCACHE_GCS_KEY_PATH=/gcs_key.json
+ENV SCCACHE_GCS_BUCKET=$SCCACHE_GCS_BUCKET
+ENV SCCACHE_GCS_KEY_PREFIX=$SCCACHE_GCS_KEY_PREFIX
+ENV SCCACHE_GCS_RW_MODE=READ_WRITE
+
+WORKDIR /build
+
+COPY rust-toolchain.toml ./
+COPY .cargo/config.toml .cargo/config.toml
+COPY Cargo.toml ./
+COPY Cargo.lock ./
+COPY scripts ./scripts
+COPY pkg ./pkg
+
+# Add fixtures needed for building dependencies
+COPY eth/artifacts/contracts ./eth/artifacts/contracts
+COPY fixtures/circuits ./fixtures/circuits
+COPY fixtures/params ./fixtures/params
+
+# Remove app package as its not needed
+RUN sed 's|, "app/packages/react-native-rust-bridge/cpp/rustbridge"||g' Cargo.toml > Cargo.toml.tmp \
+    && mv Cargo.toml.tmp Cargo.toml
+
+RUN if [ -f /gcs_key.json ]; then \
+    echo "Using sccache with GCS"; \
+    RUSTC_WRAPPER=/usr/local/cargo/bin/sccache cargo build --release --bin merge-cli; \
+    else \
+    echo "Skipping sccache (missing required vars)"; \
+    cargo build --release --bin merge-cli; \
+    fi
+
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y openssl ca-certificates libpq-dev postgresql wget tar curl
+
+# Download and install barretenberg
+RUN wget https://storage.googleapis.com/payy-public-fixtures/bb/v3.0.0-manual.20251030/barretenberg-amd64-linux.tar.gz -O barretenberg.tar.gz && \
+    echo "88586691621fdbf6105e064aca1b6e4f1f5345f2e75560d1d385693019480697  barretenberg.tar.gz" | sha256sum -c - && \
+    tar -xzf barretenberg.tar.gz && \
+    mv bb /usr/local/bin/bb && \
+    rm barretenberg.tar.gz
+
+# Enable backports and pull libstdc++ 13.x (exports GLIBCXX_3.4.31)
+# also installs jq, some bb commands require jq
+RUN echo 'deb http://deb.debian.org/debian testing main' \
+    >  /etc/apt/sources.list.d/testing.list         && \
+    echo 'APT::Default-Release "stable";'               \
+    >  /etc/apt/apt.conf.d/99defaultrelease         && \
+    apt-get update                                      && \
+    # pull only the two runtime libs from testing
+    DEBIAN_FRONTEND=noninteractive \
+    apt-get install -y -t testing libc6 libstdc++6 jq
+
+
+RUN mkdir -p /tmp /.bb-crs && \
+    chmod 755 /tmp /.bb-crs
+
+COPY --from=builder /build/scripts/download-fixtures-params.sh /usr/local/bin/download-fixtures-params.sh
+RUN chmod +x /usr/local/bin/download-fixtures-params.sh
+
+COPY --from=builder /build/target/release/merge-cli /usr/local/bin/merge-cli
+
+RUN /usr/local/bin/download-fixtures-params.sh
+
+# Set default environment variables that can be overridden
+ENV DATABASE_URL=postgres://localhost/guild
+ENV NODE_URL=http://localhost:8091/v0
+ENV BURN_EVM_ADDR=0x9A4ebe49A963D3BC5f16639A0ABFF093CA0b040D
+ENV BATCH=10
+
+CMD merge-cli merge-ramps --batch ${BATCH} --burn-evm-address ${BURN_EVM_ADDR}

@@ -3,7 +3,8 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "moduleResolution": "node",
+    "module": "Node16",
+    "moduleResolution": "node16",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true
   },

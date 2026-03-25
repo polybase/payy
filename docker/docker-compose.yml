@@ -1,0 +1,234 @@
+networks:
+  zk-rollup:
+    driver: bridge
+
+volumes:
+  node-db:
+  smirk-data:
+  prover-db:
+  prover-smirk:
+  pgdata:
+  payy-evm-data:
+
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - pgdata:/var/lib/postgresql
+    networks:
+      - zk-rollup
+    ports:
+      - "5432:5432"
+    profiles:
+      - dev
+      - test
+      - ci
+
+  db-migrations:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.db-migrations
+    depends_on:
+      - postgres
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/postgres
+    networks:
+      - zk-rollup
+    restart: "no"
+    profiles:
+      - dev
+      - ci
+
+  eth-node:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.eth-node
+    restart: unless-stopped
+    ports:
+      - "8545:8545"
+    networks:
+      - zk-rollup
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8545"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+      start_period: 5s
+    profiles:
+      - dev
+      - test
+      - ci
+
+  providers:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.providers
+    restart: unless-stopped
+    ports:
+      - "8072:8072"
+    networks:
+      - zk-rollup
+    profiles:
+      - dev
+      - test
+
+  guild:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.guild
+    restart: unless-stopped
+    depends_on:
+      db-migrations:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_started
+    ports:
+      - "8071:8071"
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/postgres
+      - HOST=0.0.0.0
+      - PORT=8071
+      - BASE_EVM_RPC_URL=http://eth-node:8545
+      - ROLLUP_CONTRACT_ADDRESS=${ROLLUP_CONTRACT_ADDRESS:-0xdc64a140aa3e981100a9beca4e685f962f0cf6c9}
+      - USDC_CONTRACT_ADDRESS=${USDC_CONTRACT_ADDRESS:-0x5fbdb2315678afecb367f032d93f642f64180aa3}
+      - ACROSS_WITH_AUTHORIZATION_ADDRESS=${ACROSS_WITH_AUTHORIZATION_ADDRESS:-0xb7f8bc63bbcad18155201308c8f3540b07f84f5e}
+      - NODE_RPC_URL=http://node:8091
+      - SKIP_PROOF=true
+      - LOG_LEVEL=INFO
+      - ALFRED_URL=http://providers:8072/alfred
+      - MANTECA_URL=http://providers:8072/manteca
+      - RAIN_URL=http://providers:8072/rain
+      - SUMSUB_URL=http://providers:8072/sumsub
+    networks:
+      - zk-rollup
+    profiles:
+      - dev
+
+  price-cache:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.price-cache
+    restart: unless-stopped
+    depends_on:
+      db-migrations:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_started
+    ports:
+      - "8073:8073"
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/postgres
+      - HOST=0.0.0.0
+      - PORT=8073
+      - ALCHEMY_API_KEY=${ALCHEMY_API_KEY:-demo}
+      - TOKEN_WHITELIST=${TOKEN_WHITELIST:-ETH}
+      - CURRENCIES=${CURRENCIES:-usd}
+    networks:
+      - zk-rollup
+    profiles:
+      - dev
+
+  node:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.node
+      args:
+        - WAIT_SECONDS=180
+    restart: unless-stopped
+    depends_on:
+      eth-node:
+        condition: service_healthy
+    ports:
+      - "8091:8091"
+      - "26656:26656"
+    volumes:
+      - node-db:/data/db
+      - smirk-data:/data/smirk
+    environment:
+      POLY_ETH_RPC_URL: "http://eth-node:8545"
+    networks:
+      - zk-rollup
+    profiles:
+      - dev
+      - test
+
+  prover:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.node
+      args:
+        - WAIT_SECONDS=180
+    restart: unless-stopped
+    depends_on:
+      eth-node:
+        condition: service_healthy
+    command:
+      [
+        "--mode",
+        "mock-prover",
+        "--db-path",
+        "/polybase/.polybase-prover/db",
+        "--smirk-path",
+        "/polybase/.polybase-prover/smirk",
+        "--rpc-laddr",
+        "0.0.0.0:8092",
+        "--p2p-laddr",
+        "/ip4/0.0.0.0/tcp/5001",
+      ]
+    ports:
+      - "8092:8092"
+      - "5001:5001"
+    volumes:
+      - prover-db:/polybase/.polybase-prover/db
+      - prover-smirk:/polybase/.polybase-prover/smirk
+    environment:
+      POLY_ETH_RPC_URL: "http://eth-node:8545"
+    networks:
+      - zk-rollup
+    profiles:
+      - prover
+
+  payy-evm:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.payy-evm
+    restart: unless-stopped
+    command:
+      [
+        "run",
+        "--mode",
+        "sequencer",
+        "--network",
+        "dev",
+        "--block-time",
+        "300ms",
+        "--datadir",
+        "/data",
+        "--http",
+        "--http.addr",
+        "0.0.0.0",
+        "--http.port",
+        "8545",
+        "--http.corsdomain",
+        "*",
+        "--ws",
+        "--ws.addr",
+        "0.0.0.0",
+        "--ws.port",
+        "8546",
+      ]
+    ports:
+      - "18545:8545"
+      - "18546:8546"
+    volumes:
+      - payy-evm-data:/data
+    environment:
+      - LOG_LEVEL=INFO
+    networks:
+      - zk-rollup
+    profiles:
+      - dev

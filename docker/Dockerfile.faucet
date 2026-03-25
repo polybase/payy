@@ -1,0 +1,37 @@
+FROM rust:1-bookworm AS builder
+ARG RUST_GIT_FETCH_CLI
+ENV HOME=/root
+
+ENV CARGO_NET_GIT_FETCH_WITH_CLI=${RUST_GIT_FETCH_CLI:-false}
+
+RUN rustup component add rustfmt && \
+    apt update && apt install -y libglib2.0-dev libssl-dev libclang-dev libpq-dev pkg-config python3 protobuf-compiler libprotobuf-dev cmake ninja-build
+
+WORKDIR /build
+
+COPY rust-toolchain.toml ./
+COPY .cargo/config.toml .cargo/config.toml
+COPY Cargo.toml ./
+COPY Cargo.lock ./
+COPY pkg ./pkg
+
+RUN rustup show
+
+COPY eth/artifacts/contracts ./eth/artifacts/contracts
+COPY fixtures/circuits ./fixtures/circuits
+COPY fixtures/params ./fixtures/params
+
+RUN sed 's|, "app/packages/react-native-rust-bridge/cpp/rustbridge"||g' Cargo.toml > Cargo.toml.tmp \
+    && mv Cargo.toml.tmp Cargo.toml
+
+RUN cargo build --release --bin faucet
+
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y ca-certificates curl && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /build/target/release/faucet /usr/local/bin/faucet
+
+EXPOSE 8080
+
+ENTRYPOINT ["faucet"]

@@ -1,4 +1,4 @@
-// lint-long-file-override allow-max-lines=400
+// lint-long-file-override allow-max-lines=430
 //! A simple JSON store that persists data to JSON files with atomic operations.
 //!
 //! This crate provides a generic JSON store that:
@@ -6,6 +6,7 @@
 //! - Ensures atomic writes using temporary files
 //! - Loads existing state on initialization
 //! - Creates default state if file doesn't exist
+//! - Recovers with default state by default, or can fail closed on invalid JSON
 //! - Supports async operations
 //!
 //! # Example
@@ -38,10 +39,15 @@
 //! }
 //! ```
 
-use serde::{Deserialize, Serialize};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+use serde::{Deserialize, Serialize};
 use tokio::fs;
+#[cfg(unix)]
+use tokio::io::AsyncWriteExt;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
@@ -54,6 +60,13 @@ pub enum JsonStoreError {
     #[error("JSON serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
 
+    #[error("JSON parse error in {}: {source}", path.display())]
+    Deserialization {
+        path: PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
+
     #[error("File path error: {0}")]
     PathError(String),
 }
@@ -62,6 +75,20 @@ pub enum JsonStoreError {
 pub struct JsonStore<T> {
     data: Arc<RwLock<T>>,
     file_path: PathBuf,
+    file_access: FileAccess,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InvalidJsonBehavior {
+    UseDefault,
+    Error,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FileAccess {
+    #[default]
+    Shared,
+    OwnerOnly,
 }
 
 impl<T> JsonStore<T>
@@ -75,10 +102,41 @@ where
     /// * `filename` - Name of the JSON file
     ///
     /// # Returns
-    /// A new JsonStore instance with loaded or default state
+    /// A new JsonStore instance with loaded state, or default state when the file is missing
+    /// or contains invalid JSON.
     pub async fn new<P: AsRef<Path>>(dir: P, filename: &str) -> Result<Self, JsonStoreError> {
+        Self::new_with_invalid_json_behavior_and_access(
+            dir,
+            filename,
+            InvalidJsonBehavior::UseDefault,
+            FileAccess::Shared,
+        )
+        .await
+    }
+
+    pub async fn new_with_invalid_json_behavior<P: AsRef<Path>>(
+        dir: P,
+        filename: &str,
+        invalid_json_behavior: InvalidJsonBehavior,
+    ) -> Result<Self, JsonStoreError> {
+        Self::new_with_invalid_json_behavior_and_access(
+            dir,
+            filename,
+            invalid_json_behavior,
+            FileAccess::Shared,
+        )
+        .await
+    }
+
+    pub async fn new_with_invalid_json_behavior_and_access<P: AsRef<Path>>(
+        dir: P,
+        filename: &str,
+        invalid_json_behavior: InvalidJsonBehavior,
+        file_access: FileAccess,
+    ) -> Result<Self, JsonStoreError> {
         let dir_path = dir.as_ref();
         let file_path = dir_path.join(filename);
+        let file_exists = file_path.exists();
 
         // Ensure the directory exists
         if !dir_path.exists() {
@@ -86,8 +144,8 @@ where
             fs::create_dir_all(dir_path).await?;
         }
 
-        // Load existing data or create default
-        let data = if file_path.exists() {
+        // Load existing data, or create default state when the file is missing.
+        let data = if file_exists {
             debug!("Loading existing state from: {:?}", file_path);
             let content = fs::read_to_string(&file_path).await?;
             match serde_json::from_str::<T>(&content) {
@@ -95,13 +153,21 @@ where
                     info!("Successfully loaded state from: {:?}", file_path);
                     parsed_data
                 }
-                Err(e) => {
-                    warn!(
-                        "Failed to parse JSON from {:?}, using default: {}",
-                        file_path, e
-                    );
-                    T::default()
-                }
+                Err(source) => match invalid_json_behavior {
+                    InvalidJsonBehavior::UseDefault => {
+                        warn!(
+                            "Failed to parse JSON from {:?}, using default state: {}",
+                            file_path, source
+                        );
+                        T::default()
+                    }
+                    InvalidJsonBehavior::Error => {
+                        return Err(JsonStoreError::Deserialization {
+                            path: file_path.clone(),
+                            source,
+                        });
+                    }
+                },
             }
         } else {
             info!(
@@ -114,11 +180,13 @@ where
         let store = Self {
             data: Arc::new(RwLock::new(data)),
             file_path,
+            file_access,
         };
 
-        // Write initial state to file if it didn't exist
-        if !store.file_path.exists() {
+        if !file_exists {
             store.persist().await?;
+        } else {
+            ensure_file_access(&store.file_path, store.file_access).await?;
         }
 
         Ok(store)
@@ -179,10 +247,11 @@ where
         let temp_path = self.file_path.with_extension("tmp");
 
         // Write to temporary file
-        fs::write(&temp_path, &json_content).await?;
+        write_json_file(&temp_path, &json_content, self.file_access).await?;
 
         // Atomically move the temporary file to the target location
         fs::rename(&temp_path, &self.file_path).await?;
+        ensure_file_access(&self.file_path, self.file_access).await?;
 
         debug!("Successfully persisted state to: {:?}", self.file_path);
         Ok(())
@@ -202,157 +271,51 @@ where
         Self {
             data: Arc::clone(&self.data),
             file_path: self.file_path.clone(),
+            file_access: self.file_access,
         }
     }
+}
+
+async fn write_json_file(
+    path: &Path,
+    content: &str,
+    file_access: FileAccess,
+) -> Result<(), std::io::Error> {
+    if matches!(file_access, FileAccess::OwnerOnly) {
+        return write_owner_only_json_file(path, content).await;
+    }
+
+    fs::write(path, content).await
+}
+
+#[cfg(unix)]
+async fn write_owner_only_json_file(path: &Path, content: &str) -> Result<(), std::io::Error> {
+    let mut options = fs::OpenOptions::new();
+    options.create(true).truncate(true).write(true).mode(0o600);
+
+    let mut file = options.open(path).await?;
+    file.write_all(content.as_bytes()).await?;
+    file.flush().await?;
+    drop(file);
+    ensure_file_access(path, FileAccess::OwnerOnly).await
+}
+
+#[cfg(not(unix))]
+async fn write_owner_only_json_file(path: &Path, content: &str) -> Result<(), std::io::Error> {
+    fs::write(path, content).await
+}
+
+async fn ensure_file_access(path: &Path, file_access: FileAccess) -> Result<(), std::io::Error> {
+    #[cfg(unix)]
+    {
+        if matches!(file_access, FileAccess::OwnerOnly) {
+            fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).await?;
+        }
+    }
+
+    let _ = (path, file_access);
+    Ok(())
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde::{Deserialize, Serialize};
-    use tempdir::TempDir;
-
-    #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
-    struct TestState {
-        counter: u64,
-        name: String,
-        active: bool,
-    }
-
-    #[tokio::test]
-    async fn test_new_store_creates_default_state() {
-        let temp_dir = TempDir::new("json_kv_store_test").unwrap();
-        let store = JsonStore::<TestState>::new(temp_dir.path(), "test.json")
-            .await
-            .unwrap();
-
-        let state = store.get().await;
-        assert_eq!(state, TestState::default());
-    }
-
-    #[tokio::test]
-    async fn test_update_and_persist() {
-        let temp_dir = TempDir::new("json_kv_store_test").unwrap();
-        let store = JsonStore::<TestState>::new(temp_dir.path(), "test.json")
-            .await
-            .unwrap();
-
-        // Update the state
-        store
-            .update(|state| {
-                state.counter = 42;
-                state.name = "test".to_string();
-                state.active = true;
-            })
-            .await
-            .unwrap();
-
-        // Verify the state was updated
-        let state = store.get().await;
-        assert_eq!(state.counter, 42);
-        assert_eq!(state.name, "test");
-        assert!(state.active);
-    }
-
-    #[tokio::test]
-    async fn test_set_and_persist() {
-        let temp_dir = TempDir::new("json_kv_store_test").unwrap();
-        let store = JsonStore::<TestState>::new(temp_dir.path(), "test.json")
-            .await
-            .unwrap();
-
-        let new_state = TestState {
-            counter: 100,
-            name: "new_test".to_string(),
-            active: false,
-        };
-
-        store.set(new_state.clone()).await.unwrap();
-
-        let retrieved_state = store.get().await;
-        assert_eq!(retrieved_state, new_state);
-    }
-
-    #[tokio::test]
-    async fn test_persistence_across_instances() {
-        let temp_dir = TempDir::new("json_kv_store_test").unwrap();
-        let file_path = temp_dir.path().join("persistent.json");
-
-        // Create first instance and update state
-        {
-            let store = JsonStore::<TestState>::new(temp_dir.path(), "persistent.json")
-                .await
-                .unwrap();
-
-            store
-                .update(|state| {
-                    state.counter = 999;
-                    state.name = "persistent".to_string();
-                })
-                .await
-                .unwrap();
-        }
-
-        // Create second instance and verify state was loaded
-        {
-            let store = JsonStore::<TestState>::new(temp_dir.path(), "persistent.json")
-                .await
-                .unwrap();
-
-            let state = store.get().await;
-            assert_eq!(state.counter, 999);
-            assert_eq!(state.name, "persistent");
-        }
-
-        // Verify the file actually exists
-        assert!(file_path.exists());
-    }
-
-    #[tokio::test]
-    async fn test_atomic_writes() {
-        let temp_dir = TempDir::new("json_kv_store_test").unwrap();
-        let store = JsonStore::<TestState>::new(temp_dir.path(), "atomic.json")
-            .await
-            .unwrap();
-
-        // Perform multiple rapid updates
-        for i in 0..10 {
-            store
-                .update(|state| {
-                    state.counter = i;
-                })
-                .await
-                .unwrap();
-        }
-
-        // Verify final state
-        let state = store.get().await;
-        assert_eq!(state.counter, 9);
-
-        // Verify no temporary files are left behind
-        let temp_file = store.file_path.with_extension("tmp");
-        assert!(!temp_file.exists());
-    }
-
-    #[tokio::test]
-    async fn test_clone_shares_state() {
-        let temp_dir = TempDir::new("json_kv_store_test").unwrap();
-        let store1 = JsonStore::<TestState>::new(temp_dir.path(), "shared.json")
-            .await
-            .unwrap();
-
-        let store2 = store1.clone();
-
-        // Update through first store
-        store1
-            .update(|state| {
-                state.counter = 123;
-            })
-            .await
-            .unwrap();
-
-        // Verify change is visible through second store
-        let state = store2.get().await;
-        assert_eq!(state.counter, 123);
-    }
-}
+mod tests;

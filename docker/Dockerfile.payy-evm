@@ -1,0 +1,104 @@
+FROM rust:1-bookworm AS builder
+
+ARG SCCACHE_GCS_BUCKET
+ARG SCCACHE_GCS_KEY_PREFIX
+
+RUN rustup component add rustfmt && \
+    apt update && apt install -y libglib2.0-dev libssl-dev libclang-dev protobuf-compiler libprotobuf-dev cmake ninja-build pkg-config curl
+
+# Conditional sccache setup: Only if bucket and key are provided
+RUN --mount=type=secret,id=gcs_sa_key_base64,required=false \
+    if [ -n "$SCCACHE_GCS_BUCKET" ] && [ -f /run/secrets/gcs_sa_key_base64 ]; then \
+    cat /run/secrets/gcs_sa_key_base64 | base64 -d > /gcs_key.json && \
+    wget https://github.com/mozilla/sccache/releases/download/v0.10.0/sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz && \
+    tar -xzf sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz && \
+    mv sccache-v0.10.0-x86_64-unknown-linux-musl/sccache /usr/local/cargo/bin/sccache && \
+    rm -rf sccache-v0.10.0-x86_64-unknown-linux-musl sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz && \
+    chmod +x /usr/local/cargo/bin/sccache; \
+    fi
+ENV SCCACHE_GCS_KEY_PATH=/gcs_key.json
+ENV SCCACHE_GCS_BUCKET=$SCCACHE_GCS_BUCKET
+ENV SCCACHE_GCS_KEY_PREFIX=$SCCACHE_GCS_KEY_PREFIX
+ENV SCCACHE_GCS_RW_MODE=READ_WRITE
+
+WORKDIR /build
+
+COPY rust-toolchain.toml ./
+COPY .cargo/config.toml .cargo/config.toml
+COPY Cargo.toml ./
+COPY Cargo.lock ./
+COPY scripts ./scripts
+COPY pkg ./pkg
+
+# Ensure the toolchain specified in rust-toolchain.toml is installed
+RUN rustup show
+
+# Add fixtures
+COPY eth/artifacts/contracts ./eth/artifacts/contracts
+COPY fixtures/circuits ./fixtures/circuits
+COPY fixtures/params ./fixtures/params
+
+# Remove app package as its not needed
+RUN sed 's|, "app/packages/react-native-rust-bridge/cpp/rustbridge"||g' Cargo.toml > Cargo.toml.tmp \
+    && mv Cargo.toml.tmp Cargo.toml
+
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    if [ -f /gcs_key.json ]; then \
+    echo "Using sccache with GCS"; \
+    RUSTC_WRAPPER=/usr/local/cargo/bin/sccache cargo build --release --bin payy-evm; \
+    sccache --show-stats && \
+    sccache --stop-server; \
+    else \
+    echo "Skipping sccache (missing required vars)"; \
+    cargo build --release --bin payy-evm; \
+    fi
+
+FROM debian:bookworm-slim AS runtime
+
+ENV ROOT_DIR=/data
+ENV HOME=/data
+WORKDIR $ROOT_DIR
+
+RUN groupadd -g 1001 --system payy && \
+    useradd -u 1001 --system --gid payy --home "$ROOT_DIR" payy && \
+    mkdir -p "$ROOT_DIR" && \
+    chown -R payy:payy "$ROOT_DIR"
+
+RUN apt-get update && apt-get install -y curl libpq-dev wget tar ca-certificates
+
+# Download and install barretenberg
+RUN wget https://storage.googleapis.com/payy-public-fixtures/bb/v3.0.0-manual.20251030/barretenberg-amd64-linux.tar.gz -O barretenberg.tar.gz && \
+    echo "88586691621fdbf6105e064aca1b6e4f1f5345f2e75560d1d385693019480697  barretenberg.tar.gz" | sha256sum -c - && \
+    tar -xzf barretenberg.tar.gz && \
+    mv bb /usr/local/bin/bb && \
+    rm barretenberg.tar.gz
+
+# Enable backports and pull libstdc++ 13.x (exports GLIBCXX_3.4.31)
+# also installs jq, some bb commands require jq
+RUN echo 'deb http://deb.debian.org/debian testing main' \
+    >  /etc/apt/sources.list.d/testing.list         && \
+    echo 'APT::Default-Release "stable";'               \
+    >  /etc/apt/apt.conf.d/99defaultrelease         && \
+    apt-get update                                      && \
+    # pull only the two runtime libs from testing
+    DEBIAN_FRONTEND=noninteractive \
+    apt-get install -y -t testing libc6 libstdc++6 jq
+
+RUN mkdir -p /tmp && \
+    chmod 1777 /tmp
+
+COPY --from=builder /build/scripts/download-fixtures-params.sh /usr/local/bin/download-fixtures-params.sh
+RUN chmod +x /usr/local/bin/download-fixtures-params.sh
+
+COPY --from=builder /build/target/release/payy-evm /usr/bin/payy-evm
+
+USER payy
+
+RUN /usr/local/bin/download-fixtures-params.sh
+
+EXPOSE 8545 8546 30303
+
+ENTRYPOINT ["/usr/bin/payy-evm"]
+CMD ["run"]
+
+VOLUME ["/data"]

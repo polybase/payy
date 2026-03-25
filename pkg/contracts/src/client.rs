@@ -11,9 +11,12 @@ use web3::{
     Web3,
     contract::{Contract, Options, tokens::Tokenize},
     ethabi,
-    signing::SecretKey,
+    signing::{SecretKey, keccak256},
     transports::Http,
-    types::{Transaction, TransactionReceipt, U256},
+    types::{
+        Block, BlockId, BlockNumber, Bytes, CallRequest, Transaction, TransactionId,
+        TransactionReceipt, U256,
+    },
 };
 
 /// Configuration for different types of transaction confirmation requirements.
@@ -36,6 +39,18 @@ pub struct Client {
 }
 
 impl Client {
+    pub fn try_new(rpc: &str, minimum_gas_price_gwei: Option<u64>) -> Result<Client> {
+        let client = Web3::new(Http::new(rpc)?);
+        let minimum_gas_price = minimum_gas_price_gwei.map(|gwei| U256::from(gwei) * 1_000_000_000);
+
+        Ok(Client {
+            client,
+            minimum_gas_price,
+            use_latest_for_nonce: false,
+            rpc_url: rpc.to_string(),
+        })
+    }
+
     pub fn new(rpc: &str, minimum_gas_price_gwei: Option<u64>) -> Client {
         let client = Web3::new(Http::new(rpc).unwrap());
         let minimum_gas_price = minimum_gas_price_gwei.map(|gwei| U256::from(gwei) * 1_000_000_000);
@@ -91,7 +106,7 @@ impl Client {
     }
 
     pub async fn get_latest_block_height(&self) -> Result<U64> {
-        let block_number = self.client.eth().block_number().await?;
+        let block_number = self.block_number().await?;
         Ok(block_number)
     }
 
@@ -138,6 +153,67 @@ impl Client {
             move || self.client.eth().logs(filter)
         })
         .await
+    }
+
+    pub async fn eth_call(
+        &self,
+        request: CallRequest,
+        block: Option<BlockId>,
+    ) -> Result<Bytes, web3::Error> {
+        retry_on_network_failure(move || self.client.eth().call(request.clone(), block)).await
+    }
+
+    pub async fn estimate_gas(
+        &self,
+        request: CallRequest,
+        block: Option<BlockNumber>,
+    ) -> Result<U256, web3::Error> {
+        retry_on_network_failure(move || self.client.eth().estimate_gas(request.clone(), block))
+            .await
+    }
+
+    pub async fn send_raw_transaction(&self, transaction: Bytes) -> Result<H256, web3::Error> {
+        let local_tx_hash = H256::from_slice(&keccak256(&transaction.0));
+
+        match retry_on_network_failure(move || {
+            self.client.eth().send_raw_transaction(transaction.clone())
+        })
+        .await
+        {
+            Ok(tx_hash) => Ok(tx_hash),
+            Err(err)
+                if should_recover_failed_submission(
+                    &err,
+                    self.submitted_transaction_exists(local_tx_hash).await,
+                ) =>
+            {
+                Ok(local_tx_hash)
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    async fn submitted_transaction_exists(&self, tx_hash: H256) -> bool {
+        matches!(self.transaction(tx_hash).await, Ok(Some(_)))
+            || matches!(self.transaction_receipt(tx_hash).await, Ok(Some(_)))
+    }
+
+    pub async fn transaction(&self, tx_hash: H256) -> Result<Option<Transaction>, web3::Error> {
+        retry_on_network_failure(move || {
+            self.client.eth().transaction(TransactionId::Hash(tx_hash))
+        })
+        .await
+    }
+
+    pub async fn transaction_receipt(
+        &self,
+        tx_hash: H256,
+    ) -> Result<Option<TransactionReceipt>, web3::Error> {
+        retry_on_network_failure(move || self.client.eth().transaction_receipt(tx_hash)).await
+    }
+
+    pub async fn block(&self, block_id: BlockId) -> Result<Option<Block<H256>>, web3::Error> {
+        retry_on_network_failure(move || self.client.eth().block(block_id)).await
     }
 
     #[tracing::instrument(err, ret, skip(self))]
@@ -297,19 +373,13 @@ impl Client {
         let start = std::time::Instant::now();
 
         loop {
-            let receipt =
-                retry_on_network_failure(|| self.client.eth().transaction_receipt(tx_hash)).await?;
+            let receipt = self.transaction_receipt(tx_hash).await?;
 
             if let Some(receipt) = receipt {
                 return Ok(receipt);
             }
 
-            let transaction = retry_on_network_failure(|| {
-                self.client
-                    .eth()
-                    .transaction(web3::types::TransactionId::Hash(tx_hash))
-            })
-            .await?;
+            let transaction = self.transaction(tx_hash).await?;
 
             if transaction.is_none() {
                 return Err(Error::UnknownTransaction(tx_hash));
@@ -336,12 +406,7 @@ impl Client {
         loop {
             interval.tick().await;
 
-            let txn = retry_on_network_failure(move || {
-                self.client
-                    .eth()
-                    .transaction(web3::types::TransactionId::Hash(txn_hash))
-            })
-            .await?;
+            let txn = self.transaction(txn_hash).await?;
 
             match txn {
                 None => {
@@ -387,8 +452,7 @@ impl Client {
         loop {
             interval.tick().await;
 
-            let latest_block =
-                retry_on_network_failure(|| self.client.eth().block_number()).await?;
+            let latest_block = self.block_number().await?;
 
             if latest_block >= required_block_number {
                 tracing::debug!(
@@ -427,12 +491,9 @@ impl Client {
         loop {
             interval.tick().await;
 
-            let finalized_block = retry_on_network_failure(|| {
-                self.client.eth().block(web3::types::BlockId::Number(
-                    web3::types::BlockNumber::Finalized,
-                ))
-            })
-            .await?;
+            let finalized_block = self
+                .block(BlockId::Number(web3::types::BlockNumber::Finalized))
+                .await?;
 
             if let Some(finalized_block) = finalized_block
                 && let Some(finalized_number) = finalized_block.number
@@ -473,6 +534,32 @@ impl IsNetworkFailure for web3::contract::Error {
             web3::contract::Error::Api(web3::error::Error::Transport(_))
         )
     }
+}
+
+const DUPLICATE_SUBMISSION_RPC_PHRASES: &[&str] = &[
+    "already known",
+    "same hash was already imported",
+    "transaction already imported",
+];
+
+fn is_duplicate_submission_rpc_error(error: &web3::Error) -> bool {
+    let web3::Error::Rpc(error) = error else {
+        return false;
+    };
+
+    is_duplicate_submission_rpc_message(&error.message)
+}
+
+fn is_duplicate_submission_rpc_message(message: &str) -> bool {
+    let message = message.to_ascii_lowercase();
+
+    DUPLICATE_SUBMISSION_RPC_PHRASES
+        .iter()
+        .any(|phrase| message.contains(phrase))
+}
+
+fn should_recover_failed_submission(error: &web3::Error, transaction_found: bool) -> bool {
+    transaction_found || is_duplicate_submission_rpc_error(error)
 }
 
 async fn retry_internal<T, E: IsNetworkFailure, Fut: Future<Output = std::result::Result<T, E>>>(
@@ -530,141 +617,4 @@ pub(crate) async fn retry_on_network_failure_instant<
 }
 
 #[cfg(test)]
-mod tests {
-    use std::sync::{Arc, atomic::AtomicU16};
-
-    use web3::error::Error;
-    use web3::error::TransportError;
-
-    use super::ConfirmationType;
-
-    #[tokio::test]
-    async fn test_retry_on_network_failure() {
-        let gen_result = |succeed_at_call_count| async move {
-            let call_count = Arc::new(AtomicU16::new(0));
-
-            super::retry_on_network_failure(move || {
-                let call_count = Arc::clone(&call_count);
-                async move {
-                    let call_count =
-                        call_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-                    if call_count == succeed_at_call_count {
-                        Ok(())
-                    } else {
-                        Err(Error::Transport(TransportError::Code(call_count)))
-                    }
-                }
-            })
-            .await
-        };
-
-        {
-            // Never succeed
-            let start = std::time::Instant::now();
-            let result = gen_result(u16::MAX).await;
-            let elapsed = start.elapsed();
-
-            assert!(
-                matches!(&result, Err(Error::Transport(TransportError::Code(4)))),
-                "{result:?}"
-            );
-            assert!(elapsed >= std::time::Duration::from_secs(16), "{elapsed:?}");
-        }
-
-        {
-            // Succeed first try
-            let start = std::time::Instant::now();
-            let result = gen_result(1).await;
-            let elapsed = start.elapsed();
-
-            assert!(result.is_ok(), "{result:?}");
-            assert!(elapsed < std::time::Duration::from_millis(1), "{elapsed:?}");
-        }
-    }
-
-    #[tokio::test]
-    async fn test_retry_on_network_failure_instant() {
-        let gen_result = |succeed_at_call_count| async move {
-            let call_count = Arc::new(AtomicU16::new(0));
-
-            super::retry_on_network_failure_instant(move || {
-                let call_count = Arc::clone(&call_count);
-                async move {
-                    let call_count =
-                        call_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-                    if call_count == succeed_at_call_count {
-                        Ok(())
-                    } else {
-                        Err(Error::Transport(TransportError::Code(call_count)))
-                    }
-                }
-            })
-            .await
-        };
-
-        {
-            // Never succeed, but should fail fast
-            let start = std::time::Instant::now();
-            let result = gen_result(u16::MAX).await;
-            let elapsed = start.elapsed();
-
-            assert!(
-                matches!(&result, Err(Error::Transport(TransportError::Code(4)))),
-                "{result:?}"
-            );
-            // 4 attempts * 0s sleep ~= 0s. Allow some buffer for scheduling.
-            assert!(
-                elapsed < std::time::Duration::from_millis(50),
-                "{elapsed:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn test_confirmation_type_eq() {
-        assert_eq!(ConfirmationType::Latest, ConfirmationType::Latest);
-        assert_eq!(
-            ConfirmationType::LatestPlus(5),
-            ConfirmationType::LatestPlus(5)
-        );
-        assert_eq!(ConfirmationType::Finalised, ConfirmationType::Finalised);
-
-        assert_ne!(ConfirmationType::Latest, ConfirmationType::LatestPlus(0));
-        assert_ne!(
-            ConfirmationType::LatestPlus(5),
-            ConfirmationType::LatestPlus(10)
-        );
-        assert_ne!(ConfirmationType::Latest, ConfirmationType::Finalised);
-    }
-
-    #[test]
-    fn test_confirmation_type_clone() {
-        let latest = ConfirmationType::Latest;
-        let latest_cloned = latest.clone();
-        assert_eq!(latest, latest_cloned);
-
-        let latest_plus = ConfirmationType::LatestPlus(42);
-        let latest_plus_cloned = latest_plus.clone();
-        assert_eq!(latest_plus, latest_plus_cloned);
-
-        let finalised = ConfirmationType::Finalised;
-        let finalised_cloned = finalised.clone();
-        assert_eq!(finalised, finalised_cloned);
-    }
-
-    #[test]
-    fn test_confirmation_type_debug() {
-        let latest = ConfirmationType::Latest;
-        let latest_debug = format!("{latest:?}");
-        assert!(latest_debug.contains("Latest"));
-
-        let latest_plus = ConfirmationType::LatestPlus(20);
-        let latest_plus_debug = format!("{latest_plus:?}");
-        assert!(latest_plus_debug.contains("LatestPlus"));
-        assert!(latest_plus_debug.contains("20"));
-
-        let finalised = ConfirmationType::Finalised;
-        let finalised_debug = format!("{finalised:?}");
-        assert!(finalised_debug.contains("Finalised"));
-    }
-}
+mod tests;

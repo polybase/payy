@@ -1,0 +1,126 @@
+# Build aggregator CLI binary
+FROM rust:1-bookworm AS workspace
+
+ARG SCCACHE_GCS_BUCKET
+ARG SCCACHE_GCS_KEY_PREFIX
+
+RUN rustup component add rustfmt && \
+    apt update && apt install -y libglib2.0-dev libssl-dev libclang-dev libpq-dev pkg-config python3 protobuf-compiler libprotobuf-dev cmake ninja-build
+
+# Ensure the toolchain specified in rust-toolchain.toml is installed
+RUN rustup show
+
+# Force static link preference for pkg-config targets
+ENV SYSROOT=/dummy
+
+# Optional sccache setup backed by GCS, matching the other barretenberg-enabled images
+RUN --mount=type=secret,id=gcs_sa_key_base64,required=false \
+    if [ -n "$SCCACHE_GCS_BUCKET" ] && [ -f /run/secrets/gcs_sa_key_base64 ]; then \
+    cat /run/secrets/gcs_sa_key_base64 | base64 -d > /gcs_key.json && \
+    wget https://github.com/mozilla/sccache/releases/download/v0.10.0/sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz && \
+    tar -xzf sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz && \
+    mv sccache-v0.10.0-x86_64-unknown-linux-musl/sccache /usr/local/cargo/bin/sccache && \
+    rm -rf sccache-v0.10.0-x86_64-unknown-linux-musl sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz && \
+    chmod +x /usr/local/cargo/bin/sccache; \
+    fi
+ENV SCCACHE_GCS_KEY_PATH=/gcs_key.json
+ENV SCCACHE_GCS_BUCKET=$SCCACHE_GCS_BUCKET
+ENV SCCACHE_GCS_KEY_PREFIX=$SCCACHE_GCS_KEY_PREFIX
+ENV SCCACHE_GCS_RW_MODE=READ_WRITE
+
+WORKDIR /build
+
+FROM workspace AS builder
+
+ARG RELEASE=1
+ENV RELEASE=$RELEASE
+
+COPY rust-toolchain.toml ./
+COPY .cargo/config.toml .cargo/config.toml
+COPY Cargo.lock ./
+COPY Cargo.toml ./
+COPY scripts ./scripts
+COPY pkg ./pkg
+
+# Remove the RN bridge package which is unused for CLI builds
+RUN sed 's|, "app/packages/react-native-rust-bridge/cpp/rustbridge"||g' Cargo.toml > Cargo.toml.tmp \
+    && mv Cargo.toml.tmp Cargo.toml
+
+# Add fixtures and artifacts required by workspace members
+COPY eth/artifacts/contracts ./eth/artifacts/contracts
+COPY fixtures/circuits ./fixtures/circuits
+COPY fixtures/params ./fixtures/params
+
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    build_flags=$([ "$RELEASE" = "1" ] && echo "--release"); \
+    if [ -f /gcs_key.json ]; then \
+    echo "Using sccache with GCS"; \
+    if RUSTC_WRAPPER=/usr/local/cargo/bin/sccache cargo build -p aggregator-cli --bin aggregator-cli ${build_flags}; then \
+    sccache --show-stats && \
+    sccache --stop-server; \
+    else \
+    status=$?; \
+    echo "sccache-backed build failed (exit ${status}); retrying without sccache"; \
+    sccache --stop-server || true; \
+    cargo build -p aggregator-cli --bin aggregator-cli ${build_flags}; \
+    fi; \
+    else \
+    echo "Skipping sccache (missing required vars)"; \
+    cargo build -p aggregator-cli --bin aggregator-cli ${build_flags}; \
+    fi
+
+RUN mkdir -p /build/bin && \
+    cp /build/target/$([ "$RELEASE" = "1" ] && echo "release" || echo "debug")/aggregator-cli /build/bin/aggregator-cli
+
+# Runtime image with barretenberg CLI installed
+FROM debian:bookworm-slim as runtime
+
+ENV ROOT_DIR /polybase
+WORKDIR $ROOT_DIR
+
+USER root
+
+RUN groupadd -g 1001 --system spaceman && \
+    useradd -u 1001 --system --gid spaceman --home "$ROOT_DIR" spaceman && \
+    chown -R spaceman:spaceman "$ROOT_DIR"
+
+RUN apt update && apt install -y curl nano libpq-dev postgresql wget tar ca-certificates
+
+# Download and install barretenberg CLI so the aggregator can spawn proofs
+RUN wget https://storage.googleapis.com/payy-public-fixtures/bb/v3.0.0-manual.20251030/barretenberg-amd64-linux.tar.gz -O barretenberg.tar.gz && \
+    echo "88586691621fdbf6105e064aca1b6e4f1f5345f2e75560d1d385693019480697  barretenberg.tar.gz" | sha256sum -c - && \
+    tar -xzf barretenberg.tar.gz && \
+    mv bb /usr/local/bin/bb && \
+    rm barretenberg.tar.gz
+
+# Fetch modern libc/libstdc++ plus jq which bb expects
+RUN echo 'deb http://deb.debian.org/debian testing main' \
+    >  /etc/apt/sources.list.d/testing.list         && \
+    echo 'APT::Default-Release "stable";'               \
+    >  /etc/apt/apt.conf.d/99defaultrelease         && \
+    apt-get update                                      && \
+    DEBIAN_FRONTEND=noninteractive \
+    apt-get install -y -t testing libc6 libstdc++6 jq
+
+# Create directories required by bb and make them writable
+RUN mkdir -p /tmp /.bb-crs && \
+    chown spaceman:spaceman /tmp /.bb-crs && \
+    chmod 755 /tmp /.bb-crs
+
+ARG WAIT_SECONDS=0
+ENV WAIT_SECONDS=$WAIT_SECONDS
+
+RUN echo '#!/bin/bash\n\
+    if [ "$WAIT_SECONDS" -gt 0 ]; then\n\
+    echo "Waiting $WAIT_SECONDS seconds before starting..."\n\
+    sleep $WAIT_SECONDS\n\
+    fi\n\
+    exec "$@"' > /entrypoint-wrapper.sh && chmod +x /entrypoint-wrapper.sh
+
+USER spaceman
+
+COPY --from=builder /build/bin/aggregator-cli /usr/bin/aggregator-cli
+
+STOPSIGNAL SIGTERM
+
+ENTRYPOINT ["/entrypoint-wrapper.sh", "/usr/bin/aggregator-cli"]

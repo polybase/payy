@@ -8,6 +8,8 @@ The bridge verifies privacy proofs through the [Privacy Proof Verify](precompile
 All calls to the PrivacyBridge are gas zero rated to enable [zero fee private payments](../stablecoins/zero-fee-payments.md).
 {% endhint %}
 
+If you need to construct PrivacyBridge ZK proofs manually outside the Payy SDK, see the [Manual proof construction](privacy-layer/zk-circuits.md#manual-proof-construction) section in [ZK Circuits](privacy-layer/zk-circuits.md) for the required `@aztec/bb.js` version and circuit source links.
+
 ```solidity
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;

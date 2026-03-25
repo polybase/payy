@@ -1,0 +1,39 @@
+FROM rust:1-bookworm AS builder
+ARG RUST_GIT_FETCH_CLI
+ENV HOME=/root
+
+ENV CARGO_NET_GIT_FETCH_WITH_CLI=${RUST_GIT_FETCH_CLI:-false}
+
+RUN rustup component add rustfmt && \
+    apt update && apt install -y libglib2.0-dev libssl-dev libclang-dev python3 protobuf-compiler libprotobuf-dev cmake ninja-build
+
+WORKDIR /build
+
+COPY rust-toolchain.toml ./
+COPY .cargo/config.toml .cargo/config.toml
+COPY Cargo.toml ./
+COPY Cargo.lock ./
+COPY pkg ./pkg
+
+# Ensure the toolchain specified in rust-toolchain.toml is installed
+RUN rustup show
+
+# Add fixtures
+COPY eth/artifacts/contracts ./eth/artifacts/contracts
+COPY fixtures/circuits ./fixtures/circuits
+COPY fixtures/params ./fixtures/params
+
+# Remove app package as its not needed
+RUN sed 's|, "app/packages/react-native-rust-bridge/cpp/rustbridge"||g' Cargo.toml > Cargo.toml.tmp \
+    && mv Cargo.toml.tmp Cargo.toml
+
+RUN cargo build --bin providers
+
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y openssl ca-certificates libpq-dev postgresql wget tar curl
+
+
+COPY --from=builder /build/target/debug/providers /usr/local/bin/providers
+
+CMD ["providers", "server"]

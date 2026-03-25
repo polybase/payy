@@ -1,0 +1,37 @@
+FROM rust:1-bookworm
+ARG SCCACHE_GCS_BUCKET
+ARG SCCACHE_GCS_KEY_PREFIX
+ENV HOME=${HOME:-/root}
+
+RUN apt update && apt install -y postgresql
+
+# Conditional sccache setup: Only if bucket and key are provided
+RUN --mount=type=secret,id=gcs_sa_key_base64,required=false \
+    if [ -n "$SCCACHE_GCS_BUCKET" ] && [ -f /run/secrets/gcs_sa_key_base64 ]; then \
+    cat /run/secrets/gcs_sa_key_base64 | base64 -d > /gcs_key.json && \
+    wget https://github.com/mozilla/sccache/releases/download/v0.10.0/sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz && \
+    tar -xzf sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz && \
+    mv sccache-v0.10.0-x86_64-unknown-linux-musl/sccache /usr/local/cargo/bin/sccache && \
+    rm -rf sccache-v0.10.0-x86_64-unknown-linux-musl sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz && \
+    chmod +x /usr/local/cargo/bin/sccache; \
+    fi
+ENV SCCACHE_GCS_KEY_PATH=/gcs_key.json
+ENV SCCACHE_GCS_BUCKET=$SCCACHE_GCS_BUCKET
+ENV SCCACHE_GCS_KEY_PREFIX=$SCCACHE_GCS_KEY_PREFIX
+ENV SCCACHE_GCS_RW_MODE=READ_WRITE
+
+RUN if [ -f /gcs_key.json ]; then \
+    echo "Using sccache with GCS"; \
+    RUSTC_WRAPPER=/usr/local/cargo/bin/sccache cargo install diesel_cli --no-default-features --features postgres; \
+    else \
+    echo "Skipping sccache (missing required vars)"; \
+    cargo install diesel_cli --no-default-features --features postgres; \
+    fi
+
+COPY pkg/database/diesel.toml ./pkg/database/diesel.toml
+COPY pkg/database/migrations ./pkg/database/migrations
+
+WORKDIR /pkg/database
+
+# Wait for postgres to be ready and run migrations
+CMD ["sh", "-c", "diesel migration run"]
