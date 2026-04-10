@@ -1,7 +1,6 @@
 // lint-long-file-override allow-max-lines=300
 use std::env;
 use std::fs;
-use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 
@@ -96,13 +95,6 @@ pub fn run_setup(args: SetupArgs) -> Result<()> {
     installed_to_cargo_bin |= pg_result.installed_diesel;
 
     fixtures::ensure_params(&repo_root)?;
-
-    let claude_md = repo_root.join("CLAUDE.md");
-    if fs::symlink_metadata(&claude_md).is_err() {
-        symlink("GENERATED_AI_GUIDANCE.md", &claude_md)
-            .with_context(|| "create CLAUDE.md symlink".to_string())?;
-        eprintln!("Created CLAUDE.md -> GENERATED_AI_GUIDANCE.md");
-    }
 
     if args.skip_eth {
         eprintln!("Skipping eth dependency installation (requested)");

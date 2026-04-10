@@ -13,4 +13,6 @@ This package defines the interface contracts and shared data types used by the G
 - Request/response types
 - Error types
 - Bungee quote errors distinguish low input-value vs low output-value quotes for client handling
+- Yield/invest request and response types for Payy swap creation, funding, price reads, and
+  aggregate position queries
 - Utility functions

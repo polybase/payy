@@ -1,4 +1,6 @@
 # Build binary
+ARG DEBIAN_TESTING_SNAPSHOT=20260404T140000Z
+
 FROM rust:1-bookworm AS workspace
 
 ARG SCCACHE_GCS_BUCKET
@@ -37,6 +39,8 @@ WORKDIR /build
 
 FROM workspace AS tester
 
+ARG DEBIAN_TESTING_SNAPSHOT
+
 SHELL ["/bin/bash", "--login", "-c"]
 
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
@@ -53,15 +57,14 @@ RUN wget https://storage.googleapis.com/payy-public-fixtures/bb/v3.0.0-manual.20
     mv bb /usr/local/bin/bb && \
     rm barretenberg.tar.gz
 
-# bb requires a recent glibcxx version
-# Enable backports and pull libstdc++ 13.x (exports GLIBCXX_3.4.31)
-# also installs jq, some bb commands require jq
-RUN echo 'deb http://deb.debian.org/debian testing main' \
-    >  /etc/apt/sources.list.d/testing.list         && \
-    echo 'APT::Default-Release "stable";'               \
-    >  /etc/apt/apt.conf.d/99defaultrelease         && \
-    apt-get update                                      && \
-    # pull only the two runtime libs from testing
+# bb requires a recent glibcxx version.
+# Freeze Debian testing to a known-good snapshot so upstream testing changes
+# do not break image builds.
+RUN echo "deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/${DEBIAN_TESTING_SNAPSHOT} testing main" \
+    > /etc/apt/sources.list.d/testing.list && \
+    echo 'APT::Default-Release "stable";' \
+    > /etc/apt/apt.conf.d/99defaultrelease && \
+    apt-get update && \
     DEBIAN_FRONTEND=noninteractive \
     apt-get install -y -t testing libc6 libstdc++6 jq
 
@@ -140,6 +143,8 @@ RUN cp /build/target/$([ "$RELEASE" = "1" ] && echo "release" || echo "debug")/b
 # Runtime stage dedicated to barretenberg-api-server
 FROM debian:bookworm-slim as runtime
 
+ARG DEBIAN_TESTING_SNAPSHOT
+
 ENV ROOT_DIR /polybase
 WORKDIR $ROOT_DIR
 
@@ -158,14 +163,12 @@ RUN wget https://storage.googleapis.com/payy-public-fixtures/bb/v3.0.0-manual.20
     mv bb /usr/local/bin/bb && \
     rm barretenberg.tar.gz
 
-# Enable backports and pull libstdc++ 13.x (exports GLIBCXX_3.4.31)
-# also installs jq, some bb commands require jq
-RUN echo 'deb http://deb.debian.org/debian testing main' \
-    >  /etc/apt/sources.list.d/testing.list         && \
-    echo 'APT::Default-Release "stable";'               \
-    >  /etc/apt/apt.conf.d/99defaultrelease         && \
-    apt-get update                                      && \
-    # pull only the two runtime libs from testing
+# Freeze Debian testing to the same snapshot used in the tester stage.
+RUN echo "deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/${DEBIAN_TESTING_SNAPSHOT} testing main" \
+    > /etc/apt/sources.list.d/testing.list && \
+    echo 'APT::Default-Release "stable";' \
+    > /etc/apt/apt.conf.d/99defaultrelease && \
+    apt-get update && \
     DEBIAN_FRONTEND=noninteractive \
     apt-get install -y -t testing libc6 libstdc++6 jq
 

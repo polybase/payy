@@ -93,6 +93,9 @@ support = { path = "./pkg/support" }
 p2p = { path = "./pkg/p2p" }
 p2p2 = { path = "./pkg/p2p2" }
 parse-link = { path = "./pkg/parse-link" }
+price-cache-http = { path = "./pkg/price-cache-http" }
+price-cache-interface = { path = "./pkg/price-cache-interface" }
+price-cache-pg = { path = "./pkg/price-cache-pg" }
 posthog-interface = { path = "./pkg/posthog-interface" }
 posthog = { path = "./pkg/posthog" }
 kyc = { path = "./pkg/kyc" }
@@ -123,6 +126,7 @@ bungee-interface = { path = "./pkg/bungee-interface" }
 bungee-client-http = { path = "./pkg/bungee-client-http" }
 slack-client-interface = { path = "./pkg/slack-client-interface" }
 slack-client-http = { path = "./pkg/slack-client-http" }
+swap-pricer-price-cache = { path = "./pkg/swap-pricer-price-cache" }
 ramps-interface = { path = "./pkg/ramps-interface" }
 ramps-providers-interface = { path = "./pkg/ramps-providers-interface" }
 ramps-storage-interface = { path = "./pkg/ramps-storage-interface" }
@@ -271,14 +275,14 @@ once_cell = "1.19.0"
 parking_lot = "0.12.1"
 phonenumber = "0.3"
 pretty-hex = "0.3.0"
-proptest = "1.6.0"
+proptest = "1.11.0"
 proc-macro2 = "1.0"
 quote = "1.0"
 quickcheck = "1.0.3"
 rand = "0.8.5"
 rand_chacha = "0.3.1"
-rand_xorshift = "0.3"
-reqwest = { version = "0.12", features = ["json", "multipart"] }
+rand_xorshift = "0.4"
+reqwest = { version = "0.12", features = ["json", "multipart", "stream"] }
 rlp = "0.6.1"
 rocksdb = "0.21"
 rpassword = "7.4.0"

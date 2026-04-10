@@ -14,7 +14,7 @@ use crate::lint::steps::{
 /// Available linter types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum LinterType {
-    /// GENERATED_AI_GUIDANCE.md regeneration
+    /// CLAUDE.md regeneration
     ClaudeGuidelines,
     /// Rust formatter
     Rustfmt,

@@ -13,6 +13,8 @@ This package provides a specialized HTTP client for communicating with the Guild
 - Wallet operations
 - Note management
 - Ramps integration
+- Yield/invest helpers for creating and funding Payy swap transactions, reading
+  aggregate yield position, and fetching token prices through Guild
 
 ## Dependency Injection
 

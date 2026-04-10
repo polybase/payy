@@ -1,0 +1,10 @@
+{
+  "amount": "0.01",
+  "currency": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+  "recipient": "0x3333333333333333333333333333333333333333",
+  "decimals": 6,
+  "methodDetails": {
+    "chainId": 8453
+  },
+  "description": "Tempo test charge"
+}

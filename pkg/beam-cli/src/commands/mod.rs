@@ -3,6 +3,7 @@ pub mod block;
 pub mod call;
 pub mod chain;
 pub mod erc20;
+pub mod fetch;
 pub mod interactive;
 pub(crate) mod interactive_helper;
 pub(crate) mod interactive_history;
@@ -36,6 +37,7 @@ pub async fn run(app: &BeamApp, command: Command) -> Result<()> {
         Command::Erc20 { action } => erc20::run(app, action).await,
         Command::Call(args) => call::run_read(app, args).await,
         Command::Send(args) => call::run_write(app, args).await,
+        Command::Fetch(args) => fetch::run(app, args).await,
         Command::Update => {
             update::run_update(&app.overrides, app.output_mode, app.color_mode).await
         }

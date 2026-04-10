@@ -2402,6 +2402,7 @@ version = "0.1.0"
 dependencies = [
  "argon2",
  "async-trait",
+ "base64 0.22.1",
  "clap",
  "contextful",
  "contracts",
@@ -3992,7 +3993,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d162beedaa69905488a8da94f5ac3edb4dd4788b732fadb7bd120b2625c1976"
 dependencies = [
  "data-encoding",
- "syn 2.0.112",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -4762,7 +4763,7 @@ dependencies = [
  "proptest",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "rand_xorshift 0.3.0",
+ "rand_xorshift 0.4.0",
  "serde",
  "serde_json",
  "test-strategy",
@@ -5878,6 +5879,8 @@ dependencies = [
  "paste",
  "posthog",
  "posthog-interface",
+ "price-cache-interface",
+ "price-cache-pg",
  "primitives",
  "providers-interface",
  "push-notification-expo",
@@ -5915,6 +5918,7 @@ dependencies = [
  "support-rpc",
  "support-storage-interface",
  "support-storage-pg",
+ "swap-pricer-price-cache",
  "tempfile",
  "testutil",
  "thiserror 1.0.69",
@@ -5939,10 +5943,12 @@ dependencies = [
  "client-http",
  "client-http-longpoll",
  "contextful",
+ "currency",
  "element",
  "guild-interface",
  "http-interface",
  "parking_lot 0.12.5",
+ "price-cache-interface",
  "ramps-interface",
  "reqwest 0.12.28",
  "rpc",
@@ -5966,7 +5972,9 @@ dependencies = [
  "element",
  "ethereum-types",
  "kyc",
+ "network",
  "notes-interface",
+ "price-cache-interface",
  "primitives",
  "ramps-interface",
  "rpc",
@@ -6049,7 +6057,7 @@ dependencies = [
  "insta",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "rand_xorshift 0.3.0",
+ "rand_xorshift 0.4.0",
  "serde",
  "workspace-hack",
 ]
@@ -6064,7 +6072,7 @@ dependencies = [
  "minimal-poseidon",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "rand_xorshift 0.3.0",
+ "rand_xorshift 0.4.0",
  "serde",
  "workspace-hack",
 ]
@@ -8440,7 +8448,6 @@ dependencies = [
  "element",
  "eth-util",
  "ethereum-types",
- "futures",
  "hex",
  "itertools 0.14.0",
  "node-client-http",
@@ -11075,6 +11082,7 @@ dependencies = [
  "deadpool",
  "diesel",
  "diesel-async",
+ "price-cache-interface",
  "reqwest 0.12.28",
  "rpc",
  "serde",
@@ -11085,6 +11093,51 @@ dependencies = [
  "tokio-postgres",
  "tracing",
  "uuid 1.19.0",
+ "workspace-hack",
+]
+
+[[package]]
+name = "price-cache-http"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "contextful",
+ "currency",
+ "guild-client-http",
+ "guild-interface",
+ "price-cache-interface",
+ "workspace-hack",
+]
+
+[[package]]
+name = "price-cache-interface"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bigdecimal",
+ "chrono",
+ "contextful",
+ "currency",
+ "serde",
+ "thiserror 1.0.69",
+ "unimock",
+ "workspace-hack",
+]
+
+[[package]]
+name = "price-cache-pg"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bigdecimal",
+ "chrono",
+ "contextful",
+ "currency",
+ "database",
+ "diesel",
+ "diesel-async",
+ "price-cache-interface",
+ "thiserror 1.0.69",
  "workspace-hack",
 ]
 
@@ -11306,9 +11359,9 @@ dependencies = [
 
 [[package]]
 name = "proptest"
-version = "1.9.0"
+version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bee689443a2bd0a16ab0348b52ee43e3b2d1b1f931c8aa5c9f8de4c86fbe8c40"
+checksum = "4b45fcc2344c680f5025fe57779faef368840d0bd1f42f216291f0dc4ace4744"
 dependencies = [
  "bit-set 0.8.0",
  "bit-vec 0.8.0",
@@ -11913,6 +11966,7 @@ dependencies = [
  "test-spy",
  "thiserror 1.0.69",
  "ts-rs",
+ "unimock",
  "uuid 1.19.0",
  "veil",
  "workspace-hack",
@@ -16508,9 +16562,9 @@ dependencies = [
 
 [[package]]
 name = "serde_spanned"
-version = "1.0.4"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8bbf91e5a4d6315eee45e704372590b30e260ee83af6639d64557f51b067776"
+checksum = "876ac351060d4f882bb1032b6369eb0aef79ad9df1ea8bc404874d8cc3d0cd98"
 dependencies = [
  "serde_core",
 ]
@@ -17492,6 +17546,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "swap-pricer-price-cache"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bigdecimal",
+ "chrono",
+ "contextful",
+ "currency",
+ "element",
+ "ethnum",
+ "hex",
+ "price-cache-interface",
+ "ramps-interface",
+ "thiserror 1.0.69",
+ "workspace-hack",
+ "zk-primitives",
+]
+
+[[package]]
 name = "swc_atoms"
 version = "9.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -18172,7 +18245,7 @@ checksum = "f3afc9a848309fe1aaffaed6e1546a7a14de1f935dc9d89d32afd9a44bab7c46"
 dependencies = [
  "indexmap 2.13.0",
  "serde_core",
- "serde_spanned 1.0.4",
+ "serde_spanned 1.1.0",
  "toml_datetime 0.7.5+spec-1.1.0",
  "toml_parser",
  "toml_writer",
@@ -19211,6 +19284,7 @@ dependencies = [
  "async-trait",
  "barretenberg-cli",
  "chrono",
+ "client-http",
  "contextful",
  "contracts",
  "element",
@@ -19222,18 +19296,24 @@ dependencies = [
  "guild-client-http",
  "guild-interface",
  "hex",
+ "http-interface",
  "json-store",
  "node-client-http",
  "node-interface",
  "parking_lot 0.12.5",
  "payy-note",
+ "price-cache-http",
+ "price-cache-interface",
  "primitives",
+ "ramps-interface",
  "rand 0.8.5",
  "reqwest 0.12.28",
+ "rpc",
  "secp256k1 0.28.2",
  "serde",
  "serde_json",
  "sha3",
+ "swap-pricer-price-cache",
  "tempfile",
  "test-spy",
  "thiserror 1.0.69",
@@ -20452,7 +20532,7 @@ dependencies = [
  "serde",
  "serde_core",
  "serde_json",
- "serde_spanned 1.0.4",
+ "serde_spanned 1.1.0",
  "serde_with",
  "sha1",
  "sha2",

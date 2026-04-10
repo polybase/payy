@@ -28,7 +28,7 @@ use clap::Parser;
 use runtime::{BeamApp, BeamPaths, ensure_root_dir};
 
 use crate::{
-    cli::{Cli, Command},
+    cli::{Cli, Command, normalize_cli_args},
     commands::{interactive, run},
     display::error_message,
     error::{Error, Result},
@@ -37,7 +37,7 @@ use crate::{
 
 #[tokio::main]
 async fn main() {
-    let cli = Cli::parse();
+    let cli = Cli::parse_from(normalize_cli_args(std::env::args_os()));
     let color_mode = cli.color;
 
     if let Err(err) = run_cli(cli).await {

@@ -2,6 +2,6 @@
 
 pub use ramps_interface::transaction::{
     CardStatus, ListRampsTransactionsQuery, RampCardTransaction, RampDepositLinkTransaction,
-    RampDepositTransaction, RampStatus, RampTransaction, RampTransactionBase, RampTransactionKind,
-    RampWithdrawTransaction,
+    RampDepositTransaction, RampStatus, RampSwapTransaction, RampTransaction, RampTransactionBase,
+    RampTransactionKind, RampWithdrawTransaction, SwapStatus,
 };

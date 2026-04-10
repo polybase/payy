@@ -15,6 +15,8 @@ pub mod bungee;
 /// EIP-7702 interface
 pub mod eip7702;
 mod error;
+/// Invest / yield interface
+pub mod invest;
 /// Migration interface
 pub mod migrate;
 /// Mint interface
@@ -23,6 +25,8 @@ pub mod mint;
 pub mod notes;
 /// Payments interface
 pub mod payments;
+/// Prices interface
+pub mod prices;
 /// Ramps interface
 pub mod ramps;
 /// Registry interface

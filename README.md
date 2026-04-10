@@ -363,6 +363,7 @@ cargo hakari manage-deps --yes
 ```
 
 The `Rust / Hakari Check` GitHub workflow enforces that the crate stays synchronized; if it fails, re-run the commands above and commit the resulting changes.
+The main `Test` workflow also verifies `Cargo.lock` during its clippy run by adding `--locked` to `cargo hack clippy`; if that check reports that the lockfile needs updates, regenerate and commit `Cargo.lock` before retrying CI.
 
 ## Contributing
 

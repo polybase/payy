@@ -1,7 +1,8 @@
-use clap::Parser;
+use clap::{ArgMatches, CommandFactory, FromArgMatches, parser::ValueSource};
+use contextful::ResultContextExt;
 
 use crate::{
-    cli::Cli,
+    cli::{Cli, normalize_cli_args},
     display::ColorMode,
     error::{Error, Result},
     output::OutputMode,
@@ -14,8 +15,19 @@ pub(crate) fn parse_line(line: &str) -> Result<ParsedLine> {
     }
 
     let args = parse_shell_words(line)?;
-    match Cli::try_parse_from(std::iter::once("beam").chain(args.iter().map(String::as_str))) {
-        Ok(cli) => Ok(ParsedLine::Cli { args, cli }),
+    match Cli::command().try_get_matches_from(normalize_cli_args(
+        std::iter::once("beam").chain(args.iter().map(String::as_str)),
+    )) {
+        Ok(matches) => {
+            let cli = Cli::from_arg_matches(&matches).context("build beam repl cli from clap")?;
+            Ok(ParsedLine::Cli {
+                cli: Box::new(cli),
+                global_flags: ParsedGlobalFlags {
+                    color_explicit: is_command_line_value(&matches, "color"),
+                    output_explicit: is_command_line_value(&matches, "output"),
+                },
+            })
+        }
         Err(err) => Ok(ParsedLine::CliError(err)),
     }
 }
@@ -62,22 +74,39 @@ pub(crate) fn merge_overrides(
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct ParsedGlobalFlags {
+    pub(crate) color_explicit: bool,
+    pub(crate) output_explicit: bool,
+}
+
 pub(crate) enum ParsedLine {
     ReplCommand(Vec<String>),
-    Cli { args: Vec<String>, cli: Cli },
+    Cli {
+        cli: Box<Cli>,
+        global_flags: ParsedGlobalFlags,
+    },
     CliError(clap::Error),
 }
 
-pub(crate) fn resolved_color_mode(args: &[String], cli: &Cli, app: &BeamApp) -> ColorMode {
-    if has_long_flag(args, "--color") {
+pub(crate) fn resolved_color_mode(
+    global_flags: ParsedGlobalFlags,
+    cli: &Cli,
+    app: &BeamApp,
+) -> ColorMode {
+    if global_flags.color_explicit {
         cli.color
     } else {
         app.color_mode
     }
 }
 
-pub(crate) fn resolved_output_mode(args: &[String], cli: &Cli, app: &BeamApp) -> OutputMode {
-    if has_long_flag(args, "--output") {
+pub(crate) fn resolved_output_mode(
+    global_flags: ParsedGlobalFlags,
+    cli: &Cli,
+    app: &BeamApp,
+) -> OutputMode {
+    if global_flags.output_explicit {
         cli.output
     } else {
         app.output_mode
@@ -138,11 +167,6 @@ fn is_cli_subcommand_invocation(command: &str, args: &[String]) -> bool {
     )
 }
 
-fn has_long_flag(args: &[String], long_flag: &str) -> bool {
-    args.iter().any(|arg| {
-        arg == long_flag
-            || arg
-                .strip_prefix(long_flag)
-                .is_some_and(|suffix| suffix.starts_with('='))
-    })
+fn is_command_line_value(matches: &ArgMatches, arg_id: &str) -> bool {
+    matches.value_source(arg_id) == Some(ValueSource::CommandLine)
 }

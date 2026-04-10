@@ -49,6 +49,7 @@ pub enum Kind {
     RampDepositV1,
     RampDepositLinkV1,
     RampWithdrawV1,
+    SwapV1,
     SupportV1,
     WalletV0,
     MigrateV0,

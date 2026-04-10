@@ -3,6 +3,7 @@
 export type Provider =
   | "ALFRED"
   | "MANTECA"
+  | "PAYY"
   | "RAIN"
   | "SUMSUB"
   | "CYBRID"

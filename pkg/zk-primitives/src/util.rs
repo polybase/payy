@@ -145,6 +145,16 @@ pub fn extract_chain_id_from_note_kind(note_kind: Element) -> u64 {
     u64::from_be_bytes(chain_bytes)
 }
 
+/// Extracts the bridged token address from a note kind element.
+///
+/// The bridge note kind uses the format `<note_kind_format:u16><chain:u64><address:H160><padding>`.
+/// This helper copies the address bytes (index 10 through 29) into an `H160`.
+#[must_use]
+pub fn extract_address_from_note_kind(note_kind: Element) -> H160 {
+    let note_bytes = note_kind.to_be_bytes();
+    H160::from_slice(&note_bytes[10..30])
+}
+
 /// Generates a note kind element for USDC on Polygon network.
 /// Uses the standard bridged asset format for USDC token on Polygon chain.
 ///
@@ -365,5 +375,14 @@ mod tests {
         let note_kind = generate_note_kind_bridge_evm(chain, H160::zero());
 
         assert_eq!(extract_chain_id_from_note_kind(note_kind), chain);
+    }
+
+    #[test]
+    fn test_extract_address_from_note_kind() {
+        let address =
+            H160::from_slice(&hex::decode("43415eb6ff9db7e26a15b704e7a3edce97d31c4e").unwrap());
+        let note_kind = generate_note_kind_bridge_evm(1, address);
+
+        assert_eq!(extract_address_from_note_kind(note_kind), address);
     }
 }
