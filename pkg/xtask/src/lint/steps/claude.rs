@@ -11,17 +11,15 @@ use crate::error::Result;
 use crate::lint::LintMode;
 use crate::lint::steps::StepResult;
 
-const CANONICAL_FILE: &str = "GENERATED_AI_GUIDANCE.md";
-
 pub fn run_claude_doc(repo_root: &Path, mode: LintMode) -> Result<StepResult> {
     let start = Instant::now();
-    let script_path = repo_root.join("GENERATED_AI_GUIDANCE.sh");
-    let target_path = repo_root.join(CANONICAL_FILE);
+    let script_path = repo_root.join("CLAUDE.md.sh");
+    let target_path = repo_root.join("CLAUDE.md");
 
     if !script_path.is_file() {
         return Ok(StepResult::failed(
-            CANONICAL_FILE,
-            "GENERATED_AI_GUIDANCE.sh was not found in the repository root".to_string(),
+            "CLAUDE.md",
+            "CLAUDE.md.sh was not found in the repository root".to_string(),
             start.elapsed(),
         ));
     }
@@ -35,8 +33,8 @@ pub fn run_claude_doc(repo_root: &Path, mode: LintMode) -> Result<StepResult> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         let step = StepResult::failed(
-            CANONICAL_FILE,
-            "GENERATED_AI_GUIDANCE.sh exited with a non-zero status code".to_string(),
+            "CLAUDE.md",
+            "CLAUDE.md.sh exited with a non-zero status code".to_string(),
             start.elapsed(),
         );
         return if stderr.is_empty() {
@@ -59,49 +57,36 @@ pub fn run_claude_doc(repo_root: &Path, mode: LintMode) -> Result<StepResult> {
             if needs_update {
                 fs::write(&target_path, &generated)
                     .with_context(|| format!("write {}", target_path.display()))?;
+
                 Ok(StepResult::fixed(
-                    CANONICAL_FILE,
-                    format!(
-                        "Regenerated {} from GENERATED_AI_GUIDANCE.sh",
-                        CANONICAL_FILE
-                    ),
-                    vec![CANONICAL_FILE.to_owned()],
+                    "CLAUDE.md",
+                    "Regenerated CLAUDE.md from CLAUDE.md.sh".to_string(),
+                    vec!["CLAUDE.md".to_owned()],
                     start.elapsed(),
                 ))
             } else {
                 Ok(StepResult::success(
-                    CANONICAL_FILE,
-                    format!(
-                        "{} already matches GENERATED_AI_GUIDANCE.sh",
-                        CANONICAL_FILE
-                    ),
+                    "CLAUDE.md",
+                    "CLAUDE.md already matches CLAUDE.md.sh".to_string(),
                     start.elapsed(),
                 ))
             }
         }
         LintMode::CheckOnly => match existing {
             Some(bytes) if bytes == generated => Ok(StepResult::success(
-                CANONICAL_FILE,
-                format!(
-                    "{} already matches GENERATED_AI_GUIDANCE.sh",
-                    CANONICAL_FILE
-                ),
+                "CLAUDE.md",
+                "CLAUDE.md already matches CLAUDE.md.sh".to_string(),
                 start.elapsed(),
             )),
             Some(_) => Ok(StepResult::failed(
-                CANONICAL_FILE,
-                format!(
-                    "{} differs from GENERATED_AI_GUIDANCE.sh output. Re-run cargo xtask lint --fix.",
-                    CANONICAL_FILE
-                ),
+                "CLAUDE.md",
+                "CLAUDE.md differs from CLAUDE.md.sh output. Re-run cargo xtask lint --fix."
+                    .to_string(),
                 start.elapsed(),
             )),
             None => Ok(StepResult::failed(
-                CANONICAL_FILE,
-                format!(
-                    "{} is missing; run cargo xtask lint --fix to regenerate it.",
-                    CANONICAL_FILE
-                ),
+                "CLAUDE.md",
+                "CLAUDE.md is missing; run cargo xtask lint --fix to regenerate it.".to_string(),
                 start.elapsed(),
             )),
         },

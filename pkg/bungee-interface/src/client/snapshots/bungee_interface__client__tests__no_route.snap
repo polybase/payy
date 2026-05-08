@@ -1,0 +1,12 @@
+---
+source: pkg/bungee-interface/src/client/tests.rs
+expression: output
+---
+{
+  "error": {
+    "code": "not-found",
+    "reason": "bungee-no-route",
+    "message": "[bungee-interface/client] no bungee route available",
+    "data": null
+  }
+}

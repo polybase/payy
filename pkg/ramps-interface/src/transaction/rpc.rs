@@ -3,18 +3,38 @@ use element::Element;
 use network::Network;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use zk_primitives::NoteURLPayload;
 
 use crate::provider::Provider;
 
 use super::{FundingStatus, Status, TransactionUpdate};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct CreateTransactionRequest {
+#[serde(untagged)]
+pub enum CreateTransactionRequest {
+    Remote(Box<CreateRemoteTransactionRequest>),
+    Swap(CreateSwapTransactionRequest),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct CreateRemoteTransactionRequest {
     pub quote_id: Uuid,
     pub from_network_identifier: Option<network::NetworkIdentifier>,
     pub to_network_identifier: Option<network::NetworkIdentifier>,
     pub evm_address: Option<String>,
     pub external_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct CreateSwapTransactionRequest {
+    pub from_network: Network,
+    pub to_network: Network,
+    pub from_note_kind: Element,
+    pub to_note_kind: Element,
+    pub from_amount: Element,
+    pub local_id: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -35,7 +55,13 @@ impl From<UpdateTransactionRequest> for TransactionUpdate {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FundTransactionRequest {
+    #[serde(flatten)]
+    pub note: NoteURLPayload,
+}
+
+pub struct FundRemoteTransactionRequest {
     pub external_id: String,
     pub from_currency: Currency,
     pub from_amount: Element,

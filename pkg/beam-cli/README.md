@@ -113,6 +113,77 @@ the session.
 Write commands stop waiting automatically and return a `dropped` state if the active RPC stops
 reporting the submitted transaction for roughly 60 seconds.
 
+## Fetch
+
+`beam fetch` is a built-in HTTP client for curl-style requests that can also satisfy x402 and
+MPP payment challenges with your active Beam wallet. It makes the initial request directly from
+Rust, prints the response body to stdout by default, and retries automatically after a successful
+payment when the server answers with `402 Payment Required`.
+
+Supported request flags:
+
+- `-X, --method <METHOD>` to override the HTTP method. Without `-X`, Beam defaults to `GET`,
+  or `POST` when `-d`, `--data`, or `--data-file` is present.
+- `-H, --header <NAME: VALUE>` to attach repeatable request headers.
+- `-d, --data <BODY>` or `--data-file <PATH>` to send a request body.
+- `-o, --output <PATH>` to write the response body to a file instead of stdout.
+- `-v, --verbose` to print request and response headers on stderr. Beam redacts
+  sensitive request header values such as `Authorization`, `Cookie`, and payment
+  credentials before printing them.
+- `-L, --follow-redirects` with `--max-redirects <N>` to follow redirects on the same
+  origin only. Beam stops before a cross-origin hop so origin-scoped headers are not replayed
+  to another host.
+- `--connect-timeout <SECONDS>` and `--timeout <SECONDS>` for request timing.
+- `--no-pay` to print the payment challenge and exit without signing.
+- `--max-fee <AMOUNT>` to auto-confirm only when the payment stays within that bound before
+  signing. Beam also rejects payments whose estimated gas alone exceeds the cap; native-asset
+  payments include the transfer amount plus estimated gas.
+- `--allowed-chains <NAME|ID>[,<NAME|ID>...]` to auto-approve only those destination chains for
+  payment requests. If a request targets a different chain, Beam fails instead of prompting.
+- `--dev` to allow plain HTTP payment challenges only for localhost or loopback development
+  fixtures. Beam otherwise refuses to pay a `402 Payment Required` response unless the challenged
+  URL is `https://`.
+
+Payment flow notes:
+
+- Use `--from <wallet-name|address|ens>` to choose which stored wallet pays for the request.
+- Use `--chain <name|id>` to force x402 offer selection. For MPP, it acts as an explicit
+  constraint: if the challenge already includes a different `chainId`, Beam fails instead of
+  prompting on that network.
+- `--chain` and `--allowed-chains` accept the same selectors as other Beam chain commands,
+  including canonical names, numeric ids, and aliases like `eth`, `bsc`, `arb`, or `payydev`.
+- MPP challenges that omit a chain are rejected unless you explicitly provide `--chain` or
+  `--rpc`.
+- MPP problem responses must include a valid `WWW-Authenticate: Payment ...` challenge. Beam
+  rejects malformed MPP responses on both the paid and `--no-pay` paths.
+- When a payment request targets a different chain than your selected/default chain, Beam prompts
+  for confirmation unless `--allowed-chains` explicitly permits it.
+- Payment challenges served over plain HTTP are rejected unless you opt into `--dev` and the
+  challenged URL stays on `localhost` or a loopback address.
+- x402 responses are retried with a Beam-generated payment proof header after the payment
+  transaction confirms.
+- MPP challenges are retried with an `Authorization: Payment ...` credential after the payment
+  transaction confirms. If the original same-origin request already set `Authorization`, Beam
+  fails instead of overwriting the caller-supplied credential.
+- If a same-origin redirect rewrites the request before the `402 Payment Required` response
+  (for example `POST` becoming `GET` on `302`/`303`), Beam retries that effective challenged
+  request after payment instead of replaying the pre-redirect method and body.
+- In the REPL, once `beam fetch` starts the on-chain payment transaction, `Ctrl-C` stops waiting
+  for confirmation without losing the submitted transaction hash. After that transaction phase,
+  `Ctrl-C` again cancels the paid retry request or response download and returns to the prompt.
+
+Examples:
+
+```bash
+beam fetch https://api.example.com/data
+beam fetch -X POST -H "Content-Type: application/json" -d '{"key":"value"}' https://api.example.com/submit
+beam fetch --max-fee 0.001 https://paywall.example.com/article/123
+beam fetch --allowed-chains base,8453 https://paywall.example.com/article/123
+beam fetch --no-pay https://paywall.example.com/article/123
+beam --from alice --chain base fetch --max-fee 0.001 https://paywall.example.com/article/123
+beam fetch -v -L https://api.example.com/redirect
+```
+
 ## Wallets
 
 Wallets are stored in an encrypted local keystore at `~/.beam/wallets.json`.
@@ -322,13 +393,14 @@ beam erc20 transfer <token> <to> <amount>
 beam erc20 approve <token> <spender> <amount>
 beam call <contract> <function-sig> [args...]
 beam send [--value <amount>] <contract> <function-sig> [args...]
+beam fetch [request-flags] <url>
 beam update
 ```
 
 Useful examples:
 
 ```bash
-beam --output json balance
+beam --format json balance
 beam --from alice balance USDC
 beam tokens
 beam --chain base tokens add 0xTokenAddress
@@ -455,12 +527,12 @@ session RPC override so the prompt and subsequent commands stay on the selected 
 
 `beam` also supports structured output modes for scripting:
 
-- `--output default`
-- `--output json`
-- `--output yaml`
-- `--output markdown`
-- `--output compact`
-- `--output quiet`
+- `--format default`
+- `--format json`
+- `--format yaml`
+- `--format markdown`
+- `--format compact`
+- `--format quiet`
 
 Human-facing warnings, errors, and the interactive prompt use color automatically when beam is
 writing to a terminal. Override that behavior with `--color auto`, `--color always`, or

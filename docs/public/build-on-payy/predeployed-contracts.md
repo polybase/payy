@@ -8,7 +8,6 @@ Native core protocol contracts that provide enhanced capabilities to Payy:
 | --------------------------------------------------------------- | -------------------------------------------- | -------------------------------------------------------- |
 | **PUSD**                                                        | `0x0200000000000000000000000000000000000000` | Native ERC-20 view over Payy balances                    |
 | [**PrivacyBridge**](../protocol/privacybridge.md)               | `0x3100000000000000000000000000000000000000` | Bridge funds to and from the native ERC-20 privacy pools |
-| [**PrivacyVaultRegistry**](../protocol/privacyvaultregistry.md) | `TBC`                                        | Stores the registry of a given address                   |
 | **Poseidon**                                                    | `0x3300000000000000000000000000000000000000` | Solidity wrapper around the public Poseidon precompile   |
 | [**Rollup**](../protocol/rollup.md)                             | `0x3200000000000000000000000000000000000000` | Sparse merkle rollup tree interface                      |
 | **BlockTimestampMs**                                            | `0x3400000000000000000000000000000000000000` | Solidity wrapper around the millisecond timestamp precompile |

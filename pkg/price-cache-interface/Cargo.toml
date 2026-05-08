@@ -1,0 +1,15 @@
+[package]
+name = "price-cache-interface"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+async-trait = { workspace = true }
+bigdecimal = { workspace = true }
+chrono = { workspace = true }
+contextful = { workspace = true }
+currency = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+unimock = { workspace = true }
+workspace-hack.workspace = true

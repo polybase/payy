@@ -1,0 +1,14 @@
+---
+source: pkg/bungee-interface/src/client/tests.rs
+expression: output
+---
+{
+  "error": {
+    "code": "bad-request",
+    "reason": "bungee-output-amount-too-low",
+    "message": "[bungee-interface/client] output amount too low: $0.02 (minimum $0.10)",
+    "data": {
+      "usd_amount": 0.02
+    }
+  }
+}

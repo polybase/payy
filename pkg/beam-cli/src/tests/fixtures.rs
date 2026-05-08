@@ -8,7 +8,7 @@ use tokio::{
 use crate::{
     display::ColorMode,
     output::OutputMode,
-    runtime::{BeamApp, BeamPaths, InvocationOverrides},
+    runtime::{BeamApp, BeamPaths, InvocationOverrides, ensure_root_dir},
 };
 
 pub(super) async fn test_app(overrides: InvocationOverrides) -> (TempDir, BeamApp) {
@@ -20,8 +20,10 @@ pub(super) async fn test_app_with_output(
     overrides: InvocationOverrides,
 ) -> (TempDir, BeamApp) {
     let temp_dir = TempDir::new().expect("create temp dir");
+    let beam_root = temp_dir.path().join(".beam");
+    ensure_root_dir(&beam_root).expect("ensure beam home");
     let app = BeamApp::for_root(
-        BeamPaths::new(temp_dir.path().to_path_buf()),
+        BeamPaths::new(beam_root),
         ColorMode::Auto,
         output_mode,
         overrides,

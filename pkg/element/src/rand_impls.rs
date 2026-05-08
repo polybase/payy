@@ -37,10 +37,9 @@ impl Element {
     ///
     /// ```rust,compile_fail
     /// # use element::Element;
-    /// # use rand_xorshift::XorShiftRng;
-    /// # use rand::SeedableRng;
+    /// # use rand::rngs::mock::StepRng;
     /// // this rng is NOT cryptographically secure
-    /// let mut rng = XorShiftRng::from_seed([0; 16]);
+    /// let mut rng = StepRng::new(0, 1);
     /// let element = Element::random(&mut rng);
     ///
     /// println!("{element}");  // uh oh
@@ -49,10 +48,9 @@ impl Element {
     /// Hopefully this is scary enough that we will think twice where we use this value.
     /// ```rust
     /// # use element::Element;
-    /// # use rand_xorshift::XorShiftRng;
-    /// # use rand::SeedableRng;
+    /// # use rand::rngs::mock::StepRng;
     /// // this rng is NOT cryptographically secure
-    /// let mut rng = XorShiftRng::from_seed([0; 16]);
+    /// let mut rng = StepRng::new(0, 1);
     /// let element = Element::random(&mut rng);
     ///
     /// println!("{}", element.get_insecure());  // works

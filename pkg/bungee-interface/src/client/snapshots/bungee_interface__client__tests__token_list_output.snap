@@ -1,0 +1,17 @@
+---
+source: pkg/bungee-interface/src/client/tests.rs
+expression: value
+---
+{
+  "tokens": {
+    "137": [
+      {
+        "address": "0x0000000000000000000000000000000000000007",
+        "decimals": 6,
+        "logo_uri": "https://example.com/usdc.png",
+        "name": "USD Coin",
+        "symbol": "USDC"
+      }
+    ]
+  }
+}

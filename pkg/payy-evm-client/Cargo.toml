@@ -1,0 +1,45 @@
+[package]
+name = "payy-evm-client"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+alloy-primitives = { workspace = true }
+alloy-sol-types = { workspace = true }
+async-trait = { workspace = true }
+barretenberg-cli = { workspace = true, optional = true }
+barretenberg-rs = { workspace = true, optional = true }
+bincode = { workspace = true }
+bn254_blackbox_solver = { workspace = true }
+bs58 = { workspace = true }
+contextful = { workspace = true }
+element = { workspace = true }
+ethnum = { workspace = true }
+hash = { workspace = true }
+payy-evm-client-interface = { workspace = true }
+payy-evm-client-alloy = { workspace = true, optional = true }
+payy-evm-client-prover-bb = { workspace = true }
+payy-evm-client-prover-interface = { workspace = true }
+payy-evm-parse-link = { workspace = true }
+rand = { workspace = true }
+rlp = { workspace = true }
+rmp-serde = { workspace = true, optional = true }
+secp256k1 = { workspace = true }
+serde = { workspace = true, optional = true }
+serde_bytes = { workspace = true, optional = true }
+sha3 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+zk-circuits = { workspace = true }
+zk-primitives = { workspace = true }
+workspace-hack.workspace = true
+
+[features]
+default = ["bb-cli"]
+alloy = ["dep:payy-evm-client-alloy"]
+bb-bindings = ["dep:barretenberg-rs", "barretenberg-rs/bb_rs"]
+bb-cli = ["dep:barretenberg-cli", "dep:rmp-serde", "dep:serde", "dep:serde_bytes"]
+
+[dev-dependencies]
+hex = { workspace = true }
+serde_json = { workspace = true }

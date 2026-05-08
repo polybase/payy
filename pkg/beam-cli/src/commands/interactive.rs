@@ -115,7 +115,7 @@ async fn handle_line(app: &BeamApp, overrides: &mut InvocationOverrides, line: &
     run_with_interrupt_owner(
         interrupt_owner,
         handle_parsed_line(app, overrides, parsed),
-        tokio::signal::ctrl_c(),
+        tokio::signal::ctrl_c,
     )
     .await
 }
@@ -127,11 +127,11 @@ pub(crate) async fn handle_parsed_line(
 ) -> Result<()> {
     match parsed {
         ParsedLine::ReplCommand(args) => handle_repl_command(app, overrides, &args).await,
-        ParsedLine::Cli { args, cli } => {
+        ParsedLine::Cli { cli, global_flags } => {
             let command_app = BeamApp {
                 overrides: merge_overrides(overrides, &cli.overrides()),
-                color_mode: resolved_color_mode(&args, &cli, app),
-                output_mode: resolved_output_mode(&args, &cli, app),
+                color_mode: resolved_color_mode(global_flags, &cli, app),
+                output_mode: resolved_output_mode(global_flags, &cli, app),
                 ..app.clone()
             };
 

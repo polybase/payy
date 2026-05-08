@@ -4,10 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+bungee-interface = { workspace = true }
 guild-interface = { workspace = true }
 client-http = { workspace = true }
 client-http-longpoll = { workspace = true }
+currency = { workspace = true }
 http-interface = { workspace = true }
+price-cache-interface = { workspace = true }
 rpc = { workspace = true }
 element = { workspace = true }
 ramps-interface = { workspace = true }

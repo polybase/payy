@@ -1,5 +1,7 @@
-use std::sync::{Mutex, Once, OnceLock};
+use std::sync::{Mutex, Once};
 
+#[cfg(feature = "max_params")]
+use std::sync::OnceLock;
 #[cfg(feature = "max_params")]
 use std::{env, fs, path::PathBuf};
 
@@ -68,6 +70,21 @@ impl BindingBackend {
         });
         Ok(())
     }
+}
+
+pub fn schnorr_construct_signature(
+    message: &[u8],
+    private_key: [u8; 32],
+) -> Result<([u8; 32], [u8; 32])> {
+    let _guard = BB_MUTEX.lock().map_err(|err| {
+        Error::ImplementationSpecific(Box::new(std::io::Error::other(err.to_string())))
+    })?;
+    let private_key = bb_rs::barretenberg_api::models::Fr { data: private_key };
+    // SAFETY: the bb_rs wrapper accepts owned Rust buffers, constructs the C buffers
+    // expected by Barretenberg, and returns fixed-size signature limbs.
+    Ok(unsafe {
+        bb_rs::barretenberg_api::schnorr::schnorr_construct_signature(message, &private_key)
+    })
 }
 
 #[async_trait]

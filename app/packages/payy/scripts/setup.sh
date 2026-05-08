@@ -77,7 +77,7 @@ if [[ -z "$EAS_BUILD" ]]; then
 fi
 
 # link the font assets (only for `iOS`)
-npx -y react-native-asset -y --ios-assets ./assets/fonts
+yarn -s react-native-asset --ios-assets ./assets/fonts
 
 # link the font assets (only for `Android`)
 bash scripts/fix-android-fonts.sh

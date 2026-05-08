@@ -1,3 +1,5 @@
+ARG DEBIAN_TESTING_SNAPSHOT=20260404T140000Z
+
 FROM rust:1-bookworm AS builder
 ARG RUST_GIT_FETCH_CLI
 ARG SCCACHE_GCS_BUCKET
@@ -55,6 +57,8 @@ RUN if [ -f /gcs_key.json ]; then \
 
 FROM debian:bookworm-slim
 
+ARG DEBIAN_TESTING_SNAPSHOT
+
 #Add custom user
 RUN adduser --disabled-password --gecos "" --uid 1001 polybase
 
@@ -67,14 +71,13 @@ RUN wget https://storage.googleapis.com/payy-public-fixtures/bb/v3.0.0-manual.20
     mv bb /usr/local/bin/bb && \
     rm barretenberg.tar.gz
 
-# Enable backports and pull libstdc++ 13.x (exports GLIBCXX_3.4.31)
-# also installs jq, some bb commands require jq
-RUN echo 'deb http://deb.debian.org/debian testing main' \
-    >  /etc/apt/sources.list.d/testing.list         && \
-    echo 'APT::Default-Release "stable";'               \
-    >  /etc/apt/apt.conf.d/99defaultrelease         && \
-    apt-get update                                      && \
-    # pull only the two runtime libs from testing
+# Freeze Debian testing to a known-good snapshot so upstream testing changes
+# do not break image builds.
+RUN echo "deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/${DEBIAN_TESTING_SNAPSHOT} testing main" \
+    > /etc/apt/sources.list.d/testing.list && \
+    echo 'APT::Default-Release "stable";' \
+    > /etc/apt/apt.conf.d/99defaultrelease && \
+    apt-get update && \
     DEBIAN_FRONTEND=noninteractive \
     apt-get install -y -t testing libc6 libstdc++6 jq
 

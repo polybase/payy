@@ -1,154 +1,137 @@
 # PrivacyBridge
 
-The Privacy Bridge provides an EVM interface to the native ERC-20 privacy pools. Calls to the privacy bridge are zero rated, incentivising usage and enhancing usability for privacy flows. The privacy bridge maintains a virtual state representing the privacy layer sparse merkle tree.
+The Privacy Bridge provides the EVM interface to Payy's native ERC-20 privacy pools. Calls to the bridge are zero rated, which keeps privacy flows usable for everyday transfers. The bridge maintains a virtual view of the privacy-layer sparse Merkle tree.
 
-The bridge verifies privacy proofs through the [Privacy Proof Verify](precompiles.md#privacy-proof-verify) precompile and reads / updates sparse merkle tree state through the [Rollup](rollup.md) predeploy.
+The bridge verifies privacy proofs through the [Privacy Proof Verify](precompiles.md#privacy-proof-verify) precompile and reads / updates sparse Merkle tree state through the [Rollup](rollup.md) predeploy.
 
 {% hint style="info" %}
-All calls to the PrivacyBridge are gas zero rated to enable [zero fee private payments](../stablecoins/zero-fee-payments.md).
+All calls to `PrivacyBridge` are gas zero rated to enable [zero fee private payments](../stablecoins/zero-fee-payments.md).
 {% endhint %}
 
-If you need to construct PrivacyBridge ZK proofs manually outside the Payy SDK, see the [Manual proof construction](privacy-layer/zk-circuits.md#manual-proof-construction) section in [ZK Circuits](privacy-layer/zk-circuits.md) for the required `@aztec/bb.js` version and circuit source links.
+Use the [Payy client SDKs](../build-on-payy/payy-client/README.md) for wallet-facing PrivacyBridge flows in TypeScript or Rust. If you need to construct PrivacyBridge ZK proofs manually outside the Payy SDKs, see [ZK Circuits](privacy-layer/zk-circuits.md).
 
 ```solidity
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-/// @title PrivacyBridge Interface
-/// @notice Interface for moving funds into, within, and out of the Payy native privacy pool using ZK proofs.
-/// @dev Merkle tree hashing uses Poseidon. Merkle path sibling order is left-to-right at each level.
-///      All proof-verification functions expect the verifier to reconstruct and validate circuit public
-///      inputs from `publicInputs`.
 interface IPrivacyBridge {
-    // ----------------------------
-    // Events
-    // ----------------------------
-
-    /// @notice Emitted when a transfer within the privacy pool is processed.
-    /// @param txHash Hash of the proof inputs for off-chain correlation (implementation-defined)
-    /// @param verificationKeyHash Hash of the verification key used
     event TransferProcessed(
         bytes32 indexed txHash,
         bytes32 indexed verificationKeyHash
     );
-
-    /// @notice Emitted when funds are burned (withdrawn) from the privacy pool.
-    /// @param txHash Hash of the proof inputs for off-chain correlation (implementation-defined)
-    /// @param verificationKeyHash Hash of the verification key used
     event BurnProcessed(
         bytes32 indexed txHash,
         bytes32 indexed verificationKeyHash
     );
-
-    /// @notice Emitted when funds are minted (deposited) into the privacy pool.
-    /// @param txHash Hash of the proof inputs for off-chain correlation (implementation-defined)
-    /// @param verificationKeyHash Hash of the verification key used
     event MintProcessed(
         bytes32 indexed txHash,
         bytes32 indexed verificationKeyHash
     );
+    event ExternalTransfer(bytes6 indexed prefix6, bytes32 indexed txHash);
+    event ChainPublicKeyUpdated(uint256 newX, uint256 newY);
 
-    /// @notice Emitted when ERC-20 funds are swept into bridge custody.
-    /// @param sweepHash Hash derived from keccak256(abi.encodePacked(to, nonce)) authorizing the sweep
-    /// @param token ERC-20 token address that was swept
-    /// @param from The visible ERC-20 account that funds were moved from (equals msg.sender)
-    /// @param amount The actual amount swept (<= maxAmount)
-    event SweepProcessed(
-        bytes32 indexed sweepHash,
-        address indexed token,
-        address indexed from,
-        uint256 amount
-    );
+    struct TxnData {
+        bytes32 verificationKeyHash;
+        bytes32[5] senderEncryptedNote;
+        bytes32[5] recipientEncryptedNote;
+        bytes32[3] senderChainEncryptedKey;
+        bytes32[3] recipientChainEncryptedKey;
+        bytes32[4] userEncryptedKey;
+        bytes32[4] recipientEncryptedKey;
+        bytes32 memo;
+    }
 
-    // ----------------------------
-    // Core functions
-    // ----------------------------
-
-    /// @notice Move funds within the privacy pool.
-    /// @dev Expected public inputs (canonical ordering, implementation-defined):
-    ///      - recent_root
-    ///      - input_nullifiers_x2
-    ///      - output_commitments_x2
-    ///      - `recent_root` must be contained in Rollup's recent-root window
     function transfer(
         bytes32 verificationKeyHash,
         bytes calldata proof,
-        bytes32[] calldata publicInputs
+        bytes32[] calldata publicInputs,
+        bytes32[4] calldata userEncryptedKey,
+        bytes32[4] calldata recipientEncryptedKey,
+        bytes32 memo
     ) external;
 
-    /// @notice Move funds out of the privacy pool (withdraw/burn).
-    /// @dev Expected public inputs (canonical ordering, implementation-defined):
-    ///      - recent_root
-    ///      - input_nullifiers_x2
-    ///      - output_commitments_x2
-    ///      - burn_recipient_public
-    ///      - burn_value
-    ///      - `recent_root` must be contained in Rollup's recent-root window
     function burn(
         bytes32 verificationKeyHash,
         bytes calldata proof,
-        bytes32[] calldata publicInputs
+        bytes32[] calldata publicInputs,
+        bytes32[4] calldata userEncryptedKey
     ) external;
 
-    /// @notice Move funds into the privacy pool (deposit/mint).
-    /// @dev Expected public inputs (canonical ordering, implementation-defined):
-    ///      - recent_root
-    ///      - input_nullifiers_x2
-    ///      - output_commitments_x2
-    ///      - mint_value
-    ///      - `recent_root` must be contained in Rollup's recent-root window
     function mint(
         bytes32 verificationKeyHash,
         bytes calldata proof,
-        bytes32[] calldata publicInputs
+        bytes32[] calldata publicInputs,
+        bytes32[4] calldata userEncryptedKey
     ) external;
 
-    /// @notice Sweep ERC-20 funds from msg.sender into bridge custody up to a maximum amount.
-    /// @dev
-    /// - Source: the visible source account is msg.sender.
-    /// - Authorization: `sweepHash` uniquely identifies the sweep and prevents replay.
-    /// - Amount: implementation will transfer `min(balanceOf(msg.sender), allowance(msg.sender, this), maxAmount)` of
-    ///   `token` into bridge custody.
-    /// - Accounting: implementation emits `SweepProcessed` with the actual amount swept.
-    /// - Note: the current implementation does not mint a private commitment as part of `sweep`.
-    /// @param token The ERC-20 token to sweep
-    /// @param sweepHash Hash derived from keccak256(abi.encodePacked(to, nonce))
-    /// @param maxAmount Maximum amount to sweep
-    function sweep(
-        address token,
-        bytes32 sweepHash,
-        uint256 maxAmount
-    ) external;
-
-    // ----------------------------
-    // Introspection / helpers
-    // ----------------------------
-
-    /// @notice Returns true if a commitment / nullifier has already been inserted into the rollup tree.
-    /// @dev Convenience helper over `Rollup.exists(bytes32)`.
+    function updateChainPublicKey(uint256 newX, uint256 newY) external;
     function elementExists(bytes32 element) external view returns (bool);
-
-    /// @notice Optional helper to compute a canonical hash of proof inputs for event indexing.
-    /// @dev Implementations may define txHash as keccak256(abi.encode(verificationKeyHash, proof, publicInputs)).
     function computeTxHash(
         bytes32 verificationKeyHash,
         bytes calldata proof,
         bytes32[] calldata publicInputs
     ) external pure returns (bytes32);
-
-    /// @notice Returns the Merkle inclusion path for a given commitment.
-    /// @dev Tree uses Poseidon hashing. Sibling order is strictly left-to-right per level.
     function getMerklePath(
         bytes32 commitment
-    ) external view returns (
-        bytes32 root,
-        bytes32[] memory siblings
-    );
-
-    /// @notice Returns the current Merkle root recognized by the bridge.
+    ) external view returns (bytes32 root, bytes32[] memory siblings);
     function getRoot() external view returns (bytes32 root);
+    function getTxnHashByNonceHash(bytes32 nonceHash) external view returns (bytes32);
+    function getTxnHashByCommitment(bytes32 commitment) external view returns (bytes32);
+    function getTxnData(bytes32 txnHash) external view returns (TxnData memory);
+    function getChainPublicKey() external view returns (uint256 x, uint256 y);
 }
-
 ```
 
-`elementExists(bytes32)` is part of the deployed `PrivacyBridge` implementation and forwards to `Rollup.exists(bytes32)` for O(1) existence checks before insertions.
+`transfer(...)` accepts both `transfer_send` and `transfer_claim` proofs.
+
+- `transfer_send` creates a sender continuation note plus a recipient-owned incoming note
+- `transfer_claim` merges an incoming note into the recipient's standard wallet chain
+
+The proof verifier returns a distinct kind for each of those two transfer variants, and the bridge
+uses that decoded kind for transfer-side branching and calldata validation.
+
+All privacy circuits now share the same **33-field** public input layout. The bridge validates that canonical vector directly against chain state, bridge config, and calldata.
+
+## Encryption Model
+
+Every privacy entrypoint requires `userEncryptedKey`, which binds sender-visible decryption data to the proof.
+
+`transfer_send` also carries:
+
+- `recipientEncryptedKey`
+- a separate recipient-encrypted note payload
+- a separate chain-encrypted key for the recipient payload
+- an optional fixed-width `bytes32 memo`
+
+`transfer_send` must move non-zero value into the recipient-owned incoming note. Zero-value direct sends are rejected at the proof layer.
+
+This means the sender continuation note and the recipient incoming note are stored and decrypted as separate domains.
+
+`memo` is unauthenticated sender metadata. The ZK proof does not authenticate its contents, and the bridge does not treat it as trusted routing or authorization data. Integrators should only use it for optional UX or application metadata, not for any security-critical decision.
+
+## Recipient Discovery
+
+The standard receive path is on-chain.
+
+For `transfer_send`, the bridge:
+
+- stores recipient-side encrypted note material in `TxnData`
+- emits `ExternalTransfer(prefix6, txHash)`
+
+`prefix6` is derived from the first 6 bytes of the recipient owner hash. Recipient wallets filter logs by that prefix, fetch candidate `txHash` records, attempt decryption, and then claim matching notes.
+
+No off-chain inbox publish step is required for the standard protocol flow.
+
+## Lookup Surface
+
+Successful `mint`, `burn`, and `transfer` calls persist:
+
+- `nonce_hash -> txn_hash`
+- `commitment -> txn_hash`
+- `txn_hash -> TxnData`
+
+That lookup surface lets wallets recover note-chain state and encrypted payloads without relying only on events. `elementExists(bytes32)` remains a convenience helper over `Rollup.exists(bytes32)`.
+
+## Deposit Safety
+
+Incoming token pulls for `mint(...)` must increase the bridge's token balance by exactly the requested amount. Tokens with fee-on-transfer / transfer-tax behavior are therefore not accepted for deposits, because the bridge refuses to mint more privacy balance than it actually receives.

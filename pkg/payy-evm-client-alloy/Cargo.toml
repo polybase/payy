@@ -1,0 +1,12 @@
+[package]
+name = "payy-evm-client-alloy"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+alloy = { workspace = true }
+async-trait = { workspace = true }
+contextful = { workspace = true }
+payy-evm-client-interface = { workspace = true }
+tokio = { workspace = true }
+workspace-hack.workspace = true

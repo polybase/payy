@@ -14,4 +14,5 @@ workspace-hack.workspace = true
 
 [features]
 default = []
+bb_rs = ["dep:bb_rs"]
 max_params = []

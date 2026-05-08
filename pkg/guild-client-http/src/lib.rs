@@ -9,9 +9,9 @@
 //! HTTPS client for guild
 
 use auth::GuildClientHttpAuth;
+use bungee_interface::client::GetTokenListOutput;
 use client_http::ClientHttp;
 use element::Element;
-use guild_interface::bungee::GetTokenListOutput;
 pub use reqwest::Url;
 use reqwest::header::HeaderMap;
 use std::sync::Arc;
@@ -28,12 +28,16 @@ mod auth;
 /// EIP-7702 client methods
 pub mod eip7702;
 mod error;
+/// Invest / yield methods
+pub mod invest;
 /// Migration methods
 pub mod migrate;
 /// Mint client methods
 pub mod mint;
 /// Note client methods
 pub mod note;
+/// Prices methods
+pub mod prices;
 /// Ramps methods
 pub mod ramps;
 /// Registry client methods

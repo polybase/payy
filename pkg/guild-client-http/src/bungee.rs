@@ -1,12 +1,13 @@
-use client_http::HttpBody;
-use guild_interface::bungee::{
-    self, GetQuoteInput, GetQuoteOutput, GetStatusInput, GetStatusOutput, GetTokenListOutput,
+use bungee_interface::client::{
+    Error as BungeeError, GetQuoteInput, GetQuoteOutput, GetStatusInput, GetStatusOutput,
+    GetTokenListOutput,
 };
+use client_http::HttpBody;
 
 use crate::GuildClientHttp;
 
 /// Bungee client methods
-pub type Error = client_http::Error<bungee::Error>;
+pub type Error = client_http::Error<BungeeError>;
 
 impl GuildClientHttp {
     /// Get a Bungee (Inbox) quote from Guild

@@ -14,7 +14,7 @@ use zk_primitives::bridged_polygon_usdc_note_kind;
 
 #[cfg(feature = "diesel")]
 use crate::derive_pg_text_enum;
-use crate::provider::Provider;
+use crate::{Error, Result, provider::Provider};
 
 use super::{Category, FundingStatus, Status, TransactionStatusReason};
 
@@ -40,6 +40,7 @@ pub struct Transaction {
     pub provider: Provider,
     pub external_id: Option<String>,
     pub external_fund_id: Option<String>,
+    pub local_id: Option<String>,
     pub status: Status,
     pub funding_status: Option<FundingStatus>,
     pub funding_kind: FundingKind,
@@ -81,6 +82,7 @@ impl Default for Transaction {
             provider: Provider::Alfred,
             external_id: None,
             external_fund_id: None,
+            local_id: None,
             status: Status::Pending,
             funding_status: None,
             funding_kind: FundingKind::Crypto,
@@ -113,11 +115,13 @@ impl Default for Transaction {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransactionKind {
     Deposit,
     DepositLink,
     Withdraw,
     Card,
+    Swap,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -161,17 +165,38 @@ impl Transaction {
 
     #[must_use]
     pub fn kind(&self) -> TransactionKind {
+        match self.try_kind() {
+            Ok(kind) => kind,
+            Err(err) => unreachable!("{err}"),
+        }
+    }
+
+    /// Returns the derived transaction kind for the current persisted state.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::Error::InvalidTransactionKindState`] when the network
+    /// and funding-kind combination does not map to a valid ramps transaction
+    /// kind.
+    pub fn try_kind(&self) -> Result<TransactionKind> {
         match (self.from_network, self.to_network) {
-            (Network::Card, _) | (_, Network::Card) => TransactionKind::Card,
-            (Network::Payy, _) => TransactionKind::Withdraw,
+            (Network::Card, _) | (_, Network::Card) => Ok(TransactionKind::Card),
+            (Network::Payy, Network::Payy) => Ok(TransactionKind::Swap),
+            (Network::Payy, _) => Ok(TransactionKind::Withdraw),
             (_, Network::Payy) => match self.funding_kind {
-                FundingKind::Crypto => TransactionKind::Deposit,
-                FundingKind::Link => TransactionKind::DepositLink,
-                FundingKind::UserRemoteNotes => {
-                    unreachable!("invalid funding kind UserRemoteNotes for deposit")
-                }
+                FundingKind::Crypto => Ok(TransactionKind::Deposit),
+                FundingKind::Link => Ok(TransactionKind::DepositLink),
+                FundingKind::UserRemoteNotes => Err(Error::InvalidTransactionKindState {
+                    from_network: self.from_network,
+                    to_network: self.to_network,
+                    funding_kind: self.funding_kind,
+                }),
             },
-            _ => unreachable!("one of to_network, from_network must be Network::Payy"),
+            _ => Err(Error::InvalidTransactionKindState {
+                from_network: self.from_network,
+                to_network: self.to_network,
+                funding_kind: self.funding_kind,
+            }),
         }
     }
 

@@ -1,6 +1,7 @@
+use network::Network;
 use rpc::{code::ErrorCode, error::HTTPError};
 
-use crate::Error;
+use crate::{Error, FundingKind, Transaction};
 
 #[test]
 fn invalid_auth_keeps_legacy_unauthorized_reason() {
@@ -28,4 +29,23 @@ fn permission_denied_uses_permission_denied_reason() {
         http_error.message(),
         "[ramps-interface] permission denied: admin token lacks required scope"
     );
+}
+
+#[test]
+fn try_kind_rejects_invalid_network_state() {
+    let transaction = Transaction {
+        from_network: Network::Polygon,
+        to_network: Network::Ethereum,
+        funding_kind: FundingKind::Crypto,
+        ..Transaction::default()
+    };
+
+    assert!(matches!(
+        transaction.try_kind(),
+        Err(Error::InvalidTransactionKindState {
+            from_network: Network::Polygon,
+            to_network: Network::Ethereum,
+            funding_kind: FundingKind::Crypto,
+        })
+    ));
 }

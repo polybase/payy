@@ -1,0 +1,14 @@
+---
+source: pkg/bungee-interface/src/client/tests.rs
+expression: output
+---
+{
+  "error": {
+    "code": "bad-request",
+    "reason": "unsupported-source-chain-id",
+    "message": "[bungee-interface/client] unsupported source chain id: 8453",
+    "data": {
+      "chain_id": 8453
+    }
+  }
+}

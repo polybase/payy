@@ -14,7 +14,7 @@ use tempfile::NamedTempFile;
 use std::os::unix::fs::PermissionsExt;
 
 use crate::{
-    cli::Cli,
+    cli::{Cli, normalize_cli_args},
     display::ColorMode,
     error::Result,
     output::{CommandOutput, OutputMode, with_loading},
@@ -119,8 +119,8 @@ where
     S: Into<OsString>,
 {
     let args = args.into_iter().map(Into::into).collect::<Vec<_>>();
-    let cli =
-        Cli::try_parse_from(args.iter().cloned()).context("parse beam args for update restart")?;
+    let cli = Cli::try_parse_from(normalize_cli_args(args.iter().cloned()))
+        .context("parse beam args for update restart")?;
 
     if !cli.is_interactive() {
         return Ok(None);

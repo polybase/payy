@@ -9,7 +9,9 @@ contextful = { workspace = true }
 currency = { workspace = true }
 data = { workspace = true }
 element = { workspace = true }
+network = { workspace = true }
 notes-interface = { workspace = true }
+price-cache-interface = { workspace = true }
 primitives = { workspace = true }
 rpc = { workspace = true }
 rpc-error-convert = { workspace = true }

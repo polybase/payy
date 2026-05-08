@@ -1,32 +1,18 @@
 // lint-long-file-override allow-max-lines=300
-use std::fmt;
-
 use contextful::{FromContextful, InternalError};
 use element::Element;
 use kyc::{KycStatus, KycUpdateRequired};
+use network::Network;
 use rpc::{
     HTTPErrorConversion,
     code::ErrorCode,
     error::{ErrorOutput, HTTPError, TryFromHTTPError},
 };
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::transaction::FundingStatus;
-
-/// Convenience result alias for ramps operations.
-pub type Result<T, E = Error> = std::result::Result<T, E>;
-
-/// Identifiers describing how an account lookup was performed.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[allow(clippy::enum_variant_names)]
-pub enum AccountKind {
-    AccountId,
-    WalletId,
-    CardId,
-    ExternalId,
-    KycExternalId,
-}
+pub use crate::account_kind::AccountKind;
+pub use crate::result::Result;
+use crate::transaction::{FundingKind, FundingStatus};
 
 #[derive(Debug, Error, HTTPErrorConversion, FromContextful)]
 pub enum Error {
@@ -67,6 +53,14 @@ pub enum Error {
         min: Option<Element>,
         max: Option<Element>,
     },
+
+    #[error("[ramps-interface] transaction amount does not match funding note amount")]
+    #[failed_precondition("transaction-amount-mismatch")]
+    AmountMismatch { expected: Element, got: Element },
+
+    #[error("[ramps-interface] invalid swap amount")]
+    #[bad_request("invalid-swap-amount")]
+    InvalidSwapAmount,
 
     #[error("[ramps-interface] invalid provider")]
     #[bad_request("invalid-provider")]
@@ -115,6 +109,23 @@ pub enum Error {
     #[error("[ramps-interface] unsupported network")]
     UnsupportedNetwork,
 
+    #[error(
+        "[ramps-interface] invalid transaction kind state for from_network {from_network:?}, to_network {to_network:?}, funding_kind {funding_kind:?}"
+    )]
+    InvalidTransactionKindState {
+        from_network: Network,
+        to_network: Network,
+        funding_kind: FundingKind,
+    },
+
+    #[error("[ramps-interface] unsupported swap pair")]
+    #[bad_request("unsupported-swap-pair")]
+    UnsupportedSwapPair,
+
+    #[error("[ramps-interface] transaction note kind does not match funding note kind")]
+    #[failed_precondition("transaction-note-kind-mismatch")]
+    NoteKindMismatch { expected: Element, got: Element },
+
     #[error("[ramps-interface] unsupported currency for provider")]
     UnsupportedProviderCurrency,
 
@@ -155,6 +166,10 @@ pub enum Error {
     #[error("[ramps-interface] payy network is required in either to or from")]
     #[bad_request("payy-network-required")]
     PayyNetworkRequired,
+
+    #[error("[ramps-interface] payy ramps account is missing")]
+    #[internal("payy-account-missing")]
+    PayyAccountMissing,
 
     #[error("[ramps-interface] account not found")]
     #[not_found("account-not-found")]
@@ -199,6 +214,14 @@ pub enum Error {
     #[failed_precondition("insufficient-funds")]
     InsufficientFunds,
 
+    #[error("[ramps-interface] token price not found")]
+    #[failed_precondition("token-price-unavailable")]
+    TokenPriceNotFound,
+
+    #[error("[ramps-interface] token price is stale")]
+    #[failed_precondition("token-price-stale")]
+    TokenPriceStale,
+
     #[error("[ramps-interface] transaction can only be cancelled")]
     #[bad_request("transaction-can-only-be-cancelled")]
     TransactionCanOnlyBeCancelled,
@@ -210,6 +233,10 @@ pub enum Error {
     #[error("[ramps-interface] transaction is in progress and cannot be cancelled")]
     #[failed_precondition("transaction-in-progress-cannot-be-cancelled")]
     TransactionCannotBeCancelled,
+
+    #[error("[ramps-interface] transaction cannot be funded in its current state")]
+    #[failed_precondition("transaction-cannot-be-funded")]
+    TransactionCannotBeFunded,
 
     #[error("[ramps-interface] transaction evm address cannot be updated")]
     #[failed_precondition("transaction-evm-address-cannot-be-updated")]
@@ -224,6 +251,14 @@ pub enum Error {
 
     #[error("[ramps-interface] declined transaction with spent notes")]
     DeclinedTransactionWithSpentNotes,
+
+    #[error("[ramps-interface] funding note is already spent")]
+    #[failed_precondition("note-already-spent")]
+    NoteAlreadySpent,
+
+    #[error("[ramps-interface] funding note was not confirmed")]
+    #[failed_precondition("funding-note-not-confirmed")]
+    FundingNoteNotConfirmed,
 
     #[error(
         "[ramps-interface] MCC 6012 transactions are blocked unless they are $0 Visa Provisioning Service transactions"
@@ -243,6 +278,10 @@ pub enum Error {
     #[bad_request("declined-payy-transaction")]
     DeclinedPayyTransaction,
 
+    #[error("[ramps-interface] transaction below minimum amount of $0.10")]
+    #[bad_request("minimum-transaction-amount")]
+    MinimumTransactionAmount,
+
     #[error("[ramps-interface] invalid auth")]
     #[unauthenticated("unauthorized-to-perform-action")]
     InvalidAuth,
@@ -258,17 +297,4 @@ pub enum Error {
     /// Internal error.
     #[error("[ramps-interface] internal error")]
     Internal(#[from] InternalError),
-}
-
-impl fmt::Display for AccountKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let name = match self {
-            AccountKind::AccountId => "account_id",
-            AccountKind::WalletId => "wallet_id",
-            AccountKind::CardId => "card_id",
-            AccountKind::ExternalId => "external_id",
-            AccountKind::KycExternalId => "kyc_external_id",
-        };
-        f.write_str(name)
-    }
 }

@@ -11,6 +11,7 @@ import type { RampWithdrawExternal } from "./RampWithdrawExternal";
 import type { SendLinkExternal } from "./SendLinkExternal";
 import type { SendRegistryExternal } from "./SendRegistryExternal";
 import type { SupportExternal } from "./SupportExternal";
+import type { SwapExternal } from "./SwapExternal";
 import type { WorkerStatus } from "./WorkerStatus";
 
 export type ActivityExternalData =
@@ -73,6 +74,7 @@ export type ActivityExternalData =
     | { "kind": "RAMP_DEPOSIT_V1"; "data": RampDepositExternal }
     | { "kind": "RAMP_DEPOSIT_LINK_V1"; "data": NoExternalData }
     | { "kind": "RAMP_WITHDRAW_V1"; "data": RampWithdrawExternal }
+    | { "kind": "SWAP_V1"; "data": SwapExternal }
     | { "kind": "SUPPORT_V1"; "data": SupportExternal }
     | { "kind": "MIGRATE_V0"; "data": NoExternalData }
     | { "kind": "WALLET_V0"; "data": NoExternalData }

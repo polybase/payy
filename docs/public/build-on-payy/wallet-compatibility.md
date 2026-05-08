@@ -1,20 +1,25 @@
 # Wallet Compatibility
 
-Payy is compatible with all existing wallets, like Metamask and Phantom.
+Payy is compatible with existing wallets such as Metamask and Phantom, but private transfers require one extra piece of metadata beyond a normal EVM transfer: the recipient's Payy private address.
 
-### Viewing private balances
+## Viewing Private Balances
 
-When `eth_getBalance` is called, the RPC node requests  the Privacy for the user (as well as the public balance) to determine the complete balance for the user.
+When `eth_getBalance` is called, the RPC can combine public balance data with the user's private note data to present a full wallet balance view.
 
-### Sending a private transfer
+## Sending a Private Transfer
 
-Many wallets have built-in capabilities to send ERC-20 directly from within the wallet.
+Wallets and RPCs can still wrap the privacy flow behind familiar send UX, but the standard direct-send protocol now works like this:
 
-Sending an ERC-20 transfer `eth_sendRawTransaction()` can also transparently be upgraded.
+1. The user signs a transfer request and supplies the recipient's Payy private address off-chain.
+2. RPC / wallet service constructs a `transfer_send` proof and submits it to the native [`PrivacyBridge`](../protocol/privacybridge.md).
+3. `PrivacyBridge` verifies the proof, updates the Merkle tree, stores sender / recipient encrypted note data, and emits `ExternalTransfer(prefix6, txHash)` for recipient discovery.
+4. The recipient wallet watches matching prefix logs, decrypts the incoming note, and later claims it with `transfer_claim`.
 
-1. User sends the signed `transfer()` transaction to the RPC
-2. RPC constructs ZK proof and submits the transaction to the native `PrivacyBridge` - privacy bridge will verify the zk proof and update the merkle tree
-3. RPC will forward the private transaction data to the private storage of the receiving user. If the [`PrivacyVaultRegistry`](../protocol/privacyvaultregistry.md) contract contains a storage destination, then data will be sent there, otherwise it will be sent to the default Payy Network storage provider.
+The recipient private address is:
 
+- a hex-encoded compressed 32-byte Grumpkin public key
+- shared off-chain, similarly to how applications share destination payment details
+- distinct from the recipient's EVM address
+- defined canonically in the [privacy-layer private-address spec](../protocol/privacy-layer/private-address.md)
 
-
+If you only have an EVM address and no Payy private address, the RPC cannot construct the standard direct private send flow by itself.

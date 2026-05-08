@@ -7,4 +7,5 @@ export type WalletEvent =
   | { "type": "onBackupPress"; "payload": Record<string, never> }
   | { "type": "onSendPress"; "payload": Record<string, never> }
   | { "type": "onRequestPress"; "payload": Record<string, never> }
+  | { "type": "onYieldPress"; "payload": Record<string, never> }
   | { "type": "onCardBannerPress"; "payload": Record<string, never> };

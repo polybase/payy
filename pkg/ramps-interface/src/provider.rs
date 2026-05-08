@@ -39,6 +39,7 @@ use crate::error::{Error, Result};
 pub enum Provider {
     Alfred,
     Manteca,
+    Payy,
     Rain,
     Sumsub,
     Cybrid,

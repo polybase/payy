@@ -4,7 +4,6 @@ export type AdvancedViewModel = {
   shareDiagnosticsLoading: boolean;
   copyDepositKeyLoading: boolean;
   fraudWarningsEnabled: boolean;
-  mainChainName: string;
   showDeleteAllData: boolean;
   deleteAllDataLoading: boolean;
   address: string | null;

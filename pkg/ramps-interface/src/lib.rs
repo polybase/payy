@@ -6,6 +6,7 @@
 //! HTTP layer (`ramps-rpc`) and business logic implementations.
 
 pub mod account;
+mod account_kind;
 pub mod admin;
 pub mod document;
 pub mod error;
@@ -13,6 +14,8 @@ pub mod event;
 pub mod method;
 pub mod provider;
 pub mod quote;
+mod result;
+pub mod swap_pricer;
 pub mod transaction;
 pub mod util;
 pub mod webhooks;
@@ -21,13 +24,16 @@ pub mod webhooks;
 mod tests;
 
 pub use account::*;
+pub use account_kind::AccountKind;
 pub use admin::*;
 pub use document::*;
-pub use error::{Error, Result};
+pub use error::Error;
 pub use event::*;
 pub use method::*;
 pub use provider::*;
 pub use quote::*;
+pub use result::Result;
+pub use swap_pricer::*;
 pub use transaction::*;
 pub use util::*;
 pub use webhooks::*;
