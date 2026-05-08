@@ -9,12 +9,13 @@ use clap::{ArgGroup, Args, ValueEnum};
 use crate::error::{Result, XTaskError, workspace_root};
 use crate::lint::steps::{
     StepResult, print_step, run_ast_grep, run_claude_doc, run_clippy, run_file_length, run_hakari,
-    run_i18n_consistency, run_rustfmt, run_taplo_check, run_taplo_fmt, run_workspace_deps,
+    run_i18n_consistency, run_rustfmt, run_spec_lint, run_taplo_check, run_taplo_fmt,
+    run_workspace_deps,
 };
 /// Available linter types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum LinterType {
-    /// GENERATED_AI_GUIDANCE.md regeneration
+    /// CLAUDE.md regeneration
     ClaudeGuidelines,
     /// Rust formatter
     Rustfmt,
@@ -22,6 +23,8 @@ pub enum LinterType {
     Taplo,
     /// AST-based linting
     AstGrep,
+    /// Spec lint for docs/specs and docs/specs-wip
+    SpecLint,
     /// Rust linter
     Clippy,
     /// File length checker
@@ -105,6 +108,12 @@ fn run_sync_linters(
         results,
         LinterType::AstGrep,
         Box::new(|| run_ast_grep(repo_root)),
+    )?;
+    run_conditional_linter(
+        filters,
+        results,
+        LinterType::SpecLint,
+        Box::new(|| run_spec_lint(repo_root)),
     )?;
     run_conditional_linter(
         filters,

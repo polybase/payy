@@ -11,7 +11,7 @@ These addresses are fixed by the `payy-evm` implementation and are the canonical
 | Poseidon | `0x0000000000000000000000000000000000000101` | Public | `10,000 + 1,000 × element_count` | Poseidon hash over one or more 32-byte field elements |
 | BlockTimestampMs | `0x0000000000000000000000000000000000000999` | Public | `2` | Returns the current block timestamp in milliseconds |
 | BB Verify | `0x0000000000000000000000000000000000000998` | Public | `50,000 + 10 × calldata_bytes` | Verifies a Barretenberg proof against supplied key and public inputs |
-| Privacy Proof Verify | `0x0000000000000000000000000000000000000997` | Public | `0` | Verifies supported privacy proofs and decodes transfer / burn / mint outputs |
+| Privacy Proof Verify | `0x0000000000000000000000000000000000000997` | Public | `0` | Verifies supported privacy proofs and returns the proof category |
 | Native Transfer | `0x0000000000000000000000000000000000000100` | Internal-only — `PUSD` predeploy `0x0200000000000000000000000000000000000000` | `2` | Moves native balances for `PUSD` without requiring `msg.value` |
 | Smirk Add | `0x0000000000000000000000000000000000000102` | Internal-only — `Rollup` predeploy `0x3200000000000000000000000000000000000000` | `170,000` | Inserts a leaf into the privacy layer sparse merkle tree |
 | Smirk Remove | `0x0000000000000000000000000000000000000103` | Internal-only — `Rollup` predeploy `0x3200000000000000000000000000000000000000` | `170,000` | Removes a leaf from the privacy layer sparse merkle tree |
@@ -57,9 +57,9 @@ These addresses are fixed by the `payy-evm` implementation and are the canonical
 - **Address:** `0x0000000000000000000000000000000000000997`
 - **Access:** Public
 - **Canonical calldata:** `abi.encodeWithSignature("verifyPrivacyProof(bytes32,bytes,bytes32[])", verificationKeyHash, proof, publicInputs)`
-- **Canonical return data:** `(uint8 kind, bytes32[] elements, uint256 value, address burnAddress)`
+- **Canonical return data:** a single ABI-encoded `uint8 kind` word.
 - **Gas:** `0`
-- **Notes:** `kind` is `1` for transfer proofs, `2` for burn proofs, and `3` for mint proofs. `elements` contains the non-zero note commitments / nullifiers returned by the verifier. `value` is populated for burn and mint proofs, while `burnAddress` is only populated for burn proofs. This is the precompile consumed by [PrivacyBridge](privacybridge.md).
+- **Notes:** `kind` is `1` for `transfer_send`, `2` for `burn`, `3` for `mint`, and `4` for `transfer_claim`. The precompile verifies the proof and returns that circuit variant id; callers read the canonical 33-field public input vector directly from `publicInputs`. All four registered layouts share the same field order: `chain_id`, `bridge_address`, `recent_root`, `input_nullifier_0`, `input_nullifier_1`, `output_commitment_0`, `output_commitment_1`, `nonce_hash`, `user_encrypted_key_hash`, `recipient_encrypted_key_hash`, `sender_encrypted_note[5]`, `recipient_encrypted_note[5]`, `sender_chain_encrypted_key[3]`, `recipient_chain_encrypted_key[3]`, `chain_public_key_x`, `chain_public_key_y`, `token`, `burn_recipient`, `value`, `mint_from`, and `receive_prefix`. Circuits zero-fill and zero-constrain unused slots instead of using variant-specific public input lengths.
 
 ## Native Transfer
 

@@ -18,4 +18,4 @@ if [ -n "$non_delete_status" ]; then
   exit 1
 else
   echo "✅ Rust and TypeScript types are in sync."
-fi 
+fi

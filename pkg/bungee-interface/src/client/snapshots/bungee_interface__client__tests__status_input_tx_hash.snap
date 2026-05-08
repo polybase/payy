@@ -1,0 +1,10 @@
+---
+source: pkg/bungee-interface/src/client/tests.rs
+expression: pairs
+---
+[
+  [
+    "txHash",
+    "0xtx"
+  ]
+]

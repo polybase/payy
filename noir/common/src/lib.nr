@@ -1,3 +1,4 @@
+// SPEC(docs/specs/privacy-protocol#shared-noir-common-modules)
 mod bytes;
 mod field_utils;
 mod merkle_path;

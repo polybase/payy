@@ -1,9 +1,15 @@
-// lint-long-file-override allow-max-lines=280
+// lint-long-file-override allow-max-lines=300
+mod fetch;
+mod normalize;
+
 pub mod util;
 
 use clap::{Args, Parser, Subcommand};
 
 use crate::{display::ColorMode, output::OutputMode, runtime::InvocationOverrides};
+
+pub use fetch::FetchArgs;
+pub(crate) use normalize::normalize_cli_args;
 use util::UtilAction;
 
 #[derive(Debug, Parser)]
@@ -21,7 +27,7 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub chain: Option<String>,
 
-    #[arg(long, global = true, value_enum, default_value_t = OutputMode::Default)]
+    #[arg(long = "format", global = true, value_enum, default_value_t = OutputMode::Default)]
     pub output: OutputMode,
 
     #[arg(
@@ -84,6 +90,8 @@ pub enum Command {
     Call(CallArgs),
     /// Send a contract transaction
     Send(SendArgs),
+    /// Fetch an HTTP resource and handle x402 / MPP payment challenges
+    Fetch(FetchArgs),
     /// Check for beam updates
     Update,
     #[command(name = "__refresh-update-status", hide = true)]

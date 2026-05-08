@@ -35,6 +35,12 @@ pub struct FunctionCall<'a> {
     pub value: U256,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TransactionGas {
+    pub gas_limit: U256,
+    pub gas_price: U256,
+}
+
 pub async fn native_balance(client: &Client, address: Address) -> Result<U256> {
     let balance = client
         .eth_balance(address)
@@ -111,8 +117,19 @@ pub async fn send_native<S: Signer>(
     on_status: impl FnMut(TransactionStatusUpdate),
     cancel: impl std::future::Future,
 ) -> Result<TransactionExecution> {
-    let gas = estimate_gas(client, signer.address(), to, &[], amount).await?;
-    let tx = fill_transaction(client, signer.address(), to, Vec::new(), amount, gas).await?;
+    send_native_with_gas(client, signer, to, amount, None, on_status, cancel).await
+}
+
+pub async fn send_native_with_gas<S: Signer>(
+    client: &Client,
+    signer: &S,
+    to: Address,
+    amount: U256,
+    gas: Option<TransactionGas>,
+    on_status: impl FnMut(TransactionStatusUpdate),
+    cancel: impl std::future::Future,
+) -> Result<TransactionExecution> {
+    let tx = prepare_transaction(client, signer.address(), to, Vec::new(), amount, gas).await?;
     submit_transaction(client, signer, tx, on_status, cancel).await
 }
 
@@ -123,9 +140,19 @@ pub async fn send_function<S: Signer>(
     on_status: impl FnMut(TransactionStatusUpdate),
     cancel: impl std::future::Future,
 ) -> Result<TransactionExecution> {
+    send_function_with_gas(client, signer, call, None, on_status, cancel).await
+}
+
+pub async fn send_function_with_gas<S: Signer>(
+    client: &Client,
+    signer: &S,
+    call: FunctionCall<'_>,
+    gas: Option<TransactionGas>,
+    on_status: impl FnMut(TransactionStatusUpdate),
+    cancel: impl std::future::Future,
+) -> Result<TransactionExecution> {
     let data = encode_input(call.function, call.args)?;
-    let gas = estimate_gas(client, signer.address(), call.contract, &data, call.value).await?;
-    let tx = fill_transaction(
+    let tx = prepare_transaction(
         client,
         signer.address(),
         call.contract,
@@ -137,18 +164,26 @@ pub async fn send_function<S: Signer>(
     submit_transaction(client, signer, tx, on_status, cancel).await
 }
 
+async fn prepare_transaction(
+    client: &Client,
+    from: Address,
+    to: Address,
+    data: Vec<u8>,
+    value: U256,
+    gas: Option<TransactionGas>,
+) -> Result<TransactionParameters> {
+    let gas = resolve_transaction_gas(client, from, to, &data, value, gas).await?;
+    fill_transaction(client, from, to, data, value, gas).await
+}
+
 async fn fill_transaction(
     client: &Client,
     from: Address,
     to: Address,
     data: Vec<u8>,
     value: U256,
-    gas: U256,
+    gas: TransactionGas,
 ) -> Result<TransactionParameters> {
-    let gas_price = client
-        .fast_gas_price()
-        .await
-        .context("fetch beam gas price")?;
     let nonce = client.nonce(from).await.context("fetch beam nonce")?;
     let chain_id = client
         .chain_id()
@@ -159,8 +194,8 @@ async fn fill_transaction(
     Ok(TransactionParameters {
         chain_id: Some(chain_id),
         data: Bytes(data),
-        gas,
-        gas_price: Some(gas_price),
+        gas: gas.gas_limit,
+        gas_price: Some(gas.gas_price),
         nonce: Some(nonce),
         to: Some(to),
         value,
@@ -168,7 +203,40 @@ async fn fill_transaction(
     })
 }
 
-async fn estimate_gas(
+async fn resolve_transaction_gas(
+    client: &Client,
+    from: Address,
+    to: Address,
+    data: &[u8],
+    value: U256,
+    gas: Option<TransactionGas>,
+) -> Result<TransactionGas> {
+    match gas {
+        Some(gas) => Ok(gas),
+        None => estimate_transaction_gas(client, from, to, data, value).await,
+    }
+}
+
+async fn estimate_transaction_gas(
+    client: &Client,
+    from: Address,
+    to: Address,
+    data: &[u8],
+    value: U256,
+) -> Result<TransactionGas> {
+    let gas_limit = estimate_gas_limit(client, from, to, data, value).await?;
+    let gas_price = client
+        .fast_gas_price()
+        .await
+        .context("fetch beam gas price")?;
+
+    Ok(TransactionGas {
+        gas_limit,
+        gas_price,
+    })
+}
+
+async fn estimate_gas_limit(
     client: &Client,
     from: Address,
     to: Address,

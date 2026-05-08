@@ -4,6 +4,7 @@ mod command;
 mod formatting;
 mod hakari;
 mod result;
+mod spec_lint;
 mod workspace_deps;
 
 pub use checks::{
@@ -14,4 +15,5 @@ pub use command::run_command;
 pub use formatting::{run_rustfmt, run_taplo_fmt};
 pub use hakari::run_hakari;
 pub use result::{StepResult, print_step};
+pub use spec_lint::run_spec_lint;
 pub use workspace_deps::run_workspace_deps;

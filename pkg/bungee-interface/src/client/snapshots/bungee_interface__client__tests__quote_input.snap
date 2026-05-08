@@ -1,0 +1,13 @@
+---
+source: pkg/bungee-interface/src/client/tests.rs
+expression: value
+---
+{
+  "destination_chain_id": 42161,
+  "input_amount": "0x7b",
+  "input_token": "0x0000000000000000000000000000000000000001",
+  "output_token": "0x0000000000000000000000000000000000000002",
+  "receiver_address": "0x0000000000000000000000000000000000000003",
+  "source_chain_id": 10,
+  "user_address": "0x0000000000000000000000000000000000000004"
+}

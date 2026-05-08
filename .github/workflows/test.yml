@@ -238,9 +238,10 @@ jobs:
       - name: Run Clippy
         run: |
           cargo hack clippy \
+            --locked \
             --workspace --all-targets \
             --feature-powerset \
-            --exclude-features bb_rs,bb_utxo
+            --exclude-features bb_rs,bb_utxo,bb-bindings
 
       - name: Verify rust-i18n translations
         run: cargo i18n

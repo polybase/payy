@@ -1,0 +1,13 @@
+---
+source: pkg/bungee-interface/src/client/tests.rs
+expression: value
+---
+{
+  "statuses": [
+    {
+      "code": 3,
+      "destination_tx_hash": "0xabc",
+      "label": "FULFILLED"
+    }
+  ]
+}

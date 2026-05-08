@@ -13,10 +13,12 @@ use super::{Status, Transaction, TransactionKind};
 
 mod card;
 mod deposit;
+mod swap;
 mod withdraw;
 
 pub use card::*;
 pub use deposit::*;
+pub use swap::*;
 pub use withdraw::*;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -34,6 +36,7 @@ pub enum RampTransactionKind {
     Withdraw(RampWithdrawTransaction),
     Deposit(RampDepositTransaction),
     DepositLink(RampDepositLinkTransaction),
+    Swap(RampSwapTransaction),
 }
 
 impl From<Transaction> for RampTransaction {
@@ -43,6 +46,7 @@ impl From<Transaction> for RampTransaction {
             TransactionKind::Withdraw => RampTransactionKind::Withdraw(txn.clone().into()),
             TransactionKind::Deposit => RampTransactionKind::Deposit(txn.clone().into()),
             TransactionKind::DepositLink => RampTransactionKind::DepositLink(txn.clone().into()),
+            TransactionKind::Swap => RampTransactionKind::Swap(txn.clone().into()),
         };
 
         Self {

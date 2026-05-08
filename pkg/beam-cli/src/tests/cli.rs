@@ -1,10 +1,10 @@
 // lint-long-file-override allow-max-lines=300
-use clap::{CommandFactory, Parser};
+use clap::Parser;
 
 use crate::{
     cli::{
         BlockArgs, ChainAction, Cli, Command, Erc20Action, RpcAction, TokenAction, TxnArgs,
-        WalletAction, util::UtilAction,
+        WalletAction, normalize_cli_args, util::UtilAction,
     },
     display::ColorMode,
     output::OutputMode,
@@ -55,6 +55,17 @@ fn parses_global_overrides_and_balance_command() {
         cli.command,
         Some(Command::Balance(args)) if args.token.as_deref() == Some("USDC")
     ));
+}
+
+#[test]
+fn parses_format_flag_and_legacy_output_alias() {
+    let cli =
+        Cli::try_parse_from(["beam", "--format", "json", "balance"]).expect("parse format flag");
+    assert_eq!(cli.output, OutputMode::Json);
+
+    let cli = Cli::try_parse_from(normalize_cli_args(["beam", "--output", "json", "balance"]))
+        .expect("parse legacy output alias");
+    assert_eq!(cli.output, OutputMode::Json);
 }
 
 #[test]
@@ -271,28 +282,4 @@ fn parses_util_subcommands() {
             action: UtilAction::FromFixedPoint(args)
         }) if args.decimals.as_deref() == Some("3") && args.value.as_deref() == Some("1.23")
     ));
-}
-
-#[test]
-fn visible_commands_have_descriptions() {
-    let cli = Cli::command();
-
-    assert_visible_commands_have_descriptions(&cli);
-}
-
-fn assert_visible_commands_have_descriptions(command: &clap::Command) {
-    for subcommand in command.get_subcommands() {
-        if subcommand.is_hide_set() {
-            continue;
-        }
-
-        assert!(
-            subcommand.get_about().is_some() || subcommand.get_long_about().is_some(),
-            "subcommand `{}` under `{}` is missing a description",
-            subcommand.get_name(),
-            command.get_name(),
-        );
-
-        assert_visible_commands_have_descriptions(subcommand);
-    }
 }

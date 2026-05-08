@@ -93,6 +93,9 @@ support = { path = "./pkg/support" }
 p2p = { path = "./pkg/p2p" }
 p2p2 = { path = "./pkg/p2p2" }
 parse-link = { path = "./pkg/parse-link" }
+price-cache-http = { path = "./pkg/price-cache-http" }
+price-cache-interface = { path = "./pkg/price-cache-interface" }
+price-cache-pg = { path = "./pkg/price-cache-pg" }
 posthog-interface = { path = "./pkg/posthog-interface" }
 posthog = { path = "./pkg/posthog" }
 kyc = { path = "./pkg/kyc" }
@@ -118,11 +121,19 @@ eip7702 = { path = "./pkg/eip7702" }
 payy_core = { path = "./pkg/payy_core" }
 payy_core_types = { path = "./pkg/payy_core_types" }
 payy-note = { path = "./pkg/payy-note" }
+payy-evm-parse-link = { path = "./pkg/payy-evm-parse-link" }
+payy-evm-client-interface = { path = "./pkg/payy-evm-client-interface" }
+payy-evm-client-prover-interface = { path = "./pkg/payy-evm-client-prover-interface" }
+payy-evm-client-prover-bb = { path = "./pkg/payy-evm-client-prover-bb" }
+payy-evm-client = { path = "./pkg/payy-evm-client" }
+payy-evm-client-alloy = { path = "./pkg/payy-evm-client-alloy" }
 noir-abi-inputs-macro = { path = "./pkg/noir-abi-inputs-macro" }
 bungee-interface = { path = "./pkg/bungee-interface" }
 bungee-client-http = { path = "./pkg/bungee-client-http" }
+bungee = { path = "./pkg/bungee" }
 slack-client-interface = { path = "./pkg/slack-client-interface" }
 slack-client-http = { path = "./pkg/slack-client-http" }
+swap-pricer-price-cache = { path = "./pkg/swap-pricer-price-cache" }
 ramps-interface = { path = "./pkg/ramps-interface" }
 ramps-providers-interface = { path = "./pkg/ramps-providers-interface" }
 ramps-storage-interface = { path = "./pkg/ramps-storage-interface" }
@@ -163,7 +174,7 @@ workspace-hack = "0.1"
 ts-rs = { version = "^11.1.0", features = ["format", "chrono-impl", "uuid-impl"] }
 actix-cors = "0.6.4"
 actix-server = "2.3.0"
-actix-web = "4.12.1"
+actix-web = "4.13.0"
 axum = "0.7"
 tower = "0.5"
 tower-http = "0.6"
@@ -177,6 +188,10 @@ alloy-evm = "0.26.3"
 alloy-genesis = "1.4.3"
 alloy-primitives = "1.5.0"
 alloy-rpc-types-engine = "1.4.3"
+alloy-rpc-types-eth = "1.4.3"
+alloy-signer = "1"
+alloy-signer-local = { version = "1", features = ["secp256k1"] }
+alloy-sol-types = "1"
 httpmock = "0.8.2"
 mime = "0.3.17"
 acvm = { git = "https://github.com/noir-lang/noir", tag = "v1.0.0-beta.14" }
@@ -200,7 +215,7 @@ async-recursion = "1.1.1"
 async-stream = "0.3.6"
 async-fn-stream = "0.3.2"
 base64 = "0.22.1"
-bb_rs = { package = "polybase_bb_rs", git = "https://github.com/polybase/aztec-packages", rev = "7ad5d5c892f1396ca572da4b2e29a761d1f11f1f" } # v3.0.0-manual.20251030-polybase
+bb_rs = { package = "polybase_bb_rs", git = "https://github.com/polybase/aztec-packages", rev = "14afe4c5e350ca8a650f8e5929385a27a0294275" } # v3.0.0-manual.20251030-polybase
 benchy = "0.1.1"
 bigdecimal = { version = "0.4.8", features = ["serde"] }
 bitvec = "1.0.1"
@@ -246,7 +261,7 @@ hex = { version = "0.4", features = ["serde"] }
 hmac = "0.12"
 home = "0.5.11"
 indoc = "2"
-indexmap = { version = "2.13", features = ["serde"] }
+indexmap = { version = "2.14", features = ["serde"] }
 insta = { version = "1", features = ["json"] }
 itertools = "0.14.0"
 jsonwebtoken = { version = "10", features = ["rust_crypto"] }
@@ -266,20 +281,22 @@ libp2p = { version = "0.51", default-features = false, features = [
 libp2p-core = { version = "0.39.2" }
 notify = "6"
 num-bigint = "0.4.6"
+num-traits = "0.2"
 openssl = { version = "0.10.75", default-features = false }
 once_cell = "1.19.0"
 parking_lot = "0.12.1"
 phonenumber = "0.3"
 pretty-hex = "0.3.0"
-proptest = "1.6.0"
+proptest = "1.11.0"
 proc-macro2 = "1.0"
 quote = "1.0"
 quickcheck = "1.0.3"
 rand = "0.8.5"
 rand_chacha = "0.3.1"
-rand_xorshift = "0.3"
-reqwest = { version = "0.12", features = ["json", "multipart"] }
+rand_xorshift = "0.4"
+reqwest = { version = "0.12", features = ["json", "multipart", "stream"] }
 rlp = "0.6.1"
+rmp-serde = "1.3.1"
 rocksdb = "0.21"
 rpassword = "7.4.0"
 rustc-hex = "2.1.0"
@@ -289,6 +306,7 @@ sentry = "0.46.0"
 sentry-tracing = "0.46.2"
 serde = { version = "1.0.221", features = ["derive"] }
 serde_json = "1.0.145"
+serde_urlencoded = "0.7.1"
 serde_qs = "0.15.0"
 serde_bytes = "0.11.19"
 serde_yaml_ng = "0.10.0"
@@ -302,6 +320,7 @@ shlex = "1.3.0"
 sha1 = "0.10.1"
 sha2 = "0.10.6"
 sha3 = "0.10.1"
+zstd = "0.13.3"
 self-replace = "1.5.0"
 spinoff = "0.8.0"
 syn = { version = "2.0", features = ["full", "extra-traits"] }
@@ -340,7 +359,7 @@ serial_test = { version = "3.0.0", features = ["file_locks"] }
 borsh = { version = "1", features = ["derive", "de_strict_order", "rc"] }
 opentelemetry = { version = "0.31.0", features = ["metrics", "trace"] }
 opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio", "metrics", "trace"] }
-opentelemetry-otlp = { version = "0.31.0", features = ["grpc-tonic", "trace", "metrics"] }
+opentelemetry-otlp = { version = "0.31.1", features = ["grpc-tonic", "trace", "metrics"] }
 tracing-opentelemetry = "0.32.0"
 x25519-dalek = { version = "2.0.1", features = ["static_secrets"] }
 

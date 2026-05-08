@@ -1,0 +1,14 @@
+---
+source: pkg/bungee-interface/src/client/tests.rs
+expression: value
+---
+{
+  "approval_amount": "0x3e7",
+  "approval_spender": "0x0000000000000000000000000000000000000006",
+  "output_amount": "0x1c8",
+  "quote_id": "qid-1",
+  "request_hash": "rh-1",
+  "tx_data": "0xdeadbeef",
+  "tx_to": "0x0000000000000000000000000000000000000005",
+  "tx_value": "0x315"
+}

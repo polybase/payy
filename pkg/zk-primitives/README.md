@@ -14,3 +14,5 @@ This package provides the fundamental zero-knowledge cryptographic primitives.
 - Note management
 - Address utilities
 - Aggregation circuits
+- Note-kind helpers for bridged assets, including Ethereum USTB, plus utilities
+  used by swap pricing to recover token network/address metadata from note kinds

@@ -21,14 +21,11 @@ mod signature;
 mod tests;
 mod utxo;
 
-pub use proof::Proof;
+pub use proc_macro_interface::{ProofInputs, PublicInputs};
+pub use proof::{Proof, ProofDecodeError, ProofDecodeErrorKind};
 pub use utxo::*;
 
-use crate::{
-    Prove, Result,
-    circuits::proc_macro_interface::{ProofInputs, PublicInputs},
-    prove::prove,
-};
+use crate::{Error, Prove, Result, prove::prove};
 
 #[async_trait]
 impl<T: ProofInputs> Prove for T
@@ -52,7 +49,8 @@ where
             T::PublicInputs::ORACLE_HASH_KECCAK,
         )
         .await?;
-        Ok(Proof::from_raw_proof_bytes(proof_bytes))
+        Ok(Proof::try_from_raw_proof_bytes(proof_bytes)
+            .map_err(|err| Error::ImplementationSpecific(Box::new(err)))?)
     }
 }
 
@@ -103,9 +101,10 @@ pub mod generated {
     generate_inputs!("../../fixtures/circuits/signature", signature);
     generate_inputs!("../../fixtures/circuits/utxo", utxo);
     generate_inputs!("../../fixtures/circuits/erc20_transfer", erc20_transfer);
-    generate_inputs!("../../fixtures/circuits/transfer", transfer);
     generate_inputs!("../../fixtures/circuits/mint", mint);
     generate_inputs!("../../fixtures/circuits/burn", burn);
+    generate_inputs!("../../fixtures/circuits/transfer_send", transfer_send);
+    generate_inputs!("../../fixtures/circuits/transfer_claim", transfer_claim);
 }
 
 pub fn get_bytecode_from_program(program_json: &str) -> Vec<u8> {

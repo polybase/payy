@@ -28,6 +28,3 @@ temp_fixtures
 
 # Claude Code completion markers
 .done
-
-# Symlink to GENERATED_AI_GUIDANCE.md (canonical file)
-CLAUDE.md

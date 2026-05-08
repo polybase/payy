@@ -1,0 +1,12 @@
+[package]
+name = "payy-evm-client-prover-interface"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+async-trait = { workspace = true }
+contextful = { workspace = true }
+payy-evm-client-interface = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+workspace-hack.workspace = true

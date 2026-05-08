@@ -1,0 +1,57 @@
+{
+  "name": "@payy/client",
+  "version": "0.1.2",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && mkdir -p dist/artifacts && cp src/artifacts/*.json dist/artifacts/",
+    "lint": "eslint 'src/**/*.ts'",
+    "prepublishOnly": "yarn test",
+    "test": "yarn build && node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@aztec/bb.js": "3.0.0-manual.20251030",
+    "@noble/hashes": "^1.4.0",
+    "@noir-lang/noir_js": "1.0.0-beta.14",
+    "bs58": "^6.0.0"
+  },
+  "peerDependencies": {
+    "ethers": "^6.15.0",
+    "viem": "^2.46.3"
+  },
+  "peerDependenciesMeta": {
+    "ethers": {
+      "optional": true
+    },
+    "viem": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "ethers": "^6.15.0",
+    "typescript": "^5.9.2",
+    "viem": "^2.46.3"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./viem": {
+      "types": "./dist/viem.d.ts",
+      "default": "./dist/viem.js"
+    },
+    "./ethers": {
+      "types": "./dist/ethers.d.ts",
+      "default": "./dist/ethers.js"
+    }
+  }
+}

@@ -34,6 +34,7 @@ network = { workspace = true }
 primitives = { workspace = true }
 rpc = { workspace = true }
 test-spy = { workspace = true }
+unimock = { workspace = true }
 chrono = { workspace = true }
 contextful = { workspace = true }
 serde = { workspace = true }

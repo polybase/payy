@@ -13,6 +13,7 @@ import type { GetBungeeTokenListInput } from "./GetBungeeTokenListInput";
 import type { GetDepositPendingBalanceLongPollInput } from "./GetDepositPendingBalanceLongPollInput";
 import type { GetMintBalanceInput } from "./GetMintBalanceInput";
 import type { GetUnclaimedBalanceLongPollInput } from "./GetUnclaimedBalanceLongPollInput";
+import type { GetYieldBalanceLongPollInput } from "./GetYieldBalanceLongPollInput";
 import type { ListActivityInput } from "./ListActivityInput";
 import type { ListActivityLongPollInput } from "./ListActivityLongPollInput";
 import type { LoadWalletInput } from "./LoadWalletInput";
@@ -28,6 +29,7 @@ import type { RetryActivityInput } from "./RetryActivityInput";
 import type { SendLinkInput } from "./SendLinkInput";
 import type { SendRegistryInput } from "./SendRegistryInput";
 import type { SignInput } from "./SignInput";
+import type { TreasurySwapInput } from "./TreasurySwapInput";
 
 export type Command =
   | { "cmd": "logs" }
@@ -49,6 +51,13 @@ export type Command =
   | { "cmd": "retry_activity"; "params": RetryActivityInput }
   | { "cmd": "get_balance" }
   | { "cmd": "get_balance_long_poll"; "params": GetBalanceLongPollInput }
+  | { "cmd": "get_yield_balance" }
+  | {
+    "cmd": "get_yield_balance_long_poll";
+    "params": GetYieldBalanceLongPollInput;
+  }
+  | { "cmd": "get_yield_position" }
+  | { "cmd": "treasury_swap"; "params": TreasurySwapInput }
   | { "cmd": "get_deposit_pending_balance" }
   | {
     "cmd": "get_deposit_pending_balance_long_poll";

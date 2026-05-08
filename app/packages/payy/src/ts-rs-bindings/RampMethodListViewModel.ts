@@ -8,5 +8,4 @@ export type RampMethodListViewModel = {
   methodItems: Array<RampMethodListItem>;
   loading: boolean;
   alertMessage: string | null;
-  network: string;
 };

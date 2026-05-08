@@ -1,67 +1,183 @@
 # Get Started
 
 {% hint style="warning" %}
-Payy Testnet and NPM packages are currently invite only - reach out to hello@payy.link for access.
+Payy Testnet and SDK packages are currently invite only - reach out to hello@payy.link for access.
 {% endhint %}
 
-Payy lets you authorise rich, wallet‑native transactions using typed signatures and execute them through the [TransactionBridge](../protocol/transactionbridge.md) with advanced features.&#x20;
+Use Payy's client SDKs for EVM privacy flows: private accounts, owned-note lookup, private balances, incoming-note discovery, proof preparation, and PrivacyBridge submission.
 
-You build Txn objects off‑chain with `@payy/viem`, sign them via EIP‑712, and send them through the bridge. After submission, inspect the transaction receipt and bridge status/events to confirm the outcome. Everything works with standard wallets and familiar viem primitives.
+For the full SDK guide, start with [Payy Client](payy-client/README.md).
 
-### Install
+## Install
 
-```
-npm install viem @payy/viem
+{% tabs %}
+
+{% tab title="viem" %}
+```bash
+npm install @payy/client viem
 # or
-yarn add viem @payy/viem
+yarn add @payy/client viem
+```
+{% endtab %}
+
+{% tab title="ethers" %}
+```bash
+npm install @payy/client ethers
+# or
+yarn add @payy/client ethers
+```
+{% endtab %}
+
+{% tab title="Rust" %}
+```toml
+# Once crates.io publishing is enabled:
+payy-evm-client = { version = "0.1", features = ["alloy"] }
+
+# Until then, pin the repo revision:
+payy-evm-client = { git = "https://github.com/polybase/payy", package = "payy-evm-client", rev = "<commit>", features = ["alloy"] }
 ```
 
-### Minimal setup
+Rust builds use the `bb-cli` backend by default and shell out to an installed
+`bb` executable. To use compiled Barretenberg bindings instead, disable default
+features and enable `bb-bindings`.
+{% endtab %}
 
+{% endtabs %}
+
+## Minimal Setup
+
+{% tabs %}
+
+{% tab title="viem" %}
 ```typescript
+import { createPayyClient } from "@payy/client";
+import {
+  chains,
+  toViemTransaction,
+  viemPublicClientAdapter,
+} from "@payy/client/viem";
 import { createPublicClient, createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { createPayyClient, erc20 } from "@payy/viem";
-import { payy } from "@payy/viem/chains";
 
-const account = privateKeyToAccount(process.env.PRIV_KEY as `0x${string}`);
+const evmPrivateKey = process.env.PRIV_KEY as `0x${string}`;
+const payyChain = chains.payy.testnet;
+const account = privateKeyToAccount(evmPrivateKey);
 
 const publicClient = createPublicClient({
-    transport: http(payy.rpcUrls.default.http[0]),
-    chain: payy,
+  chain: payyChain,
+  transport: http(),
 });
 
 const walletClient = createWalletClient({
-    account,
-    transport: http(payy.rpcUrls.default.http[0]),
-    chain: payy,
+  account,
+  chain: payyChain,
+  transport: http(),
 });
 
-const payyClient = createPayyClient();
-```
+const client = createPayyClient({
+  publicClient: viemPublicClientAdapter(publicClient),
+}).withEvmPrivateKey(evmPrivateKey);
 
-### Your first Txn: simple send
-
-```typescript
-async function simpleSend() {
-    const txn = await payyClient.buildTxn
-        .from(account.address)
-        .calls([
-            erc20.transfer({
-                token: "0xYourERC20",
-                to: "0xRecipient",
-                amount: 1_000_000n,
-                gasLimit: 120_000n,
-            }),
-        ]);
-
-    const { hash } = await payyClient.submitTxn({ txn, walletClient });
-    const receipt = await publicClient.waitForTransactionReceipt({ hash });
-
-    const txnHash = await payyClient.hashTxn({ txn, publicClient });
-
-    console.log("Sent on-chain tx:", hash);
-    console.log("Receipt status:", receipt.status);
-    console.log("Txn hash:", txnHash);
+const privacyAccount = await client.privacy().defaultAccount();
+if (privacyAccount === null) {
+  throw new Error("missing Payy privacy account");
 }
+
+const prepared = await client
+  .privacy()
+  .mint({
+    privacyAccount,
+    evmAccount: account.address,
+    token: process.env.TOKEN_ADDRESS as `0x${string}`,
+    amount: 1_000_000n,
+  })
+  .prepare();
+
+const hash = await walletClient.sendTransaction(
+  toViemTransaction(prepared),
+);
 ```
+{% endtab %}
+
+{% tab title="ethers" %}
+```typescript
+import { createPayyClient } from "@payy/client";
+import {
+  ethersProviderAdapter,
+  toEthersTransaction,
+} from "@payy/client/ethers";
+import { JsonRpcProvider, Wallet } from "ethers";
+
+const evmPrivateKey = process.env.PRIV_KEY as `0x${string}`;
+const provider = new JsonRpcProvider(process.env.PAYY_RPC_URL);
+const wallet = new Wallet(evmPrivateKey, provider);
+const evmAccount = (await wallet.getAddress()) as `0x${string}`;
+
+const client = createPayyClient({
+  publicClient: ethersProviderAdapter(provider),
+}).withEvmPrivateKey(evmPrivateKey);
+
+const privacyAccount = await client.privacy().defaultAccount();
+if (privacyAccount === null) {
+  throw new Error("missing Payy privacy account");
+}
+
+const prepared = await client
+  .privacy()
+  .mint({
+    privacyAccount,
+    evmAccount,
+    token: process.env.TOKEN_ADDRESS as `0x${string}`,
+    amount: 1_000_000n,
+  })
+  .prepare();
+
+const response = await wallet.sendTransaction(toEthersTransaction(prepared));
+```
+{% endtab %}
+
+{% tab title="Rust" %}
+```rust
+use payy_evm_client::{
+    alloy_read_client, to_alloy_transaction, BaseClient, EvmAccount, MintParams,
+    PayyNetworkPreset,
+};
+use alloy::providers::Provider;
+
+let client = BaseClient::builder(
+    PayyNetworkPreset::Testnet.config(),
+    alloy_read_client(provider.clone()),
+)
+    .build()
+    .with_evm_private_key(evm_private_key)?;
+
+let privacy_account = client
+    .privacy()
+    .default_account()?
+    .ok_or(AppError::MissingPayyPrivacyAccount)?;
+
+let prepared = client
+    .privacy()
+    .mint(MintParams {
+        privacy_account,
+        evm_account: EvmAccount::Address(evm_account),
+        token,
+        amount: 1_000_000u64.into(),
+    })
+    .prepare()
+    .await?;
+
+let pending = provider
+    .send_transaction(to_alloy_transaction(&prepared)?)
+    .await?;
+```
+{% endtab %}
+
+{% endtabs %}
+
+`privacyAccount` selects a Payy private account / private address. `evmAccount` selects the public EVM sender used for operations such as `mint`, where the bridge requires `mint_from == msg.sender`.
+
+The TypeScript and Rust clients expose the same privacy operations. TypeScript uses
+camelCase object fields and viem / ethers conversion helpers; Rust uses snake_case
+params structs, EVM adapter traits, and `to_alloy_transaction(...)` when using the
+first-party Alloy adapter.

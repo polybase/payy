@@ -114,6 +114,54 @@ pub enum Error {
     #[error("[beam-cli] missing input for beam util {command}")]
     MissingUtilInput { command: String },
 
+    #[error("[beam-cli] fetch request failed")]
+    FetchRequestFailed,
+
+    #[error("[beam-cli] fetch payment required")]
+    FetchPaymentRequired,
+
+    #[error("[beam-cli] fetch payment rejected")]
+    FetchPaymentRejected,
+
+    #[error("[beam-cli] invalid fetch payment response")]
+    FetchInvalidPaymentResponse,
+
+    #[error("[beam-cli] fetch payment retry cannot override an existing Authorization header")]
+    FetchPaymentAuthorizationConflict,
+
+    #[error(
+        "[beam-cli] fetch payment challenge must specify a chain unless --chain or --rpc is provided"
+    )]
+    FetchPaymentChainRequired,
+
+    #[error(
+        "[beam-cli] fetch payment chain mismatch: challenge requested {challenge}, but --chain selected {selected}"
+    )]
+    FetchPaymentChainMismatch { challenge: String, selected: String },
+
+    #[error("[beam-cli] fetch payment chain not allowed: {chain}")]
+    FetchPaymentChainNotAllowed { chain: String },
+
+    #[error("[beam-cli] fetch payment exceeds max fee")]
+    FetchPaymentExceedsMaxFee,
+
+    #[error("[beam-cli] fetch payment balance too low")]
+    FetchPaymentInsufficientBalance,
+
+    #[error(
+        "[beam-cli] fetch payment challenges require https; use --dev only for localhost or loopback HTTP fixtures: {url}"
+    )]
+    FetchPaymentRequiresHttps { url: String },
+
+    #[error("[beam-cli] invalid http method: {value}")]
+    FetchInvalidMethod { value: String },
+
+    #[error("[beam-cli] invalid http header: {value}")]
+    FetchInvalidHeader { value: String },
+
+    #[error("[beam-cli] payment transaction was not confirmed: {tx_hash}")]
+    FetchPaymentUnconfirmed { tx_hash: String },
+
     #[error("[beam-cli] prompt input closed while reading {label}")]
     PromptClosed { label: String },
 

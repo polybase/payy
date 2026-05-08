@@ -1,0 +1,65 @@
+{
+  "version": 3,
+  "network_presets": {
+    "dev": {
+      "chain_id": 7297,
+      "privacy_bridge": "0x3100000000000000000000000000000000000000"
+    },
+    "testnet": {
+      "chain_id": 7298,
+      "privacy_bridge": "0x3100000000000000000000000000000000000000"
+    }
+  },
+  "grumpkin_private_key": "0x0000000000000000000000000000000000000000000000000000000000000001",
+  "privacy_address": {
+    "bytes": "0x0000000000000000000000000000000000000000000000000000000000000001",
+    "owner": "0x11c7a106b10fba4413767b8b23cfbe7ac7244a8a51665655fe7ad938bffd1bd7",
+    "prefix6": "0x11c7a106b10f"
+  },
+  "leading_zero_prefix": {
+    "grumpkin_private_key": "0x000000000000000000000000000000000000000000000000000000000000194b",
+    "privacy_address": "0x85abd85f9434fc0d33b67646219612e61bcace102b16d547157145d7bfa2fa7d",
+    "owner": "0x0000fe036af7c6b68d73f10d6ad4a0b1bdec4e9149c6e90098650e4dda291c93",
+    "prefix6": "0x0000fe036af7"
+  },
+  "note": {
+    "kind": "1",
+    "token": "1",
+    "nonce": "0",
+    "psi": "1",
+    "owner": "8042032353374685952828156458405901601059955864615870200044433271119207537623",
+    "value": "1",
+    "commitment": "0x09f74033da3cdd883017e1e769fab9e4083c1cc937a92ca76cc7ce7ca3e2a96a",
+    "nullifier": "0x21b82e636aef0e596f5e01fb111af35515d09da526718d6016a619358a35d48d"
+  },
+  "direct_send_delivery": {
+    "recipient": "0x0000000000000000000000000000000000000000000000000000000000000001",
+    "commitment": "0x09f74033da3cdd883017e1e769fab9e4083c1cc937a92ca76cc7ce7ca3e2a96a",
+    "link": "/s/hello%20world#UGgyTwMLyNEXMGPB1VtHEvYbcYx4s3yD1Mn1FyFtgDW7mwSPPMpvKKLebaWCgkgFwMkNezZGgjGTSJMbwscN7k95xQK88BesL8sHZ5x9uQ3wyaT1VdZkParzyN"
+  },
+  "incoming_transfer": {
+    "commitment": "0x09f74033da3cdd883017e1e769fab9e4083c1cc937a92ca76cc7ce7ca3e2a96a",
+    "ephemeral_private_key": "0x0000000000000000000000000000000000000000000000000000000000000001",
+    "link": "/s/handoff#97UMZSJF8Sp9uMKhDcMpBWF7CeNxSXoi56HyB9gEUTQeRWHxVVKGg7jd8mRopjL3MwAP1z7mtT2FfGP8cBMCCmtqMfBjQ1HKp2FzWu6TNgqS5dVyyh9BYwfCqrkMps48RbrRA2uvpBZFTAXvXp1AhzZnMXst84wTX7W3jE"
+  },
+  "incoming_note": {
+    "commitment": "0x09f74033da3cdd883017e1e769fab9e4083c1cc937a92ca76cc7ce7ca3e2a96a",
+    "nullifier": "0x21b82e636aef0e596f5e01fb111af35515d09da526718d6016a619358a35d48d",
+    "source_position": {
+      "block_number": 1,
+      "transaction_index": 0,
+      "log_index": 0
+    },
+    "status": "claimable"
+  },
+  "prepared_call_public_fields": [
+    "operation",
+    "chainId",
+    "bridgeRequest",
+    "verificationKeyHash",
+    "proof",
+    "publicInputs",
+    "txCommitment",
+    "statePreview"
+  ]
+}

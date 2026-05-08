@@ -1,0 +1,23 @@
+[package]
+name = "bungee-interface"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+async-trait = { workspace = true }
+bytes = { workspace = true }
+contextful = { workspace = true }
+contracts = { workspace = true }
+http = { workspace = true }
+primitives = { workspace = true }
+rpc = { workspace = true }
+rpc-error-convert = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+unimock = { workspace = true }
+workspace-hack.workspace = true
+
+[dev-dependencies]
+insta = { workspace = true }
+serde_urlencoded = { workspace = true }

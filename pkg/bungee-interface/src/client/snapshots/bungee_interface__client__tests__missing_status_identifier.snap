@@ -1,0 +1,12 @@
+---
+source: pkg/bungee-interface/src/client/tests.rs
+expression: output
+---
+{
+  "error": {
+    "code": "bad-request",
+    "reason": "bungee-status-missing-identifier",
+    "message": "[bungee-interface/client] missing identifier for bungee status lookup",
+    "data": null
+  }
+}

@@ -116,7 +116,7 @@ Once the prerequisites above are installed you can bootstrap the local tooling w
 eval "$(cargo xtask setup)"
 ```
 
-**What this does:** The `cargo xtask setup` command installs the bb and nargo toolchains, ensures the `polybase-pg` Postgres container is running with the latest migrations, and installs the Ethereum workspace dependencies under `eth/`. It prints shell `export` commands to stdout, and wrapping it in `eval "$(...)"` executes those exports in your current shell so `DATABASE_URL` and any `PATH` updates take effect.
+**What this does:** The `cargo xtask setup` command installs the bb and nargo toolchains, ensures the `polybase-pg` Postgres container is running with the latest migrations, installs the spec authoring tooling under `docs/tools/spec-lint/`, and installs the Ethereum workspace dependencies under `eth/`. It prints shell `export` commands to stdout, and wrapping it in `eval "$(...)"` executes those exports in your current shell so `DATABASE_URL` and any `PATH` updates take effect.
 
 **Environment variables set:**
 - `DATABASE_URL` - Connection string for the local Postgres database
@@ -124,6 +124,14 @@ eval "$(cargo xtask setup)"
 **Important:** These exports only persist for the current terminal session. For convenience, consider integrating this command into a repo-specific development shell (for example: direnv, nix shell, guix container) rather than global shell profiles like `.bashrc` or `.zshrc`, because the setup is too heavyweight for global profiles.
 
 Re-run the command whenever you need to refresh the development environment; it is safe and idempotent.
+
+### Copybara Sync
+
+The public repo sync uses two workflows in `copy.bara.sky`: `snapshot` exports the filtered tree to a local folder, then `push_generated` publishes that generated snapshot after Cargo refreshes `Cargo.lock`.
+
+CI drives this through `scripts/copybara-sync.sh`, which seeds the snapshot from the current public `Cargo.lock` when available, updates it in place, and falls back to generating a new lockfile only when no public lockfile seed exists.
+
+The sync script runs a pinned official Copybara release jar under Java 21, configured by `COPYBARA_VERSION`, to avoid drift from third-party Docker image tags. It also points the JVM home at the prepared auth directory so Copybara resolves SSH and Git credentials consistently in CI.
 
 ### Targeted Tests
 
@@ -363,6 +371,7 @@ cargo hakari manage-deps --yes
 ```
 
 The `Rust / Hakari Check` GitHub workflow enforces that the crate stays synchronized; if it fails, re-run the commands above and commit the resulting changes.
+The main `Test` workflow also verifies `Cargo.lock` during its clippy run by adding `--locked` to `cargo hack clippy`; if that check reports that the lockfile needs updates, regenerate and commit `Cargo.lock` before retrying CI.
 
 ## Contributing
 

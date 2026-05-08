@@ -12,5 +12,12 @@ This package defines the interface contracts and shared data types used by the G
 - Shared data structures
 - Request/response types
 - Error types
-- Bungee quote errors distinguish low input-value vs low output-value quotes for client handling
+- Yield/invest request and response types for Payy swap creation, funding, price reads, and
+  aggregate position queries
 - Utility functions
+
+## Notes
+
+Bungee request / response types and Bungee-specific error modeling now live in
+[`bungee-interface`](../bungee-interface/README.md). `guild-interface` no
+longer owns a `bungee` module.

@@ -1,0 +1,8 @@
+[package]
+name = "transfer_claim"
+type = "bin"
+authors = [""]
+compiler_version = ">=0.36.0"
+
+[dependencies]
+evm_common = { path = "../common" }

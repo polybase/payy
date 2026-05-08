@@ -1,0 +1,12 @@
+---
+source: pkg/bungee-interface/src/client/tests.rs
+expression: output
+---
+{
+  "error": {
+    "code": "internal",
+    "reason": "internal-error",
+    "message": "[bungee-interface/client] internal error",
+    "data": null
+  }
+}

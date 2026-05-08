@@ -1,7 +1,6 @@
 // lint-long-file-override allow-max-lines=300
 use std::env;
 use std::fs;
-use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 
@@ -19,6 +18,9 @@ mod eth;
 mod fixtures;
 mod noir;
 mod postgres;
+mod spec_lint;
+
+pub(crate) use spec_lint::ensure_spec_lint;
 
 const REQUIRED_COMMANDS: &[(&str, &str)] = &[
     (
@@ -28,6 +30,7 @@ const REQUIRED_COMMANDS: &[(&str, &str)] = &[
     ("git", "Install Git: https://git-scm.com/downloads"),
     ("cargo", "Install Rust via https://rustup.rs"),
     ("node", "Install Node.js: https://nodejs.org"),
+    ("npm", "Install npm (normally bundled with Node.js)"),
     (
         "yarn",
         "Install Yarn (e.g. corepack enable or https://classic.yarnpkg.com)",
@@ -96,13 +99,7 @@ pub fn run_setup(args: SetupArgs) -> Result<()> {
     installed_to_cargo_bin |= pg_result.installed_diesel;
 
     fixtures::ensure_params(&repo_root)?;
-
-    let claude_md = repo_root.join("CLAUDE.md");
-    if fs::symlink_metadata(&claude_md).is_err() {
-        symlink("GENERATED_AI_GUIDANCE.md", &claude_md)
-            .with_context(|| "create CLAUDE.md symlink".to_string())?;
-        eprintln!("Created CLAUDE.md -> GENERATED_AI_GUIDANCE.md");
-    }
+    ensure_spec_lint(&repo_root)?;
 
     if args.skip_eth {
         eprintln!("Skipping eth dependency installation (requested)");

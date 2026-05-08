@@ -8,7 +8,7 @@ use rustyline::{
     history::{DefaultHistory, History, SearchDirection, SearchResult},
 };
 
-use crate::cli::Cli;
+use crate::cli::{Cli, normalize_cli_args};
 
 pub(crate) struct ReplHistory {
     inner: DefaultHistory,
@@ -182,9 +182,9 @@ pub(crate) fn should_persist_history(line: &str) -> bool {
     }
 
     if let Some(args) = shlex::split(line) {
-        if let Ok(cli) =
-            Cli::try_parse_from(std::iter::once("beam").chain(args.iter().map(String::as_str)))
-        {
+        if let Ok(cli) = Cli::try_parse_from(normalize_cli_args(
+            std::iter::once("beam").chain(args.iter().map(String::as_str)),
+        )) {
             return match cli.command {
                 Some(command) => !command.is_sensitive(),
                 None => true,
@@ -237,7 +237,7 @@ fn command_index(args: &[String]) -> Option<usize> {
         let flag = arg.split_once('=').map_or(arg, |(flag, _)| flag);
         if matches!(
             flag,
-            "--chain" | "--color" | "--from" | "--output" | "--rpc"
+            "--chain" | "--color" | "--format" | "--from" | "--output" | "--rpc"
         ) {
             index += if arg.contains('=') { 1 } else { 2 };
             continue;
