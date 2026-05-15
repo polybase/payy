@@ -480,6 +480,7 @@ main() {
   log "Run \`beam --help\` to get started."
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+script_source="${BASH_SOURCE[0]:-}"
+if [[ -z "$script_source" || "$script_source" == "$0" ]]; then
   main "$@"
 fi
