@@ -6,11 +6,14 @@ mod config;
 mod display;
 mod ens;
 mod error;
+mod error_render;
 mod evm;
 mod human_output;
 mod keystore;
 mod known_tokens;
 mod output;
+mod privacy;
+mod privacy_config;
 mod prompts;
 mod runtime;
 mod signer;
@@ -32,6 +35,7 @@ use crate::{
     commands::{interactive, run},
     display::error_message,
     error::{Error, Result},
+    error_render::format_error_chain,
     output::OutputMode,
 };
 
@@ -46,7 +50,7 @@ async fn main() {
         }
         eprintln!(
             "{}",
-            error_message(&err.to_string(), color_mode.colors_stderr()),
+            error_message(&format_error_chain(&err), color_mode.colors_stderr()),
         );
         std::process::exit(1);
     }

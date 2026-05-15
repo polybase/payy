@@ -109,6 +109,25 @@ fn parses_fetch_request_body_without_implied_method_flag() {
 }
 
 #[test]
+fn parses_private_fetch_payment_flag() {
+    let cli = Cli::try_parse_from([
+        "beam",
+        "fetch",
+        "--private-payment",
+        "https://api.example.com/paid",
+    ])
+    .expect("parse private fetch flag");
+
+    assert!(matches!(
+        cli.command,
+        Some(Command::Fetch(FetchArgs {
+            private_payment: true,
+            ..
+        }))
+    ));
+}
+
+#[test]
 fn rejects_removed_fetch_pay_flag() {
     let err = Cli::try_parse_from(["beam", "fetch", "--pay", "https://api.example.com/paid"])
         .expect_err("reject removed pay flag");

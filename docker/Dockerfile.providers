@@ -27,13 +27,13 @@ COPY fixtures/params ./fixtures/params
 RUN sed 's|, "app/packages/react-native-rust-bridge/cpp/rustbridge"||g' Cargo.toml > Cargo.toml.tmp \
     && mv Cargo.toml.tmp Cargo.toml
 
-RUN cargo build --bin providers
+RUN cargo build --bin providers-mock-cli
 
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y openssl ca-certificates libpq-dev postgresql wget tar curl
 
 
-COPY --from=builder /build/target/debug/providers /usr/local/bin/providers
+COPY --from=builder /build/target/debug/providers-mock-cli /usr/local/bin/providers-mock-cli
 
-CMD ["providers", "server"]
+CMD ["providers-mock-cli", "server"]

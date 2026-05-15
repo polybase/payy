@@ -37,6 +37,7 @@ pub(crate) struct X402Offer {
     pub asset: String,
     pub network: String,
     pub pay_to: String,
+    pub private_address: Option<String>,
     pub raw: Value,
     pub scheme: String,
 }
@@ -74,6 +75,7 @@ pub(crate) struct MppPaymentRequest {
     pub chain_id: Option<u64>,
     pub currency: String,
     pub description: Option<String>,
+    pub private_address: Option<String>,
     pub recipient: String,
 }
 

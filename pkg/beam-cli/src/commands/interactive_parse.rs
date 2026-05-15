@@ -133,7 +133,7 @@ pub(crate) fn normalized_repl_command(command: Option<&str>) -> Option<&str> {
     let command = command?;
     matches!(
         command,
-        "wallets" | "chains" | "rpc" | "balance" | "tokens" | "help"
+        "wallets" | "chains" | "rpc" | "balance" | "tokens" | "privacy" | "help"
     )
     .then_some(command)
 }
@@ -163,6 +163,21 @@ fn is_cli_subcommand_invocation(command: &str, args: &[String]) -> bool {
         ) | (
             "tokens",
             Some("list" | "add" | "remove" | "help" | "-h" | "--help")
+        ) | (
+            "privacy",
+            Some(
+                "address"
+                    | "balance"
+                    | "mint"
+                    | "burn"
+                    | "send"
+                    | "incoming"
+                    | "claim"
+                    | "state"
+                    | "help"
+                    | "-h"
+                    | "--help"
+            )
         )
     )
 }

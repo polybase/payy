@@ -53,6 +53,20 @@ expression: default_known_tokens()
       "label": "USDC"
     }
   },
+  "payy-dev": {
+    "NATIVE": {
+      "address": "0x0200000000000000000000000000000000000000",
+      "decimals": 18,
+      "label": "native"
+    }
+  },
+  "payy-testnet": {
+    "NATIVE": {
+      "address": "0x0200000000000000000000000000000000000000",
+      "decimals": 18,
+      "label": "native"
+    }
+  },
   "polygon": {
     "USDC": {
       "address": "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",

@@ -1,20 +1,32 @@
 // lint-long-file-override allow-max-lines=300
+#[path = "chain_fields.rs"]
+mod chain_fields;
+#[path = "chain_privacy.rs"]
+mod chain_privacy;
+
 use contextful::ResultContextExt;
 use serde_json::json;
 
 use crate::{
     chains::{
-        BeamChains, ConfiguredChain, all_chains, chain_key, ensure_rpc_matches_chain_id,
-        find_chain, resolve_rpc_chain_id,
+        ConfiguredChain, all_chains, chain_key, ensure_rpc_matches_chain_id, find_chain,
+        resolve_rpc_chain_id,
     },
     cli::{ChainAction, ChainAddArgs},
     config::ChainRpcConfig,
     error::{Error, Result},
-    human_output::{sanitize_control_chars, sanitize_control_chars_trimmed},
+    human_output::sanitize_control_chars,
     output::{CommandOutput, with_loading},
     prompts::{prompt_required, prompt_with_default},
     runtime::BeamApp,
     table::{render_markdown_table, render_table},
+};
+
+use self::{
+    chain_fields::{
+        marker, normalize_chain_name, normalize_native_symbol, validate_new_chain_name,
+    },
+    chain_privacy::{PrivacyProfileArgs, build_privacy_profile, privacy_status},
 };
 
 const DEFAULT_CHAIN_KEY: &str = "ethereum";
@@ -23,7 +35,7 @@ const DEFAULT_NATIVE_SYMBOL: &str = "ETH";
 pub async fn run(app: &BeamApp, action: ChainAction) -> Result<()> {
     match action {
         ChainAction::List => list_chains(app).await,
-        ChainAction::Add(args) => add_chain(app, args).await,
+        ChainAction::Add(args) => add_chain(app, *args).await,
         ChainAction::Remove { chain } => remove_chain(app, &chain).await,
         ChainAction::Use { chain } => use_chain(app, &chain).await,
     }
@@ -35,6 +47,14 @@ pub(crate) async fn add_chain(app: &BeamApp, args: ChainAddArgs) -> Result<()> {
         rpc,
         chain_id,
         native_symbol,
+        privacy_bridge,
+        privacy_standard,
+        privacy_version,
+        privacy_deployment,
+        privacy_prover,
+        privacy_token_policy,
+        privacy_state_policy,
+        privacy_features,
     } = args;
     let interactive_native_symbol = native_symbol.is_none() && (name.is_none() || rpc.is_none());
     let name = normalize_chain_name(match name {
@@ -71,11 +91,22 @@ pub(crate) async fn add_chain(app: &BeamApp, args: ChainAddArgs) -> Result<()> {
         )?),
         None => None,
     });
+    let privacy = build_privacy_profile(PrivacyProfileArgs {
+        bridge: privacy_bridge,
+        deployment: privacy_deployment,
+        prover: privacy_prover,
+        standard: privacy_standard,
+        state_policy: privacy_state_policy,
+        token_policy: privacy_token_policy,
+        version: privacy_version,
+        features: privacy_features,
+    })?;
     let configured_chain = ConfiguredChain {
         aliases: Vec::new(),
         chain_id,
         name: name.clone(),
         native_symbol: native_symbol.clone(),
+        privacy: privacy.clone(),
     };
 
     let existing = all_chains(&beam_chains);
@@ -110,6 +141,7 @@ pub(crate) async fn add_chain(app: &BeamApp, args: ChainAddArgs) -> Result<()> {
             "default_rpc": rpc_url,
             "name": name,
             "native_symbol": native_symbol,
+            "privacy": privacy,
         }),
     )
     .compact(format!("{} {chain_id}", sanitize_control_chars(&key)))
@@ -209,6 +241,7 @@ async fn list_chains(app: &BeamApp) -> Result<()> {
                 chain.display_name.clone(),
                 chain.chain_id.to_string(),
                 chain.native_symbol.clone(),
+                privacy_status(chain.privacy.as_ref()),
                 config
                     .rpc_config_for_chain(chain)
                     .map(|rpc_config| rpc_config.rpc_urls().len())
@@ -222,7 +255,9 @@ async fn list_chains(app: &BeamApp) -> Result<()> {
             ]
         })
         .collect::<Vec<_>>();
-    let headers = ["default", "chain", "name", "id", "symbol", "rpcs", "source"];
+    let headers = [
+        "default", "chain", "name", "id", "symbol", "privacy", "rpcs", "source",
+    ];
 
     CommandOutput::new(
         render_table(&headers, &rows),
@@ -235,6 +270,7 @@ async fn list_chains(app: &BeamApp) -> Result<()> {
                     "is_default": config.default_chain == chain.key,
                     "name": chain.display_name,
                     "native_symbol": chain.native_symbol,
+                    "privacy": chain.privacy.clone(),
                     "rpc_count": config
                         .rpc_config_for_chain(chain)
                         .map(|rpc_config| rpc_config.rpc_urls().len())
@@ -245,45 +281,4 @@ async fn list_chains(app: &BeamApp) -> Result<()> {
     )
     .markdown(render_markdown_table(&headers, &rows))
     .print(app.output_mode)
-}
-
-fn marker(active: bool) -> String {
-    if active {
-        "*".to_string()
-    } else {
-        String::new()
-    }
-}
-
-fn normalize_chain_name(name: String) -> Result<String> {
-    let name = sanitize_control_chars_trimmed(&name);
-    if name.is_empty() {
-        return Err(Error::InvalidChainName { name });
-    }
-
-    Ok(name)
-}
-
-fn validate_new_chain_name(name: &str, configured: &BeamChains) -> Result<()> {
-    let key = chain_key(name);
-    if let Ok(existing_chain) = find_chain(&key, configured) {
-        return Err(if existing_chain.key == key {
-            Error::ChainNameAlreadyExists {
-                name: name.to_string(),
-            }
-        } else {
-            Error::ChainNameConflictsWithSelector {
-                name: name.to_string(),
-            }
-        });
-    }
-
-    Ok(())
-}
-
-fn normalize_native_symbol(native_symbol: Option<String>) -> String {
-    native_symbol
-        .map(|value| sanitize_control_chars_trimmed(&value).to_ascii_uppercase())
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| DEFAULT_NATIVE_SYMBOL.to_string())
 }

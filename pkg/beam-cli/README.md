@@ -140,6 +140,8 @@ Supported request flags:
   payments include the transfer amount plus estimated gas.
 - `--allowed-chains <NAME|ID>[,<NAME|ID>...]` to auto-approve only those destination chains for
   payment requests. If a request targets a different chain, Beam fails instead of prompting.
+- `--private-payment` to require a privacy-capable challenge recipient and satisfy the payment
+  with a private transfer on the selected privacy-capable chain.
 - `--dev` to allow plain HTTP payment challenges only for localhost or loopback development
   fixtures. Beam otherwise refuses to pay a `402 Payment Required` response unless the challenged
   URL is `https://`.
@@ -162,6 +164,9 @@ Payment flow notes:
   challenged URL stays on `localhost` or a loopback address.
 - x402 responses are retried with a Beam-generated payment proof header after the payment
   transaction confirms.
+- Privacy-capable x402/MPP challenges can include a private recipient address. With
+  `--private-payment`, Beam rejects ordinary public challenges and only returns payment
+  credentials after the private transfer confirms.
 - MPP challenges are retried with an `Authorization: Payment ...` credential after the payment
   transaction confirms. If the original same-origin request already set `Authorization`, Beam
   fails instead of overwriting the caller-supplied credential.
@@ -181,8 +186,47 @@ beam fetch --max-fee 0.001 https://paywall.example.com/article/123
 beam fetch --allowed-chains base,8453 https://paywall.example.com/article/123
 beam fetch --no-pay https://paywall.example.com/article/123
 beam --from alice --chain base fetch --max-fee 0.001 https://paywall.example.com/article/123
+beam --from alice --chain payy-testnet fetch --private-payment https://paywall.example.com/article/123
 beam fetch -v -L https://api.example.com/redirect
 ```
+
+## Privacy
+
+Beam privacy support is configured per chain. Built-in Payy privacy-capable chains include a
+default `payy-evm-privacy` v1 profile. Custom chains become privacy-capable only when `beam chains
+add` stores a privacy profile; Beam does not infer privacy support from an RPC endpoint alone.
+Built-in Payy chains also include a known ERC20 token label, `native`, for the PUSD predeploy
+at `0x0200000000000000000000000000000000000000`, so privacy token arguments can use `native`.
+
+The selected wallet's private address is derived from its encrypted EVM private key with the
+SDK-defined `payy/grumpkin/v1` derivation rule. Beam does not store a separate Grumpkin private
+key.
+
+Common commands:
+
+```bash
+beam --chain payy-testnet privacy address
+beam --chain payy-testnet privacy balance [token|token-address]
+beam --chain payy-testnet privacy mint native 10
+beam --chain payy-testnet privacy incoming list
+beam --chain payy-testnet privacy incoming watch
+beam --chain payy-testnet privacy mint USDC 10
+beam --chain payy-testnet privacy burn USDC 5 0x1111111111111111111111111111111111111111
+beam --chain payy-testnet privacy send <private-address> USDC 1
+beam --chain payy-testnet privacy send --ephemeral USDC 1 --claim-link-message "invoice"
+beam --chain payy-testnet privacy claim <claim-link|incoming-id|artifact>
+beam --chain payy-testnet privacy state reset
+beam privacy state repair
+```
+
+`privacy mint` checks ERC20 allowance before preparing the private proof. If allowance is too low,
+run the printed `beam erc20 approve <token> <privacy-bridge> <amount>` command and retry.
+
+Privacy scan state, incoming summaries, owned-note checkpoints, and pending operation records are
+stored in `~/.beam/privacy-state.json`. The file is a resume cache, not an authority; Beam
+revalidates live bridge state before balance and spend flows. Invalid JSON fails closed. Use
+`beam privacy state repair` to move a corrupted state file aside, or `beam privacy state reset` to
+clear state for the active wallet and chain.
 
 ## Wallets
 
@@ -210,6 +254,8 @@ Notes:
 - The CLI prompts for a password when creating/importing a wallet and rejects empty or whitespace-only values.
 - Beam trims surrounding whitespace and sanitizes terminal control characters in wallet names, rejecting aliases that become empty after normalization.
 - Commands that need signing prompt for the keystore password again before decrypting.
+- `beam privacy address` uses the same password prompt and keystore integrity checks before
+  deriving the wallet's private address.
 - If `wallets.json` contains invalid JSON, `beam` fails closed and will not rewrite the file until you repair or restore it.
 - Before signing, Beam re-derives the decrypted wallet address and rejects any keystore entry whose key does not match the stored address.
 - Wallet names cannot start with `0x`, because that prefix is reserved for raw addresses.
@@ -279,6 +325,11 @@ Add a custom chain:
 
 ```bash
 beam chains add "Beam Dev" https://beam.example/dev --chain-id 31337 --native-symbol BEAM
+beam chains add "Private Dev" https://beam.example/dev \
+  --chain-id 31337 \
+  --native-symbol BEAM \
+  --privacy-bridge 0x3100000000000000000000000000000000000000 \
+  --privacy-features all
 ```
 
 If you omit the chain name or RPC URL, `beam chains add` prompts for them interactively. When
@@ -298,6 +349,10 @@ beam --chain base rpc remove https://beam.example/base-backup
 
 Custom chain metadata is stored in `~/.beam/chains.json`. Global defaults and per-chain RPC
 configuration live in `~/.beam/config.json`.
+
+Privacy profile fields in `chains.json` include the standard id/version, privacy bridge address,
+deployment kind, prover profile, token policy, state policy, and feature flags. `beam chains list`
+shows whether each chain has a privacy profile, and JSON output includes the full stored profile.
 
 Beam validates RPC URLs before running a command, so malformed values from `--rpc`,
 `config.json`, or `beam chains add` fail with a normal CLI error instead of crashing.
@@ -374,7 +429,7 @@ Top-level commands:
 beam wallets <subcommand>
 beam util <subcommand>
 beam chains list
-beam chains add [name] [rpc] [--chain-id <id>] [--native-symbol <symbol>]
+beam chains add [name] [rpc] [--chain-id <id>] [--native-symbol <symbol>] [privacy-flags]
 beam chains remove <name|id>
 beam chains use <name|id>
 beam rpc list [--chain <name|id>]
@@ -393,6 +448,16 @@ beam erc20 transfer <token> <to> <amount>
 beam erc20 approve <token> <spender> <amount>
 beam call <contract> <function-sig> [args...]
 beam send [--value <amount>] <contract> <function-sig> [args...]
+beam privacy address
+beam privacy balance [token|token-address]
+beam privacy incoming list [--from-block <n>] [--to-block <n>] [--include-spent]
+beam privacy incoming watch [--from-block <n>] [--include-spent]
+beam privacy mint <token|token-address> <amount>
+beam privacy burn <token|token-address> <amount> <recipient>
+beam privacy send [--ephemeral] [--memo <bytes32>] [--claim-link-message <text>] [private-address] <token> <amount>
+beam privacy claim <claim-link|incoming-id|artifact>
+beam privacy state reset
+beam privacy state repair
 beam fetch [request-flags] <url>
 beam update
 ```
@@ -412,6 +477,7 @@ beam block 21000000
 beam send 0xContract "approve(address,uint256)" 0xSpender 1000000
 beam send --value 0.01 0xContract "deposit()"
 beam call 0xContract "symbol():(string)"
+beam --chain payy-testnet privacy balance USDC
 ```
 
 Function signatures use standard ABI signature syntax. For read-only calls, include output
@@ -450,6 +516,7 @@ chains <name|id>
 rpc <url>
 balance
 tokens
+privacy
 help
 exit
 ```
@@ -473,6 +540,8 @@ command, `Up` / `Down` search only history entries with that prefix; on an empty
 cycle through previously submitted commands.
 The `balance` shortcut prints the full tracked-token report for the current session owner, and
 the regular CLI form still handles one-off selectors such as `balance USDC` or `tokens add ...`.
+Privacy commands use the regular CLI form under `privacy ...`; tab completion surfaces the privacy
+subcommands alongside the rest of the command tree.
 When a write command is waiting on-chain, `Ctrl-C` stops the wait, prints the submitted
 transaction hash, and returns you to the REPL instead of exiting Beam. Use `Ctrl-D` or `exit`
 to leave interactive mode.
@@ -482,9 +551,11 @@ the active chain, and the current RPC endpoint.
 The chain segment is tinted per network brand in color-capable terminals, and all Payy
 networks use `#E0FF32`.
 
-Sensitive wallet commands are never written to REPL history, and startup immediately rewrites
-`~/.beam/history.txt` after scrubbing previously persisted `wallets import` / `wallets address`
-entries, including mistyped slash-prefixed variants such as `/wallets import`.
+Sensitive wallet and privacy commands are never written to REPL history, and startup immediately
+rewrites `~/.beam/history.txt` after scrubbing previously persisted `wallets import` /
+`wallets address` entries, including mistyped slash-prefixed variants such as `/wallets import`.
+Privacy claim artifacts, ephemeral sends, claim-link messages, memos, and private-payment fetch
+commands are also excluded from persisted history.
 
 Interactive startup only reads the cached update status. If a previous background refresh
 found a newer GitHub Release, `beam` prints a warning before entering the REPL and refreshes
@@ -502,6 +573,7 @@ Default files:
 - `~/.beam/config.json`
 - `~/.beam/chains.json`
 - `~/.beam/wallets.json`
+- `~/.beam/privacy-state.json`
 - `~/.beam/history.txt`
 - `~/.beam/update-status.json`
 

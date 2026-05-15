@@ -26,6 +26,7 @@ use crate::{
     commands,
     display::{error_message, render_colored_shell_prefix, render_shell_prefix, shrink},
     error::{Error, Result},
+    error_render::format_error_chain,
     output::{CommandOutput, with_loading},
     runtime::{BeamApp, InvocationOverrides},
 };
@@ -65,7 +66,10 @@ pub async fn run(app: &BeamApp) -> Result<()> {
                     Err(err) => {
                         eprintln!(
                             "{}",
-                            error_message(&err.to_string(), app.color_mode.colors_stderr()),
+                            error_message(
+                                &format_error_chain(&err),
+                                app.color_mode.colors_stderr()
+                            ),
                         );
                     }
                 }

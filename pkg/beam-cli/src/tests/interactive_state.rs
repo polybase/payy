@@ -82,6 +82,7 @@ async fn interactive_chain_remove_clears_invalid_chain_and_rpc_overrides() {
                 chain_id: 31337,
                 name: "Beam Dev".to_string(),
                 native_symbol: "BEAM".to_string(),
+                privacy: None,
             }],
         })
         .await

@@ -135,5 +135,6 @@ fn fetch_args() -> FetchArgs {
         allowed_chains: Vec::new(),
         no_pay: false,
         dev: false,
+        private_payment: false,
     }
 }

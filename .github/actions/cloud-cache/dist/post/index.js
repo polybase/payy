@@ -108416,6 +108416,11 @@ const exec = util.promisify(cp.exec);
 function sleep(ms) {
   return new Promise((res) => setTimeout(res, ms));
 }
+
+function isStrictR2Context() {
+  return process.env.GITHUB_REF === "refs/heads/main";
+}
+
 async function run() {
   try {
     const skipUpload = core.getInput("skip-upload") === "true";
@@ -108480,11 +108485,16 @@ async function run() {
     } else if (provider === "s3") {
       const s3AccessKey = core.getState("s3AccessKey");
       const s3SecretKey = core.getState("s3SecretKey");
-      if (!s3AccessKey || !s3SecretKey) {
-        console.log("S3 credentials not available, skipping cache upload");
+      const s3Endpoint = core.getState("s3Endpoint");
+      if (!s3AccessKey || !s3SecretKey || !s3Endpoint) {
+        if (isStrictR2Context()) {
+          throw new Error(
+            "Cloudflare R2 credentials and endpoint are required for provider=s3 on refs/heads/main"
+          );
+        }
+        console.log("Cloudflare R2 credentials or endpoint not available for provider=s3, skipping cache upload");
         return;
       }
-      const s3Endpoint = core.getState("s3Endpoint");
       const s3Region = core.getState("s3Region");
       // Initialize S3 client
       const s3Config = {
@@ -108494,10 +108504,8 @@ async function run() {
           secretAccessKey: s3SecretKey,
         },
         forcePathStyle: true,
+        endpoint: s3Endpoint,
       };
-      if (s3Endpoint) {
-        s3Config.endpoint = s3Endpoint;
-      }
       s3Client = new S3Client(s3Config);
     }
     const primaryWithExt = primaryKey + ".tar.zst";

@@ -16,12 +16,14 @@ clap = { workspace = true }
 contextful = { workspace = true }
 contracts = { workspace = true }
 dirs = { workspace = true }
+element = { workspace = true }
 encrypt = { workspace = true }
 eth-util = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 json-store = { workspace = true }
 num-bigint = { workspace = true }
+payy-evm-client = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
 rlp = { workspace = true }

@@ -17,7 +17,7 @@ use super::interactive_suggestion::completion_hint;
 use crate::cli::Cli;
 
 const REPL_OPTIONS: &[&str] = &[
-    "wallets", "chains", "rpc", "balance", "tokens", "help", "exit",
+    "wallets", "chains", "rpc", "balance", "tokens", "privacy", "help", "exit",
 ];
 const SUGGESTION_STYLE_PREFIX: &str = "\x1b[2m";
 const SUGGESTION_STYLE_SUFFIX: &str = "\x1b[0m";

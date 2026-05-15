@@ -28,10 +28,10 @@ env:
   SKIP_UPLOAD: ${{ github.event_name == 'pull_request' && 'true' || 'false' }}
   # Main branch pushes should rebuild the canonical cache, so skip downloads
   # when creating the fresh artifacts. Dependabot PRs do not receive repository
-  # secrets, so default to skipping cache downloads when the GCS key is
+  # secrets, so default to skipping cache downloads when the S3 credentials are
   # unavailable. GitHub expressions treat missing secrets as null, so guard on
   # both existence and non-emptiness.
-  SKIP_DOWNLOAD: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || !(secrets.SCCACHE_GCS_SA_KEY_BASE64 && secrets.SCCACHE_GCS_SA_KEY_BASE64 != '') && 'true' || 'false' }}
+  SKIP_DOWNLOAD: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || !(secrets.SCCACHE_S3_ACCESS_KEY_ID && secrets.SCCACHE_S3_ACCESS_KEY_ID != '' && secrets.SCCACHE_S3_SECRET_ACCESS_KEY && secrets.SCCACHE_S3_SECRET_ACCESS_KEY != '' && secrets.SCCACHE_S3_ENDPOINT && secrets.SCCACHE_S3_ENDPOINT != '') && 'true' || 'false' }}
 
 permissions:
   contents: read
@@ -47,7 +47,9 @@ jobs:
       - name: Setup sccache
         uses: ./.github/actions/setup-sccache
         with:
-          sccache_gcs_sa_key_base64: "${{ secrets.SCCACHE_GCS_SA_KEY_BASE64 }}"
+          sccache_s3_access_key_id: "${{ secrets.SCCACHE_S3_ACCESS_KEY_ID }}"
+          sccache_s3_secret_access_key: "${{ secrets.SCCACHE_S3_SECRET_ACCESS_KEY }}"
+          sccache_s3_endpoint: "${{ secrets.SCCACHE_S3_ENDPOINT }}"
 
       - name: Log in to Docker Hub
         env:
@@ -80,9 +82,10 @@ jobs:
       - name: Setup sccache
         uses: ./.github/actions/setup-sccache
         with:
-          sccache_gcs_sa_key_base64: "${{ secrets.SCCACHE_GCS_SA_KEY_BASE64 }}"
-          sccache_bucket: ${{ vars.SCCACHE_GCS_BUCKET }}
-          backend: gcs
+          sccache_bucket: polybase-sccache-eu
+          sccache_s3_access_key_id: "${{ secrets.SCCACHE_S3_ACCESS_KEY_ID }}"
+          sccache_s3_secret_access_key: "${{ secrets.SCCACHE_S3_SECRET_ACCESS_KEY }}"
+          sccache_s3_endpoint: "${{ secrets.SCCACHE_S3_ENDPOINT }}"
 
       - name: Log in to Docker Hub
         env:
@@ -127,9 +130,10 @@ jobs:
         if: steps.check-docs.outputs.has_doc_changes == 'true'
         uses: ./.github/actions/setup-sccache
         with:
-          sccache_gcs_sa_key_base64: "${{ secrets.SCCACHE_GCS_SA_KEY_BASE64 }}"
-          sccache_bucket: ${{ vars.SCCACHE_GCS_BUCKET }}
-          backend: gcs
+          sccache_bucket: polybase-sccache-eu
+          sccache_s3_access_key_id: "${{ secrets.SCCACHE_S3_ACCESS_KEY_ID }}"
+          sccache_s3_secret_access_key: "${{ secrets.SCCACHE_S3_SECRET_ACCESS_KEY }}"
+          sccache_s3_endpoint: "${{ secrets.SCCACHE_S3_ENDPOINT }}"
 
       - name: Compile eth contracts
         if: steps.check-docs.outputs.has_doc_changes == 'true'
@@ -166,10 +170,11 @@ jobs:
       - name: Setup sccache
         uses: ./.github/actions/setup-sccache
         with:
-          backend: gcs
-          sccache_bucket: ${{ vars.SCCACHE_GCS_BUCKET }}
+          sccache_bucket: polybase-sccache-eu
           sccache_key_prefix: testing-sccache
-          sccache_gcs_sa_key_base64: "${{ secrets.SCCACHE_GCS_SA_KEY_BASE64 }}"
+          sccache_s3_access_key_id: "${{ secrets.SCCACHE_S3_ACCESS_KEY_ID }}"
+          sccache_s3_secret_access_key: "${{ secrets.SCCACHE_S3_SECRET_ACCESS_KEY }}"
+          sccache_s3_endpoint: "${{ secrets.SCCACHE_S3_ENDPOINT }}"
 
       - name: Install zstd
         run: sudo apt-get update && sudo apt-get install -y zstd
@@ -181,8 +186,10 @@ jobs:
         id: cloud-cache
         uses: ./.github/actions/cloud-cache
         with:
-          gcs-key: ${{ secrets.SCCACHE_GCS_SA_KEY_BASE64 }}
-          bucket: ${{ vars.TARGET_CACHE_GCS_BUCKET }}
+          s3-access-key: ${{ secrets.SCCACHE_S3_ACCESS_KEY_ID }}
+          s3-secret-key: ${{ secrets.SCCACHE_S3_SECRET_ACCESS_KEY }}
+          s3-endpoint: ${{ secrets.SCCACHE_S3_ENDPOINT }}
+          bucket: polybase-target-cache-eu
           prefix: testing-cache
           local-path: target
           skip-upload: ${{ env.SKIP_UPLOAD }}
@@ -200,8 +207,10 @@ jobs:
         id: cloud-cache-home-cargo
         uses: ./.github/actions/cloud-cache
         with:
-          gcs-key: ${{ secrets.SCCACHE_GCS_SA_KEY_BASE64 }}
-          bucket: ${{ vars.TARGET_CACHE_GCS_BUCKET }}
+          s3-access-key: ${{ secrets.SCCACHE_S3_ACCESS_KEY_ID }}
+          s3-secret-key: ${{ secrets.SCCACHE_S3_SECRET_ACCESS_KEY }}
+          s3-endpoint: ${{ secrets.SCCACHE_S3_ENDPOINT }}
+          bucket: polybase-target-cache-eu
           prefix: testing-cache
           local-path: ~/.cargo
           skip-upload: ${{ env.SKIP_UPLOAD }}
@@ -258,9 +267,10 @@ jobs:
       - name: Setup sccache
         uses: ./.github/actions/setup-sccache
         with:
-          backend: gcs
-          sccache_gcs_sa_key_base64: "${{ secrets.SCCACHE_GCS_SA_KEY_BASE64 }}"
-          sccache_bucket: ${{ vars.SCCACHE_GCS_BUCKET }}
+          sccache_bucket: polybase-sccache-eu
+          sccache_s3_access_key_id: "${{ secrets.SCCACHE_S3_ACCESS_KEY_ID }}"
+          sccache_s3_secret_access_key: "${{ secrets.SCCACHE_S3_SECRET_ACCESS_KEY }}"
+          sccache_s3_endpoint: "${{ secrets.SCCACHE_S3_ENDPOINT }}"
 
       - name: Install npm modules
         run: cd .github/actions/cloud-cache && npm install
@@ -269,8 +279,10 @@ jobs:
         id: cloud-cache
         uses: ./.github/actions/cloud-cache
         with:
-          gcs-key: ${{ secrets.SCCACHE_GCS_SA_KEY_BASE64 }}
-          bucket: ${{ vars.TARGET_CACHE_GCS_BUCKET }}
+          s3-access-key: ${{ secrets.SCCACHE_S3_ACCESS_KEY_ID }}
+          s3-secret-key: ${{ secrets.SCCACHE_S3_SECRET_ACCESS_KEY }}
+          s3-endpoint: ${{ secrets.SCCACHE_S3_ENDPOINT }}
+          bucket: polybase-target-cache-eu
           prefix: testing-cache
           local-path: target
           skip-upload: ${{ env.SKIP_UPLOAD }}

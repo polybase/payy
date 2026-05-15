@@ -71,7 +71,13 @@ pub(super) fn describe_mpp(challenge: &MppChallenge) -> String {
             sanitize_control_chars(&auth.method),
             sanitize_control_chars(challenge.request.amount.raw()),
             sanitize_control_chars(&challenge.request.currency),
-            sanitize_control_chars(&challenge.request.recipient),
+            sanitize_control_chars(
+                challenge
+                    .request
+                    .private_address
+                    .as_deref()
+                    .unwrap_or(&challenge.request.recipient)
+            ),
         ));
     }
 
@@ -119,6 +125,10 @@ fn parse_mpp_request(encoded_request: &str) -> Result<MppPaymentRequest> {
             .or(raw.chain_id),
         currency: raw.currency.ok_or(Error::FetchInvalidPaymentResponse)?,
         description: raw.description,
+        private_address: raw.private_address.or_else(|| {
+            raw.method_details
+                .and_then(|details| details.private_address)
+        }),
         recipient: raw.recipient.ok_or(Error::FetchInvalidPaymentResponse)?,
     })
 }
@@ -180,6 +190,7 @@ struct RawMppRequest {
     currency: Option<String>,
     description: Option<String>,
     method_details: Option<RawMppMethodDetails>,
+    private_address: Option<String>,
     recipient: Option<String>,
 }
 
@@ -187,4 +198,5 @@ struct RawMppRequest {
 #[serde(rename_all = "camelCase")]
 struct RawMppMethodDetails {
     chain_id: Option<u64>,
+    private_address: Option<String>,
 }

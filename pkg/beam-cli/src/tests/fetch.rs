@@ -227,6 +227,7 @@ async fn fetch_writes_response_to_output_file() {
             allowed_chains: Vec::new(),
             no_pay: false,
             dev: false,
+            private_payment: false,
         },
     )
     .await
@@ -265,6 +266,7 @@ async fn fetch_returns_payment_required_when_no_pay_is_set() {
             allowed_chains: Vec::new(),
             no_pay: true,
             dev: true,
+            private_payment: false,
         },
     )
     .await

@@ -1,4 +1,7 @@
 // lint-long-file-override allow-max-lines=300
+#[path = "interactive_history_sensitive.rs"]
+mod sensitive;
+
 use std::path::Path;
 
 use clap::Parser;
@@ -9,6 +12,7 @@ use rustyline::{
 };
 
 use crate::cli::{Cli, normalize_cli_args};
+use sensitive::looks_like_sensitive_command;
 
 pub(crate) struct ReplHistory {
     inner: DefaultHistory,
@@ -191,62 +195,14 @@ pub(crate) fn should_persist_history(line: &str) -> bool {
             };
         }
 
-        return !looks_like_sensitive_wallet_command(&args);
+        return !looks_like_sensitive_command(&args);
     }
 
     let args = line
         .split_whitespace()
         .map(ToString::to_string)
         .collect::<Vec<_>>();
-    !looks_like_sensitive_wallet_command(&args)
-}
-
-fn looks_like_sensitive_wallet_command(args: &[String]) -> bool {
-    let Some(command_index) = command_index(args) else {
-        return false;
-    };
-
-    matches!(
-        args.get(command_index)
-            .map(String::as_str)
-            .map(normalized_command),
-        Some("wallet" | "wallets")
-    ) && matches!(
-        args.get(command_index + 1).map(String::as_str),
-        Some("import" | "address")
-    )
-}
-
-fn normalized_command(command: &str) -> &str {
-    command.strip_prefix('/').unwrap_or(command)
-}
-
-fn command_index(args: &[String]) -> Option<usize> {
-    let mut index = 0;
-    if args.get(index).map(String::as_str) == Some("beam") {
-        index += 1;
-    }
-
-    while index < args.len() {
-        let arg = args[index].as_str();
-        if arg == "--no-update-check" {
-            index += 1;
-            continue;
-        }
-
-        let flag = arg.split_once('=').map_or(arg, |(flag, _)| flag);
-        if matches!(
-            flag,
-            "--chain" | "--color" | "--format" | "--from" | "--output" | "--rpc"
-        ) {
-            index += if arg.contains('=') { 1 } else { 2 };
-            continue;
-        }
-
-        return Some(index);
-    }
-
-    None
+    !looks_like_sensitive_command(&args)
 }
 
 fn bind_history_search<H, I>(editor: &mut Editor<H, I>, key: KeyEvent, direction: SearchDirection)

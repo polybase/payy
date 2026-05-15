@@ -108420,6 +108420,11 @@ function expandTilde(inputPath) {
   }
   return inputPath;
 }
+
+function isStrictR2Context() {
+  return process.env.GITHUB_REF === "refs/heads/main";
+}
+
 async function run() {
   try {
     // Get inputs
@@ -108490,12 +108495,30 @@ async function run() {
       const s3SecretKey = core.getInput("s3-secret-key");
       const s3Endpoint = core.getInput("s3-endpoint");
       const s3Region = core.getInput("s3-region");
+      const strictR2Context = isStrictR2Context();
+
+      if (!s3Endpoint) {
+        if (strictR2Context) {
+          throw new Error("s3-endpoint is required when provider=s3 on refs/heads/main");
+        }
+        if (needsCredentials) {
+          throw new Error("s3-endpoint is required when provider=s3 and skip-download is false");
+        }
+        core.warning("Cloudflare R2 endpoint not provided for provider=s3. Cache operations will be skipped.");
+        core.setOutput("cache-hit", "false");
+        core.setOutput("restored", "false");
+        core.setOutput("path", localPath);
+        return;
+      }
 
       if (!s3AccessKey || !s3SecretKey) {
+        if (strictR2Context) {
+          throw new Error("s3-access-key and s3-secret-key are required when provider=s3 on refs/heads/main");
+        }
         if (needsCredentials) {
           throw new Error("s3-access-key and s3-secret-key are required when skip-download is false");
         }
-        core.warning("S3 credentials not provided. Cache operations will be skipped.");
+        core.warning("Cloudflare R2 credentials not provided for provider=s3. Cache operations will be skipped.");
         core.setOutput("cache-hit", "false");
         core.setOutput("restored", "false");
         core.setOutput("path", localPath);
@@ -108514,10 +108537,8 @@ async function run() {
           secretAccessKey: s3SecretKey,
         },
         forcePathStyle: true,
+        endpoint: s3Endpoint,
       };
-      if (s3Endpoint) {
-        s3Config.endpoint = s3Endpoint;
-      }
       s3Client = new S3Client(s3Config);
     } else {
       throw new Error(`Unsupported provider: ${provider}`);

@@ -11,6 +11,7 @@ pub(crate) mod interactive_interrupt;
 pub(crate) mod interactive_parse;
 pub(crate) mod interactive_state;
 mod interactive_suggestion;
+pub mod privacy;
 pub mod rpc;
 pub(crate) mod signing;
 pub(crate) mod token_report;
@@ -30,6 +31,7 @@ pub async fn run(app: &BeamApp, command: Command) -> Result<()> {
         Command::Chain { action } => chain::run(app, action).await,
         Command::Rpc { action } => rpc::run(app, action).await,
         Command::Tokens { action } => tokens::run(app, action).await,
+        Command::Privacy { action } => privacy::run(app, action).await,
         Command::Balance(args) => balance::run(app, args).await,
         Command::Transfer(args) => transfer::run(app, args).await,
         Command::Txn(args) => txn::run(app, args).await,

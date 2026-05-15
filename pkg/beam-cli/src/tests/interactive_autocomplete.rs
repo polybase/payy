@@ -7,7 +7,7 @@ use rustyline::{
 
 use crate::commands::{
     interactive::uses_matching_prefix_history_search,
-    interactive_helper::BeamHelper,
+    interactive_helper::{BeamHelper, completion_candidates},
     interactive_history::{ReplHistory, history_navigation_command},
 };
 
@@ -47,6 +47,20 @@ fn inline_hint_falls_back_to_completion_prefixes() {
     assert_eq!(
         helper.hint("wallets import --pri", "wallets import --pri".len(), &ctx),
         Some("vate-key-".to_string())
+    );
+}
+
+#[test]
+fn privacy_commands_are_completion_candidates() {
+    assert!(
+        completion_candidates("pri", 3)
+            .iter()
+            .any(|candidate| candidate == "privacy")
+    );
+    assert!(
+        completion_candidates("privacy ", "privacy ".len())
+            .iter()
+            .any(|candidate| candidate == "incoming")
     );
 }
 

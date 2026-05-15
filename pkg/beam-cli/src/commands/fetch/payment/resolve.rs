@@ -72,6 +72,7 @@ pub(super) async fn resolve_payment_chain(
         is_builtin: false,
         key,
         native_symbol: "ETH".to_string(),
+        privacy: None,
     };
     let client = connect_payment_client(app, &fallback_entry, &rpc_url, chain_id_hint).await?;
     let chain_id = match chain_id_hint {
@@ -230,5 +231,6 @@ pub(super) fn payment_chain_from_entry(entry: &ChainEntry, chain_id: u64) -> Pay
         display_name: entry.display_name.clone(),
         key: entry.key.clone(),
         native_symbol: entry.native_symbol.clone(),
+        privacy: entry.privacy.clone(),
     }
 }

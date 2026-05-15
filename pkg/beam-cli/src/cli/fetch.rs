@@ -46,6 +46,13 @@ pub struct FetchArgs {
     #[arg(
         long,
         default_value_t = false,
+        help = "Prefer explicit privacy-capable payment challenges"
+    )]
+    pub private_payment: bool,
+
+    #[arg(
+        long,
+        default_value_t = false,
         help = "Allow loopback HTTP payment challenges for development and fixtures"
     )]
     pub dev: bool,

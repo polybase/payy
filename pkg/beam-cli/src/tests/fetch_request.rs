@@ -56,6 +56,7 @@ async fn fetch_defaults_to_post_when_inline_data_is_present() {
             allowed_chains: Vec::new(),
             no_pay: false,
             dev: false,
+            private_payment: false,
         },
     )
     .await
@@ -94,6 +95,7 @@ async fn fetch_streams_request_body_from_data_file() {
             allowed_chains: Vec::new(),
             no_pay: false,
             dev: false,
+            private_payment: false,
         },
     )
     .await
@@ -130,6 +132,7 @@ async fn fetch_rejects_http_payment_challenge_without_dev_flag() {
             allowed_chains: Vec::new(),
             no_pay: true,
             dev: false,
+            private_payment: false,
         },
     )
     .await
@@ -170,6 +173,7 @@ async fn fetch_allows_loopback_http_payment_challenge_with_dev_flag() {
             allowed_chains: Vec::new(),
             no_pay: true,
             dev: true,
+            private_payment: false,
         },
     )
     .await
@@ -213,6 +217,7 @@ async fn fetch_rejects_mpp_retry_when_request_already_has_authorization_header()
             allowed_chains: Vec::new(),
             no_pay: false,
             dev: true,
+            private_payment: false,
         },
     )
     .await
@@ -286,5 +291,6 @@ fn fetch_args(dev: bool) -> FetchArgs {
         allowed_chains: Vec::new(),
         no_pay: false,
         dev,
+        private_payment: false,
     }
 }

@@ -54,7 +54,7 @@ BLOCKSCOUT_REDIS_RESET_IMAGE="${BLOCKSCOUT_REDIS_RESET_IMAGE:-redis:7-alpine}"
 BLOCKSCOUT_REDIS_FLUSH_COMMAND="${BLOCKSCOUT_REDIS_FLUSH_COMMAND:-FLUSHDB}"
 BLOCKSCOUT_REDIS_TIMEOUT_SECONDS="${BLOCKSCOUT_REDIS_TIMEOUT_SECONDS:-10}"
 BLOCKSCOUT_REDIS_REQUIRED="${BLOCKSCOUT_REDIS_REQUIRED:-false}"
-BLOCKSCOUT_REDIS_URL="${BLOCKSCOUT_REDIS_URL:-redis://10.96.88.3:6379/0}"
+BLOCKSCOUT_REDIS_URL="${BLOCKSCOUT_REDIS_URL:-}"
 BLOCKSCOUT_REDIS_URL_SECRET="${BLOCKSCOUT_REDIS_URL_SECRET:-}"
 BLOCKSCOUT_REDIS_URL_SECRET_KEY="${BLOCKSCOUT_REDIS_URL_SECRET_KEY:-}"
 DRY_RUN="${DRY_RUN:-false}"
@@ -144,6 +144,10 @@ is_blockscout_redis_required() {
   [[ "${BLOCKSCOUT_REDIS_REQUIRED}" == "1" ||
     "${BLOCKSCOUT_REDIS_REQUIRED}" == "true" ||
     "${BLOCKSCOUT_REDIS_REQUIRED}" == "yes" ]]
+}
+
+has_blockscout_redis_config() {
+  [[ -n "${BLOCKSCOUT_REDIS_URL_SECRET}" || -n "${BLOCKSCOUT_REDIS_URL}" ]]
 }
 
 database_name_from_url() {
@@ -475,6 +479,16 @@ YAML
 }
 
 reset_blockscout_redis() {
+  if ! has_blockscout_redis_config; then
+    if is_blockscout_redis_required; then
+      echo "BLOCKSCOUT_REDIS_URL or BLOCKSCOUT_REDIS_URL_SECRET is required when BLOCKSCOUT_REDIS_REQUIRED=true." >&2
+      exit 1
+    fi
+
+    echo "Skipping Blockscout Redis reset because no Redis URL or secret is configured."
+    return
+  fi
+
   create_blockscout_redis_reset_pod
 
   local deadline=$((SECONDS + BLOCKSCOUT_REDIS_TIMEOUT_SECONDS + 120))
@@ -538,8 +552,14 @@ preflight() {
       ;;
   esac
   if [[ -n "${BLOCKSCOUT_REDIS_URL_SECRET}" ]]; then
+    if [[ -z "${BLOCKSCOUT_REDIS_URL_SECRET_KEY}" ]]; then
+      echo "BLOCKSCOUT_REDIS_URL_SECRET_KEY is required when BLOCKSCOUT_REDIS_URL_SECRET is set" >&2
+      exit 1
+    fi
     kubectl_ns get "secret/${BLOCKSCOUT_REDIS_URL_SECRET}" >/dev/null
-  else
+  elif [[ -n "${BLOCKSCOUT_REDIS_URL}" ]]; then
+    :
+  elif is_blockscout_redis_required; then
     require_env BLOCKSCOUT_REDIS_URL
   fi
 
@@ -561,49 +581,50 @@ print_dry_run_plan() {
   echo "DRY RUN: no Kubernetes resources will be mutated."
   echo
   echo "Resolved variables:"
-  cat <<EOF
-KUBECTL=${KUBECTL}
-NAMESPACE=${NAMESPACE}
-PAYY_EVM_STATEFULSET=${PAYY_EVM_STATEFULSET}
-PAYY_EVM_CONTAINER=${PAYY_EVM_CONTAINER}
-PAYY_EVM_PVC=${PAYY_EVM_PVC}
-PAYY_EVM_DATADIR=${PAYY_EVM_DATADIR}
-PAYY_EVM_IMAGE_SOURCE=${PAYY_EVM_IMAGE_SOURCE}
-PAYY_EVM_PIN_IMAGE=${PAYY_EVM_PIN_IMAGE}
-PAYY_EVM_IMAGE=${PAYY_EVM_IMAGE}
-PAYY_EVM_IMAGE_DIGEST=${PAYY_EVM_IMAGE_DIGEST}
-PAYY_EVM_PATCH_RUN_SUBCOMMAND=${PAYY_EVM_PATCH_RUN_SUBCOMMAND}
-MIGRATION_POD=${MIGRATION_POD}
-MIGRATION_TIMEOUT=${MIGRATION_TIMEOUT}
-PAYY_EVM_READY_TIMEOUT=${PAYY_EVM_READY_TIMEOUT}
-BLOCKSCOUT_RESOURCE_REGEX=${BLOCKSCOUT_RESOURCE_REGEX}
-BLOCKSCOUT_SELECTOR=${BLOCKSCOUT_SELECTOR}
-BLOCKSCOUT_DB_RESET_MODE=${BLOCKSCOUT_DB_RESET_MODE}
-BLOCKSCOUT_DB_SECRET=${BLOCKSCOUT_DB_SECRET}
-BLOCKSCOUT_DB_SECRET_KEY=${BLOCKSCOUT_DB_SECRET_KEY}
-BLOCKSCOUT_DB_RESET_POD=${BLOCKSCOUT_DB_RESET_POD}
-BLOCKSCOUT_DB_RESET_IMAGE=${BLOCKSCOUT_DB_RESET_IMAGE}
-BLOCKSCOUT_CLOUDSQL_PROJECT=${BLOCKSCOUT_CLOUDSQL_PROJECT}
-BLOCKSCOUT_CLOUDSQL_INSTANCE=${BLOCKSCOUT_CLOUDSQL_INSTANCE}
-BLOCKSCOUT_DB_FRESH_NAME=${BLOCKSCOUT_DB_FRESH_NAME}
-BLOCKSCOUT_DB_CHARSET=${BLOCKSCOUT_DB_CHARSET}
-BLOCKSCOUT_DB_COLLATION=${BLOCKSCOUT_DB_COLLATION}
-BLOCKSCOUT_SECRET_MANAGER_SECRET=${BLOCKSCOUT_SECRET_MANAGER_SECRET}
-BLOCKSCOUT_EXTERNAL_SECRET=${BLOCKSCOUT_EXTERNAL_SECRET}
-BLOCKSCOUT_EXTERNAL_SECRET_SYNC_TIMEOUT_SECONDS=${BLOCKSCOUT_EXTERNAL_SECRET_SYNC_TIMEOUT_SECONDS}
-BLOCKSCOUT_REDIS_RESET_POD=${BLOCKSCOUT_REDIS_RESET_POD}
-BLOCKSCOUT_REDIS_RESET_IMAGE=${BLOCKSCOUT_REDIS_RESET_IMAGE}
-BLOCKSCOUT_REDIS_FLUSH_COMMAND=${BLOCKSCOUT_REDIS_FLUSH_COMMAND}
-BLOCKSCOUT_REDIS_TIMEOUT_SECONDS=${BLOCKSCOUT_REDIS_TIMEOUT_SECONDS}
-BLOCKSCOUT_REDIS_REQUIRED=${BLOCKSCOUT_REDIS_REQUIRED}
-BLOCKSCOUT_REDIS_URL_SECRET=${BLOCKSCOUT_REDIS_URL_SECRET}
-BLOCKSCOUT_REDIS_URL_SECRET_KEY=${BLOCKSCOUT_REDIS_URL_SECRET_KEY}
-BLOCKSCOUT_REDIS_URL=${BLOCKSCOUT_REDIS_URL:+<set>}
-EOF
+  printf '%s\n' \
+    "KUBECTL=${KUBECTL}" \
+    "NAMESPACE=${NAMESPACE}" \
+    "PAYY_EVM_STATEFULSET=${PAYY_EVM_STATEFULSET}" \
+    "PAYY_EVM_CONTAINER=${PAYY_EVM_CONTAINER}" \
+    "PAYY_EVM_PVC=${PAYY_EVM_PVC}" \
+    "PAYY_EVM_DATADIR=${PAYY_EVM_DATADIR}" \
+    "PAYY_EVM_IMAGE_SOURCE=${PAYY_EVM_IMAGE_SOURCE}" \
+    "PAYY_EVM_PIN_IMAGE=${PAYY_EVM_PIN_IMAGE}" \
+    "PAYY_EVM_IMAGE=${PAYY_EVM_IMAGE}" \
+    "PAYY_EVM_IMAGE_DIGEST=${PAYY_EVM_IMAGE_DIGEST}" \
+    "PAYY_EVM_PATCH_RUN_SUBCOMMAND=${PAYY_EVM_PATCH_RUN_SUBCOMMAND}" \
+    "MIGRATION_POD=${MIGRATION_POD}" \
+    "MIGRATION_TIMEOUT=${MIGRATION_TIMEOUT}" \
+    "PAYY_EVM_READY_TIMEOUT=${PAYY_EVM_READY_TIMEOUT}" \
+    "BLOCKSCOUT_RESOURCE_REGEX=${BLOCKSCOUT_RESOURCE_REGEX}" \
+    "BLOCKSCOUT_SELECTOR=${BLOCKSCOUT_SELECTOR}" \
+    "BLOCKSCOUT_DB_RESET_MODE=${BLOCKSCOUT_DB_RESET_MODE}" \
+    "BLOCKSCOUT_DB_SECRET=${BLOCKSCOUT_DB_SECRET}" \
+    "BLOCKSCOUT_DB_SECRET_KEY=${BLOCKSCOUT_DB_SECRET_KEY}" \
+    "BLOCKSCOUT_DB_RESET_POD=${BLOCKSCOUT_DB_RESET_POD}" \
+    "BLOCKSCOUT_DB_RESET_IMAGE=${BLOCKSCOUT_DB_RESET_IMAGE}" \
+    "BLOCKSCOUT_CLOUDSQL_PROJECT=${BLOCKSCOUT_CLOUDSQL_PROJECT}" \
+    "BLOCKSCOUT_CLOUDSQL_INSTANCE=${BLOCKSCOUT_CLOUDSQL_INSTANCE}" \
+    "BLOCKSCOUT_DB_FRESH_NAME=${BLOCKSCOUT_DB_FRESH_NAME}" \
+    "BLOCKSCOUT_DB_CHARSET=${BLOCKSCOUT_DB_CHARSET}" \
+    "BLOCKSCOUT_DB_COLLATION=${BLOCKSCOUT_DB_COLLATION}" \
+    "BLOCKSCOUT_SECRET_MANAGER_SECRET=${BLOCKSCOUT_SECRET_MANAGER_SECRET}" \
+    "BLOCKSCOUT_EXTERNAL_SECRET=${BLOCKSCOUT_EXTERNAL_SECRET}" \
+    "BLOCKSCOUT_EXTERNAL_SECRET_SYNC_TIMEOUT_SECONDS=${BLOCKSCOUT_EXTERNAL_SECRET_SYNC_TIMEOUT_SECONDS}" \
+    "BLOCKSCOUT_REDIS_RESET_POD=${BLOCKSCOUT_REDIS_RESET_POD}" \
+    "BLOCKSCOUT_REDIS_RESET_IMAGE=${BLOCKSCOUT_REDIS_RESET_IMAGE}" \
+    "BLOCKSCOUT_REDIS_FLUSH_COMMAND=${BLOCKSCOUT_REDIS_FLUSH_COMMAND}" \
+    "BLOCKSCOUT_REDIS_TIMEOUT_SECONDS=${BLOCKSCOUT_REDIS_TIMEOUT_SECONDS}" \
+    "BLOCKSCOUT_REDIS_REQUIRED=${BLOCKSCOUT_REDIS_REQUIRED}" \
+    "BLOCKSCOUT_REDIS_URL_SECRET=${BLOCKSCOUT_REDIS_URL_SECRET}" \
+    "BLOCKSCOUT_REDIS_URL_SECRET_KEY=${BLOCKSCOUT_REDIS_URL_SECRET_KEY}" \
+    "BLOCKSCOUT_REDIS_URL=${BLOCKSCOUT_REDIS_URL:+<set>}"
 
   echo
   echo "Matched Blockscout workloads and current replicas:"
-  cat "${blockscout_replicas}"
+  while IFS= read -r resource; do
+    printf '%s\n' "${resource}"
+  done < "${blockscout_replicas}"
 
   echo
   echo "Migration pod manifest:"
@@ -611,20 +632,25 @@ EOF
 
   echo
   echo "Planned operations:"
-  cat <<EOF
-1. kubectl -n ${NAMESPACE} scale statefulset/${PAYY_EVM_STATEFULSET} --replicas=0
-2. Wait for pod/${PAYY_EVM_STATEFULSET}-0 to delete.
-3. Scale matched Blockscout workloads to 0.
-4. Wait for pods matching ${BLOCKSCOUT_SELECTOR} to delete.
-5. Create pod/${MIGRATION_POD} with PVC ${PAYY_EVM_PVC} mounted at ${PAYY_EVM_DATADIR}.
-6. Wait for pod/${MIGRATION_POD} to complete successfully, then delete it.
-7. Reset Blockscout DB using mode ${BLOCKSCOUT_DB_RESET_MODE}.
-8. Create pod/${BLOCKSCOUT_REDIS_RESET_POD} to run ${BLOCKSCOUT_REDIS_FLUSH_COMMAND} against Blockscout Redis.
-9. kubectl -n ${NAMESPACE} set image statefulset/${PAYY_EVM_STATEFULSET} ${PAYY_EVM_CONTAINER}=${PAYY_EVM_IMAGE}
-10. Ensure container ${PAYY_EVM_CONTAINER} args start with run when PAYY_EVM_PATCH_RUN_SUBCOMMAND=true.
-11. kubectl -n ${NAMESPACE} scale statefulset/${PAYY_EVM_STATEFULSET} --replicas=1
-12. Restore matched Blockscout workloads to their original replica counts.
-EOF
+  local redis_step
+  if has_blockscout_redis_config; then
+    redis_step="8. Create pod/${BLOCKSCOUT_REDIS_RESET_POD} to run ${BLOCKSCOUT_REDIS_FLUSH_COMMAND} against Blockscout Redis."
+  else
+    redis_step="8. Skip Blockscout Redis reset because no Redis URL or secret is configured."
+  fi
+  printf '%s\n' \
+    "1. kubectl -n ${NAMESPACE} scale statefulset/${PAYY_EVM_STATEFULSET} --replicas=0" \
+    "2. Wait for pod/${PAYY_EVM_STATEFULSET}-0 to delete." \
+    "3. Scale matched Blockscout workloads to 0." \
+    "4. Wait for pods matching ${BLOCKSCOUT_SELECTOR} to delete." \
+    "5. Create pod/${MIGRATION_POD} with PVC ${PAYY_EVM_PVC} mounted at ${PAYY_EVM_DATADIR}." \
+    "6. Wait for pod/${MIGRATION_POD} to complete successfully, then delete it." \
+    "7. Reset Blockscout DB using mode ${BLOCKSCOUT_DB_RESET_MODE}." \
+    "${redis_step}" \
+    "9. kubectl -n ${NAMESPACE} set image statefulset/${PAYY_EVM_STATEFULSET} ${PAYY_EVM_CONTAINER}=${PAYY_EVM_IMAGE}" \
+    "10. Ensure container ${PAYY_EVM_CONTAINER} args start with run when PAYY_EVM_PATCH_RUN_SUBCOMMAND=true." \
+    "11. kubectl -n ${NAMESPACE} scale statefulset/${PAYY_EVM_STATEFULSET} --replicas=1" \
+    "12. Restore matched Blockscout workloads to their original replica counts."
 }
 
 payy_evm_container_index() {
@@ -681,46 +707,45 @@ ensure_payy_evm_run_subcommand() {
 }
 
 print_migration_pod_manifest() {
-  cat <<YAML
-apiVersion: v1
-kind: Pod
-metadata:
-  name: ${MIGRATION_POD}
-  labels:
-    app.kubernetes.io/name: payy-evm-volume-migration
-spec:
-  restartPolicy: Never
-  terminationGracePeriodSeconds: 30
-  securityContext:
-    fsGroup: 1001
-    fsGroupChangePolicy: OnRootMismatch
-  containers:
-    - name: migrate
-      image: ${PAYY_EVM_IMAGE}
-      imagePullPolicy: Always
-      command:
-        - /usr/bin/payy-evm
-      args:
-        - --log-format
-        - MINIMAL
-        - migrate
-        - --network
-        - testnet
-        - --datadir
-        - ${PAYY_EVM_DATADIR}
-        - --skip-empty-blocks
-      securityContext:
-        runAsUser: 1001
-        runAsGroup: 1001
-        runAsNonRoot: true
-      volumeMounts:
-        - name: data
-          mountPath: ${PAYY_EVM_DATADIR}
-  volumes:
-    - name: data
-      persistentVolumeClaim:
-        claimName: ${PAYY_EVM_PVC}
-YAML
+  printf '%s\n' \
+    "apiVersion: v1" \
+    "kind: Pod" \
+    "metadata:" \
+    "  name: ${MIGRATION_POD}" \
+    "  labels:" \
+    "    app.kubernetes.io/name: payy-evm-volume-migration" \
+    "spec:" \
+    "  restartPolicy: Never" \
+    "  terminationGracePeriodSeconds: 30" \
+    "  securityContext:" \
+    "    fsGroup: 1001" \
+    "    fsGroupChangePolicy: OnRootMismatch" \
+    "  containers:" \
+    "    - name: migrate" \
+    "      image: ${PAYY_EVM_IMAGE}" \
+    "      imagePullPolicy: Always" \
+    "      command:" \
+    "        - /usr/bin/payy-evm" \
+    "      args:" \
+    "        - --log-format" \
+    "        - MINIMAL" \
+    "        - migrate" \
+    "        - --network" \
+    "        - testnet" \
+    "        - --datadir" \
+    "        - ${PAYY_EVM_DATADIR}" \
+    "        - --skip-empty-blocks" \
+    "      securityContext:" \
+    "        runAsUser: 1001" \
+    "        runAsGroup: 1001" \
+    "        runAsNonRoot: true" \
+    "      volumeMounts:" \
+    "        - name: data" \
+    "          mountPath: ${PAYY_EVM_DATADIR}" \
+    "  volumes:" \
+    "    - name: data" \
+    "      persistentVolumeClaim:" \
+    "        claimName: ${PAYY_EVM_PVC}"
 }
 
 main() {

@@ -1,7 +1,7 @@
 # Get Started
 
 {% hint style="warning" %}
-Payy Testnet and SDK packages are currently invite only - reach out to hello@payy.link for access.
+Payy Testnet and SDK packages are in alpha - you should expect breaking changes.
 {% endhint %}
 
 Use Payy's client SDKs for EVM privacy flows: private accounts, owned-note lookup, private balances, incoming-note discovery, proof preparation, and PrivacyBridge submission.
@@ -37,9 +37,18 @@ payy-evm-client = { version = "0.1", features = ["alloy"] }
 payy-evm-client = { git = "https://github.com/polybase/payy", package = "payy-evm-client", rev = "<commit>", features = ["alloy"] }
 ```
 
-Rust builds use the `bb-cli` backend by default and shell out to an installed
-`bb` executable. To use compiled Barretenberg bindings instead, disable default
-features and enable `bb-bindings`.
+Rust builds use the `bb-cli` backend by default and shell out to `bb` version
+`3.0.0-manual.20251030` on `PATH`. Install that version with `bbup`:
+
+```bash
+curl -L https://raw.githubusercontent.com/AztecProtocol/aztec-packages/refs/heads/master/barretenberg/bbup/install | bash
+bbup -v 3.0.0-manual.20251030
+bb --version
+```
+
+To use compiled Barretenberg bindings instead, enable `bb-bindings`. Cargo
+features are additive, so add `default-features = false` only if you also want to
+omit the default `bb-cli` dependency.
 {% endtab %}
 
 {% endtabs %}

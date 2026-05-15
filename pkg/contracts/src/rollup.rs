@@ -27,7 +27,7 @@ use web3::{
 };
 
 pub const AGG_FINAL_VERIFICATION_KEY_HASH: &str =
-    "0x122d2ac7542fa020cbfff0836b5d0c30898330074b19869179bba49b5db69967";
+    "0x0701c58cb73e870b8da74294bb1a820e346546e4d3cdca393aa84d3716d3787c";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ValidatorSet {

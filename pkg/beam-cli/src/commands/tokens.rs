@@ -68,13 +68,13 @@ async fn add_token(app: &BeamApp, args: TokenAddArgs) -> Result<()> {
         Some(token) => token,
         None => prompt_required("beam token address")?,
     };
-    if is_native_selector(&selector, &native_symbol) {
-        return Err(Error::NativeTokenAlwaysTracked { chain: chain_key });
-    }
 
     let mut config = app.config_store.get().await;
     let (label_key, token) = match config.known_token_by_label(&chain_key, &selector) {
         Some((label_key, token)) => (label_key, token),
+        None if is_native_selector(&selector, &native_symbol) => {
+            return Err(Error::NativeTokenAlwaysTracked { chain: chain_key });
+        }
         None => {
             resolve_custom_token(
                 app,
@@ -130,18 +130,16 @@ async fn add_token(app: &BeamApp, args: TokenAddArgs) -> Result<()> {
 async fn remove_token(app: &BeamApp, selector: &str) -> Result<()> {
     let chain = app.active_chain().await?;
     let chain_key = chain.entry.key.clone();
-    if is_native_selector(selector, &chain.entry.native_symbol) {
-        return Err(Error::NativeTokenAlwaysTracked { chain: chain_key });
-    }
 
     let mut config = app.config_store.get().await;
-    let (label_key, token) =
-        tracked_token_selection(&config, &chain_key, selector).ok_or_else(|| {
-            Error::TokenNotTracked {
-                chain: chain_key.clone(),
-                token: selector.to_string(),
-            }
-        })?;
+    let selected = tracked_token_selection(&config, &chain_key, selector);
+    if selected.is_none() && is_native_selector(selector, &chain.entry.native_symbol) {
+        return Err(Error::NativeTokenAlwaysTracked { chain: chain_key });
+    }
+    let (label_key, token) = selected.ok_or_else(|| Error::TokenNotTracked {
+        chain: chain_key.clone(),
+        token: selector.to_string(),
+    })?;
 
     if !config.untrack_token(&chain_key, &label_key) {
         return Err(Error::TokenNotTracked {
@@ -186,27 +184,33 @@ async fn resolve_custom_token(
         return Ok((label_key, token));
     }
 
-    let (_, client) = app.active_chain_client().await?;
-    let (suggested_label, decimals) = with_loading(
-        app.output_mode,
-        format!("Fetching token metadata for {address:#x}..."),
-        async {
-            let decimals = match decimals_override {
-                Some(decimals) => decimals,
-                None => erc20_decimals(&client, address).await?,
-            };
+    let (suggested_label, decimals) =
+        if let (Some(_), Some(decimals)) = (label_override.as_ref(), decimals_override) {
             validate_unit_decimals(usize::from(decimals))?;
+            (None, decimals)
+        } else {
+            let (_, client) = app.active_chain_client().await?;
+            with_loading(
+                app.output_mode,
+                format!("Fetching token metadata for {address:#x}..."),
+                async {
+                    let decimals = match decimals_override {
+                        Some(decimals) => decimals,
+                        None => erc20_decimals(&client, address).await?,
+                    };
+                    validate_unit_decimals(usize::from(decimals))?;
 
-            Ok::<_, Error>((lookup_token_label(&client, address).await.ok(), decimals))
-        },
-    )
-    .await?;
+                    Ok::<_, Error>((lookup_token_label(&client, address).await.ok(), decimals))
+                },
+            )
+            .await?
+        };
     let label = match label_override.or(suggested_label) {
         Some(label) => normalize_token_label(&label)?,
         None => normalize_token_label(&prompt_required("beam token label")?)?,
     };
     let label_key = token_label_key(&label);
-    if label_key == token_label_key(native_symbol) || label_key == token_label_key("native") {
+    if label_key == token_label_key(native_symbol) {
         return Err(Error::ReservedTokenLabel {
             chain: chain_key.to_string(),
             label,

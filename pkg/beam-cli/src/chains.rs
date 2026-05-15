@@ -6,7 +6,10 @@ use contracts::Client;
 use json_store::{FileAccess, InvalidJsonBehavior, JsonStore};
 use serde::{Deserialize, Serialize};
 
-use crate::error::{Error, Result};
+use crate::{
+    error::{Error, Result},
+    privacy_config::{PrivacyProfile, builtin_privacy_profile},
+};
 
 const ETHEREUM_RPC_URL: &str = "https://ethereum-rpc.publicnode.com";
 const BASE_RPC_URL: &str = "https://base-rpc.publicnode.com";
@@ -74,6 +77,7 @@ pub struct ChainEntry {
     pub is_builtin: bool,
     pub key: String,
     pub native_symbol: String,
+    pub privacy: Option<PrivacyProfile>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -89,6 +93,8 @@ pub struct ConfiguredChain {
     pub name: String,
     #[serde(default = "default_native_symbol")]
     pub native_symbol: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub privacy: Option<PrivacyProfile>,
 }
 
 pub async fn load_chains(root: &Path) -> Result<JsonStore<BeamChains>> {
@@ -207,6 +213,7 @@ fn builtin_entry(spec: &BuiltinChainSpec) -> ChainEntry {
         is_builtin: true,
         key: spec.0.to_string(),
         native_symbol: spec.3.to_string(),
+        privacy: builtin_privacy_profile(spec.0),
     }
 }
 
@@ -222,6 +229,7 @@ fn custom_chain_entry(chain: &ConfiguredChain) -> ChainEntry {
         is_builtin: false,
         key: canonicalize(&chain.name),
         native_symbol: chain.native_symbol.clone(),
+        privacy: chain.privacy.clone(),
     }
 }
 

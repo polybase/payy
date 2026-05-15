@@ -189,6 +189,7 @@ fn fetch_args(max_fee: Option<&str>, allowed_chains: &[&str]) -> FetchArgs {
         allowed_chains: allowed_chains.iter().map(ToString::to_string).collect(),
         no_pay: false,
         dev: false,
+        private_payment: false,
     }
 }
 
@@ -198,6 +199,7 @@ fn native_offer(network: &str, amount: &str) -> X402Offer {
         asset: "native".to_string(),
         network: network.to_string(),
         pay_to: RECIPIENT_ADDRESS.to_string(),
+        private_address: None,
         raw: Value::Null,
         scheme: "exact".to_string(),
     }

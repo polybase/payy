@@ -2,6 +2,7 @@
 mod approval;
 mod chain_match;
 mod prepare;
+mod private;
 mod resolve;
 mod selection;
 
@@ -20,6 +21,7 @@ use crate::{
     },
     human_output::sanitize_control_chars,
     output::with_loading_handle,
+    privacy_config::PrivacyProfile,
     runtime::BeamApp,
     transaction::{TransactionExecution, loading_message},
 };
@@ -44,6 +46,7 @@ pub(crate) struct PreparedPayment {
     pub gas: GasEstimate,
     pub network: String,
     pub payer: Address,
+    pub private_recipient: Option<String>,
     pub recipient: Address,
     pub selected_chain: Option<PaymentChain>,
     pub scheme: String,
@@ -65,6 +68,7 @@ pub(crate) struct PaymentChain {
     pub display_name: String,
     pub key: String,
     pub native_symbol: String,
+    pub privacy: Option<PrivacyProfile>,
 }
 
 #[derive(Clone, Debug)]
@@ -101,6 +105,10 @@ pub(crate) async fn execute_payment(
     app: &BeamApp,
     payment: &PreparedPayment,
 ) -> Result<ExecutedPayment> {
+    if payment.private_recipient.is_some() {
+        return private::execute_private_payment(app, payment).await;
+    }
+
     let signer = prompt_active_signer(app).await?;
     let action = format!(
         "payment of {} {} to {:#x}",
@@ -196,6 +204,12 @@ impl PreparedPayment {
         }
 
         match &self.asset.kind {
+            PaymentAssetKind::Erc20(_) if self.private_recipient.is_some() => {
+                let asset_threshold = parse_units(max_fee, usize::from(self.asset.decimals))?;
+                if self.amount > asset_threshold {
+                    return Err(Error::FetchPaymentExceedsMaxFee);
+                }
+            }
             PaymentAssetKind::Native => {
                 if self.amount.saturating_add(self.gas.fee) > gas_threshold {
                     return Err(Error::FetchPaymentExceedsMaxFee);
@@ -241,6 +255,13 @@ impl PreparedPayment {
                 self.gas.gas_price,
             ),
         ];
+
+        if let Some(private_recipient) = self.private_recipient.as_ref() {
+            lines[2] = format!(
+                "Private recipient: {}",
+                sanitize_control_chars(private_recipient)
+            );
+        }
 
         if let Some(description) = self.description.as_ref() {
             lines.push(format!(

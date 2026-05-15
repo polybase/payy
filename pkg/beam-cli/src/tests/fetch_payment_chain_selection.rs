@@ -96,6 +96,7 @@ fn fetch_args() -> FetchArgs {
         allowed_chains: Vec::new(),
         no_pay: false,
         dev: false,
+        private_payment: false,
     }
 }
 
@@ -106,6 +107,7 @@ fn x402_challenge(chain_id: u64) -> X402Challenge {
             asset: "native".to_string(),
             network: format!("eip155:{chain_id}"),
             pay_to: RECIPIENT_ADDRESS.to_string(),
+            private_address: None,
             raw: Value::Null,
             scheme: "exact".to_string(),
         }],
@@ -138,6 +140,7 @@ fn mpp_challenge(chain_id: u64) -> MppChallenge {
             currency: "native".to_string(),
             description: Some("Tempo test charge".to_string()),
             recipient: RECIPIENT_ADDRESS.to_string(),
+            private_address: None,
         },
     }
 }
@@ -170,6 +173,7 @@ async fn set_stale_default_chain(app: &BeamApp) {
                 chain_id: STALE_CHAIN_ID,
                 name: "Forgotten Chain".to_string(),
                 native_symbol: "FGT".to_string(),
+                privacy: None,
             }],
         })
         .await

@@ -120,6 +120,8 @@ minimal-poseidon = { path = "./pkg/minimal-poseidon" }
 eip7702 = { path = "./pkg/eip7702" }
 payy_core = { path = "./pkg/payy_core" }
 payy_core_types = { path = "./pkg/payy_core_types" }
+payy-app-interface = { path = "./pkg/payy-app-interface" }
+payy-app-wallet-mobile = { path = "./pkg/payy-app-wallet-mobile" }
 payy-note = { path = "./pkg/payy-note" }
 payy-evm-parse-link = { path = "./pkg/payy-evm-parse-link" }
 payy-evm-client-interface = { path = "./pkg/payy-evm-client-interface" }
