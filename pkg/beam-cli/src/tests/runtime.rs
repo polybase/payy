@@ -152,6 +152,7 @@ async fn active_chain_rejects_custom_chain_without_rpc_config() {
                 chain_id: 31337,
                 name: "Beam Dev".to_string(),
                 native_symbol: "BEAM".to_string(),
+                privacy: None,
             }],
         },
     )

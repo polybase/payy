@@ -32,9 +32,18 @@ payy-evm-client = { git = "https://github.com/polybase/payy", package = "payy-ev
 payy-evm-client-alloy = { git = "https://github.com/polybase/payy", package = "payy-evm-client-alloy", rev = "<commit>" }
 ```
 
-The Rust client enables `bb-cli` by default, so it shells out to a `bb`
-executable on `PATH`. Use `default-features = false` with `bb-bindings` if you
-want compiled Barretenberg bindings instead. Enable the `alloy` feature for
+The Rust client enables `bb-cli` by default, so it shells out to `bb` version
+`3.0.0-manual.20251030` on `PATH`. Install that version with `bbup`:
+
+```bash
+curl -L https://raw.githubusercontent.com/AztecProtocol/aztec-packages/refs/heads/master/barretenberg/bbup/install | bash
+bbup -v 3.0.0-manual.20251030
+bb --version
+```
+
+Enable `bb-bindings` if you want compiled Barretenberg bindings instead. Cargo
+features are additive, so use `default-features = false` only if you also want
+to omit the default `bb-cli` dependency. Enable the `alloy` feature for
 first-party Alloy helpers, or depend on `payy-evm-client-alloy` directly if you
 prefer explicit crate imports.
 {% endtab %}
@@ -187,8 +196,10 @@ submitter only when you want `prepared.submit()` / `submit_and_wait()` to locall
 sign and broadcast through the SDK.
 
 Rust local privacy signing and the default prover use the `bb-cli` feature by
-default. Use `bb-bindings` with `default-features = false` when you need the
-compiled Barretenberg binding backend.
+default and require `bb` version `3.0.0-manual.20251030` on `PATH`. Enable
+`bb-bindings` when you need the compiled Barretenberg binding backend; use
+`default-features = false` only if you also want to omit the default `bb-cli`
+dependency.
 
 ## Local EVM Key
 

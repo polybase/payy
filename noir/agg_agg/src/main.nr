@@ -8,7 +8,7 @@ struct AggProof {
     commit_hash: Field,
     messages: [Field; 1000],
     verification_key: [Field; 115],
-    verification_key_hash: Field
+    verification_key_hash: Field,
 }
 
 fn main(
@@ -28,7 +28,8 @@ fn main(
         let proof = proofs[i];
 
         // Assert the proof is one of public verification_key_hash (this will be verified in the agg_final)
-        let is_valid_proof = (verification_key_hash[0] == proof.verification_key_hash) | (verification_key_hash[1] == proof.verification_key_hash);
+        let is_valid_proof = (verification_key_hash[0] == proof.verification_key_hash)
+            | (verification_key_hash[1] == proof.verification_key_hash);
         assert(is_valid_proof, "proof must be one of the valid proofs");
 
         let mut public_inputs: [Field; 1005] = [0; 1005];
@@ -104,12 +105,42 @@ fn main(
         }
     }
 
+    assert_message_tail_zero(messages, messages_index);
+
     assert(
         commit_hash
-            == poseidon2::Poseidon2::hash(
-                [proofs[0].commit_hash, proofs[1].commit_hash],
-                2,
-            ),
+            == poseidon2::Poseidon2::hash([proofs[0].commit_hash, proofs[1].commit_hash], 2),
     );
     assert(new_root == root, "Roots must match");
+}
+
+fn assert_message_tail_zero(messages: [Field; 1000], messages_index: u32) {
+    for i in 0..messages.len() {
+        if i >= messages_index {
+            assert(messages[i] == 0, "Message is not zero");
+        }
+    }
+}
+
+#[test]
+fn test_message_tail_zero_allows_zero_padding() {
+    let mut messages = [0; 1000];
+    messages[0] = 2;
+    messages[1] = 1;
+    messages[2] = 10;
+    messages[3] = 20;
+
+    assert_message_tail_zero(messages, 4);
+}
+
+#[test(should_fail)]
+fn test_message_tail_zero_rejects_forged_tail() {
+    let mut messages = [0; 1000];
+    messages[0] = 2;
+    messages[1] = 1;
+    messages[2] = 10;
+    messages[3] = 20;
+    messages[4] = 3;
+
+    assert_message_tail_zero(messages, 4);
 }

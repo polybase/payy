@@ -1,6 +1,8 @@
 // lint-long-file-override allow-max-lines=300
+mod chain;
 mod fetch;
 mod normalize;
+mod privacy;
 
 pub mod util;
 
@@ -8,8 +10,10 @@ use clap::{Args, Parser, Subcommand};
 
 use crate::{display::ColorMode, output::OutputMode, runtime::InvocationOverrides};
 
+pub use chain::*;
 pub use fetch::FetchArgs;
 pub(crate) use normalize::normalize_cli_args;
+pub use privacy::*;
 use util::UtilAction;
 
 #[derive(Debug, Parser)]
@@ -72,6 +76,11 @@ pub enum Command {
         #[command(subcommand)]
         action: Option<TokenAction>,
     },
+    /// Work with private balances and transfers
+    Privacy {
+        #[command(subcommand)]
+        action: PrivacyAction,
+    },
     /// Show balances for tracked tokens or a specific token
     Balance(BalanceArgs),
     /// Send the native token
@@ -120,28 +129,6 @@ pub enum WalletAction {
     },
     /// Set the default wallet
     Use { name: String },
-}
-
-#[derive(Debug, Subcommand)]
-pub enum ChainAction {
-    /// List available chains
-    List,
-    /// Add a custom chain
-    Add(ChainAddArgs),
-    /// Remove a custom chain
-    Remove { chain: String },
-    /// Set the default chain
-    Use { chain: String },
-}
-
-#[derive(Clone, Debug, Args)]
-pub struct ChainAddArgs {
-    pub name: Option<String>,
-    pub rpc: Option<String>,
-    #[arg(long)]
-    pub chain_id: Option<u64>,
-    #[arg(long)]
-    pub native_symbol: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Args, PartialEq, Eq)]
@@ -272,12 +259,29 @@ impl Cli {
 
 impl Command {
     pub(crate) fn is_sensitive(&self) -> bool {
-        matches!(self, Self::Wallet { action } if action.is_sensitive())
+        match self {
+            Self::Wallet { action } => action.is_sensitive(),
+            Self::Privacy { action } => action.is_sensitive(),
+            Self::Fetch(args) => args.private_payment,
+            _ => false,
+        }
     }
 }
 
 impl WalletAction {
     pub(crate) fn is_sensitive(&self) -> bool {
         matches!(self, Self::Import { .. } | Self::Address { .. })
+    }
+}
+
+impl PrivacyAction {
+    pub(crate) fn is_sensitive(&self) -> bool {
+        match self {
+            Self::Send(args) => {
+                args.ephemeral || args.claim_link_message.is_some() || args.memo.is_some()
+            }
+            Self::Claim { .. } => true,
+            _ => false,
+        }
     }
 }

@@ -1,28 +1,28 @@
 name: 'Cloud Cache'
-description: 'Restores and saves a directory to cloud storage as a cache (tar.zst compressed), using a primary key and fallback keys. Supports GCS and S3.'
+description: 'Restores and saves a directory to cloud storage as a cache (tar.zst compressed), using a primary key and fallback keys. Supports GCS and Cloudflare R2 via its S3-compatible API.'
 inputs:
   provider:
-    description: 'Storage provider: gcs or s3'
+    description: 'Storage provider: gcs or s3 (Cloudflare R2 only for s3)'
     required: false
-    default: 'gcs'
+    default: 's3'
   gcs-key:
     description: 'Base64 encoded JSON service account key for GCS'
     required: false
   s3-access-key:
-    description: 'Access key for S3'
+    description: 'Cloudflare R2 access key ID for the s3 backend'
     required: false
   s3-secret-key:
-    description: 'Secret key for S3'
+    description: 'Cloudflare R2 secret access key for the s3 backend'
     required: false
   s3-endpoint:
-    description: 'Endpoint URL for S3 (for non-AWS S3-compatible services)'
+    description: 'Cloudflare R2 endpoint URL for the s3 backend; required when provider=s3'
     required: false
   s3-region:
-    description: 'Region for S3 (default: auto)'
+    description: 'Region for the R2 s3 backend (default: auto)'
     required: false
     default: 'auto'
   bucket:
-    description: 'Bucket name (GCS or S3)'
+    description: 'Bucket name (GCS or Cloudflare R2)'
     required: true
   prefix:
     description: 'Prefix path in the bucket (optional)'

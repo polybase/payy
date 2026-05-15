@@ -15,7 +15,7 @@ type LinkReferences = Record<
 
 // Auto-updated by generate_fixturecs.sh - do not modify manually
 const AGG_FINAL_VERIFICATION_KEY_HASH =
-  "0x122d2ac7542fa020cbfff0836b5d0c30898330074b19869179bba49b5db69967";
+  "0x0701c58cb73e870b8da74294bb1a820e346546e4d3cdca393aa84d3716d3787c";
 
 const USDC_ADDRESSES: Record<number | string, `0x${string}`> = {
   // Ethereum Mainnet

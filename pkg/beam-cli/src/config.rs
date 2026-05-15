@@ -36,9 +36,10 @@ impl BeamConfig {
         label: &str,
     ) -> Option<(String, KnownToken)> {
         let key = token_label_key(label);
-        self.known_tokens
-            .get(chain_key)
-            .and_then(|tokens| tokens.get(&key).cloned().map(|token| (key, token)))
+        self.known_tokens_for_chain(chain_key)
+            .get(&key)
+            .cloned()
+            .map(|token| (key, token))
     }
 
     pub fn known_token_by_address(
@@ -46,12 +47,10 @@ impl BeamConfig {
         chain_key: &str,
         address: &str,
     ) -> Option<(String, KnownToken)> {
-        self.known_tokens.get(chain_key).and_then(|tokens| {
-            tokens
-                .iter()
-                .find(|(_, token)| token.address.eq_ignore_ascii_case(address))
-                .map(|(key, token)| (key.clone(), token.clone()))
-        })
+        self.known_tokens_for_chain(chain_key)
+            .iter()
+            .find(|(_, token)| token.address.eq_ignore_ascii_case(address))
+            .map(|(key, token)| (key.clone(), token.clone()))
     }
 
     pub fn rpc_config_for_chain(&self, chain: &ChainEntry) -> Option<ChainRpcConfig> {
@@ -63,9 +62,10 @@ impl BeamConfig {
     }
 
     pub fn tracked_token_keys_for_chain(&self, chain_key: &str) -> Vec<String> {
-        let Some(tokens) = self.known_tokens.get(chain_key) else {
+        let tokens = self.known_tokens_for_chain(chain_key);
+        if tokens.is_empty() {
             return Vec::new();
-        };
+        }
         let Some(tracked) = self.tracked_tokens.get(chain_key) else {
             return tokens.keys().cloned().collect();
         };
@@ -82,14 +82,20 @@ impl BeamConfig {
     }
 
     pub fn tracked_tokens_for_chain(&self, chain_key: &str) -> Vec<(String, KnownToken)> {
+        let tokens = self.known_tokens_for_chain(chain_key);
         self.tracked_token_keys_for_chain(chain_key)
             .into_iter()
-            .filter_map(|label| {
-                self.known_tokens
-                    .get(chain_key)
-                    .and_then(|tokens| tokens.get(&label).cloned().map(|token| (label, token)))
-            })
+            .filter_map(|label| tokens.get(&label).cloned().map(|token| (label, token)))
             .collect()
+    }
+
+    fn known_tokens_for_chain(&self, chain_key: &str) -> BTreeMap<String, KnownToken> {
+        let mut defaults = default_known_tokens();
+        let mut tokens = defaults.remove(chain_key).unwrap_or_default();
+        if let Some(configured) = self.known_tokens.get(chain_key) {
+            tokens.extend(configured.clone());
+        }
+        tokens
     }
 
     pub fn track_token(&mut self, chain_key: &str, label: &str) -> bool {

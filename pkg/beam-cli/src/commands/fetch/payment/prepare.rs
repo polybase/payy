@@ -1,19 +1,22 @@
 // lint-long-file-override allow-max-lines=300
-use contracts::U256;
+#[path = "prepare_support.rs"]
+mod prepare_support;
+
+use contracts::{Address, U256};
 use serde_json::Value;
 
 use crate::{
     cli::FetchArgs,
     error::{Error, Result},
-    evm::{erc20_balance, format_units, native_balance, parse_units},
+    evm::{erc20_balance, format_units, native_balance},
+    privacy::parse_privacy_address,
     runtime::{BeamApp, parse_address},
 };
 
 use super::{
     PaymentAssetKind, PreparedPayment,
     chain_match::{
-        payment_chain_summary, summarize_x402_offer_chains, x402_offer_matches_payment_chain,
-        x402_offer_matches_selector,
+        summarize_x402_offer_chains, x402_offer_matches_payment_chain, x402_offer_matches_selector,
     },
     resolve::{
         chain_id_from_network, estimate_payment_gas, resolve_payment_asset, resolve_payment_chain,
@@ -21,6 +24,8 @@ use super::{
     selection::selected_payment_chain,
 };
 use crate::commands::fetch::protocol::{AmountValue, MppChallenge, X402Challenge, X402Offer};
+
+use self::prepare_support::{ensure_mpp_chain_matches_override, parse_payment_amount};
 
 pub(crate) async fn prepare_x402_payment(
     app: &BeamApp,
@@ -34,7 +39,7 @@ pub(crate) async fn prepare_x402_payment(
     let mut had_insufficient_balance = false;
 
     for offer in offers {
-        match prepare_offer_payment(app, offer).await {
+        match prepare_offer_payment(app, args, offer).await {
             Ok(payment) => {
                 if let Some(max_fee) = args.max_fee.as_ref() {
                     match payment.ensure_max_fee_allows(max_fee) {
@@ -107,6 +112,8 @@ pub(crate) async fn prepare_mpp_payment(
             chain_id_hint: challenge.request.chain_id,
             description,
             network,
+            private_recipient: challenge.request.private_address.as_deref(),
+            private_required: false,
             recipient: &challenge.request.recipient,
             scheme,
         },
@@ -122,9 +129,30 @@ async fn prepare_payment(app: &BeamApp, request: PaymentRequest<'_>) -> Result<P
     let selected_chain = selected_payment_chain(app).await?;
     let asset = resolve_payment_asset(app, &client, &chain, request.asset_id).await?;
     let amount = parse_payment_amount(request.amount, asset.decimals)?;
-    let recipient =
-        parse_address(request.recipient).map_err(|_| Error::FetchInvalidPaymentResponse)?;
-    let gas = estimate_payment_gas(&client, payer, recipient, amount, &asset).await?;
+    let private_recipient = request.private_recipient.map(ToString::to_string);
+    if request.private_required && private_recipient.is_none() {
+        return Err(Error::FetchInvalidPaymentResponse);
+    }
+    if let Some(private_recipient) = private_recipient.as_ref() {
+        let _ = parse_privacy_address(private_recipient)?;
+        if matches!(asset.kind, PaymentAssetKind::Native) {
+            return Err(Error::FetchInvalidPaymentResponse);
+        }
+    }
+    let recipient = if private_recipient.is_some() {
+        Address::zero()
+    } else {
+        parse_address(request.recipient).map_err(|_| Error::FetchInvalidPaymentResponse)?
+    };
+    let gas = if private_recipient.is_some() {
+        super::GasEstimate {
+            fee: U256::zero(),
+            gas_limit: U256::zero(),
+            gas_price: U256::zero(),
+        }
+    } else {
+        estimate_payment_gas(&client, payer, recipient, amount, &asset).await?
+    };
 
     Ok(PreparedPayment {
         accepted: request.accepted,
@@ -140,13 +168,18 @@ async fn prepare_payment(app: &BeamApp, request: PaymentRequest<'_>) -> Result<P
         description: request.description,
         gas,
         payer,
+        private_recipient,
         recipient,
         selected_chain,
         scheme: request.scheme,
     })
 }
 
-async fn prepare_offer_payment(app: &BeamApp, offer: &X402Offer) -> Result<PreparedPayment> {
+async fn prepare_offer_payment(
+    app: &BeamApp,
+    args: &FetchArgs,
+    offer: &X402Offer,
+) -> Result<PreparedPayment> {
     prepare_payment(
         app,
         PaymentRequest {
@@ -157,6 +190,8 @@ async fn prepare_offer_payment(app: &BeamApp, offer: &X402Offer) -> Result<Prepa
             chain_id_hint: chain_id_from_network(&offer.network),
             description: None,
             network: Some(offer.network.clone()),
+            private_recipient: offer.private_address.as_deref(),
+            private_required: args.private_payment,
             recipient: &offer.pay_to,
             scheme: offer.scheme.clone(),
         },
@@ -216,6 +251,10 @@ async fn prioritized_x402_offers<'a>(
 }
 
 async fn payment_has_sufficient_balance(payment: &PreparedPayment) -> Result<bool> {
+    if payment.private_recipient.is_some() {
+        return Ok(true);
+    }
+
     match payment.asset.kind {
         PaymentAssetKind::Native => {
             let balance = native_balance(&payment.client, payment.payer).await?;
@@ -233,43 +272,6 @@ async fn payment_has_sufficient_balance(payment: &PreparedPayment) -> Result<boo
     }
 }
 
-async fn ensure_mpp_chain_matches_override(
-    app: &BeamApp,
-    challenge_chain_id: Option<u64>,
-) -> Result<()> {
-    if app.overrides.chain.is_none() {
-        return Ok(());
-    }
-
-    let Some(challenge_chain_id) = challenge_chain_id else {
-        return Ok(());
-    };
-    let Some(selected_chain) = selected_payment_chain(app).await? else {
-        return Ok(());
-    };
-    if selected_chain.chain_id == challenge_chain_id {
-        return Ok(());
-    }
-
-    let chain_store = app.chain_store.get().await;
-    let challenge = payment_chain_summary(challenge_chain_id, &chain_store);
-
-    Err(Error::FetchPaymentChainMismatch {
-        challenge,
-        selected: selected_chain.summary(),
-    })
-}
-
-fn parse_payment_amount(amount: &AmountValue, decimals: u8) -> Result<U256> {
-    match amount {
-        AmountValue::Atomic(value) => {
-            U256::from_dec_str(value).map_err(|_| Error::FetchInvalidPaymentResponse)
-        }
-        AmountValue::Human(value) => parse_units(value, usize::from(decimals))
-            .map_err(|_| Error::FetchInvalidPaymentResponse),
-    }
-}
-
 struct PaymentRequest<'a> {
     accepted: Value,
     amount: &'a AmountValue,
@@ -278,6 +280,8 @@ struct PaymentRequest<'a> {
     chain_id_hint: Option<u64>,
     description: Option<String>,
     network: Option<String>,
+    private_recipient: Option<&'a str>,
+    private_required: bool,
     recipient: &'a str,
     scheme: String,
 }

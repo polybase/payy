@@ -15,6 +15,14 @@ fn beam_dev_chain_args(rpc_url: String) -> ChainAddArgs {
         rpc: Some(rpc_url),
         chain_id: Some(31337),
         native_symbol: Some("BEAM".to_string()),
+        privacy_bridge: None,
+        privacy_standard: None,
+        privacy_version: None,
+        privacy_deployment: None,
+        privacy_prover: None,
+        privacy_token_policy: None,
+        privacy_state_policy: None,
+        privacy_features: None,
     }
 }
 

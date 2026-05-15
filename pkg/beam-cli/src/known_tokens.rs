@@ -5,6 +5,10 @@ use serde::{Deserialize, Serialize};
 pub type KnownTokensByChain = BTreeMap<String, BTreeMap<String, KnownToken>>;
 pub type TrackedTokensByChain = BTreeMap<String, Vec<String>>;
 
+pub const PAYY_NATIVE_ERC20_ADDRESS: &str = "0x0200000000000000000000000000000000000000";
+pub const PAYY_NATIVE_TOKEN_LABEL: &str = "native";
+pub const PAYY_NATIVE_TOKEN_DECIMALS: u8 = 18;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct KnownToken {
     pub address: String,
@@ -71,6 +75,8 @@ pub fn default_known_tokens() -> KnownTokensByChain {
         "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9",
         6,
     );
+    add_payy_native_token(&mut chains, "payy-testnet");
+    add_payy_native_token(&mut chains, "payy-dev");
     add_token(
         &mut chains,
         "sepolia",
@@ -108,11 +114,21 @@ fn add_token(
     decimals: u8,
 ) {
     chains.entry(chain.to_string()).or_default().insert(
-        label.to_string(),
+        token_label_key(label),
         KnownToken {
             address: address.to_string(),
             decimals,
             label: label.to_string(),
         },
+    );
+}
+
+fn add_payy_native_token(chains: &mut KnownTokensByChain, chain: &str) {
+    add_token(
+        chains,
+        chain,
+        PAYY_NATIVE_TOKEN_LABEL,
+        PAYY_NATIVE_ERC20_ADDRESS,
+        PAYY_NATIVE_TOKEN_DECIMALS,
     );
 }

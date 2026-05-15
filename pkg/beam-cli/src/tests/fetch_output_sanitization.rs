@@ -26,6 +26,7 @@ fn x402_describe_sanitizes_human_facing_offer_fields() {
             asset: "USDC\t\x1b[31m".to_string(),
             network: "eip155:8453\r\x1b[31m".to_string(),
             pay_to: "0xabc\x1b[31m".to_string(),
+            private_address: None,
             raw: Value::Null,
             scheme: "exact\n\x1b[31m".to_string(),
         }],
@@ -64,6 +65,7 @@ fn mpp_describe_sanitizes_human_facing_problem_fields() {
             currency: "USDC\t\x1b[31m".to_string(),
             description: Some("Invoice\n\x1b[31m".to_string()),
             recipient: "0x333\r\x1b[31m".to_string(),
+            private_address: None,
         },
     }));
 
@@ -131,6 +133,7 @@ fn fetch_args(max_fee: Option<&str>) -> FetchArgs {
         allowed_chains: Vec::new(),
         no_pay: false,
         dev: false,
+        private_payment: false,
     }
 }
 
@@ -156,6 +159,7 @@ fn payment_fixture() -> PreparedPayment {
         network: "eip155:8453".to_string(),
         payer: Address::from_low_u64_be(1),
         recipient: Address::from_low_u64_be(2),
+        private_recipient: None,
         selected_chain: Some(payment_chain(8453, "Base", "base")),
         scheme: "exact".to_string(),
     }
@@ -168,5 +172,6 @@ fn payment_chain(chain_id: u64, display_name: &str, key: &str) -> PaymentChain {
         display_name: display_name.to_string(),
         key: key.to_string(),
         native_symbol: "ETH".to_string(),
+        privacy: None,
     }
 }

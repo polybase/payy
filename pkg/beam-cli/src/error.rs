@@ -69,6 +69,33 @@ pub enum Error {
         expected: u64,
     },
 
+    #[error("[beam-cli] privacy is not configured for chain: {chain}")]
+    PrivacyNotConfigured { chain: String },
+
+    #[error("[beam-cli] unsupported privacy standard {standard} v{version}")]
+    UnsupportedPrivacyStandard { standard: String, version: u32 },
+
+    #[error("[beam-cli] privacy is not available on {chain}: {feature}")]
+    PrivacyFeatureUnsupported { chain: String, feature: String },
+
+    #[error("[beam-cli] invalid privacy feature: {feature}")]
+    InvalidPrivacyFeature { feature: String },
+
+    #[error(
+        "[beam-cli] private mint requires ERC20 approval first: beam erc20 approve {token} {spender} {amount}"
+    )]
+    PrivacyApprovalRequired {
+        amount: String,
+        spender: String,
+        token: String,
+    },
+
+    #[error("[beam-cli] invalid private address: {value}")]
+    InvalidPrivateAddress { value: String },
+
+    #[error("[beam-cli] privacy state not found: {id}")]
+    PrivacyStateNotFound { id: String },
+
     #[error("[beam-cli] token not configured on {chain}: {token}")]
     UnknownToken { chain: String, token: String },
 

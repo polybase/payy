@@ -13,6 +13,14 @@ volumes:
 services:
   postgres:
     image: postgres:18
+    command:
+      [
+        "postgres",
+        "-c",
+        "checkpoint_timeout=${POSTGRES_CHECKPOINT_TIMEOUT:-5min}",
+        "-c",
+        "max_wal_size=${POSTGRES_MAX_WAL_SIZE:-1GB}",
+      ]
     restart: unless-stopped
     environment:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
@@ -23,6 +31,12 @@ services:
       - zk-rollup
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
     profiles:
       - dev
       - test
@@ -33,7 +47,8 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.db-migrations
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     environment:
       - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/postgres
     networks:
@@ -48,6 +63,10 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.eth-node
     restart: unless-stopped
+    environment:
+      # Dev/local Hardhat deploy parity: keep Docker deployments aligned with
+      # the manual `PROVER_ADDRESS=... yarn deploy:local` flow used for Maestro.
+      - PROVER_ADDRESS=${PROVER_ADDRESS:-0x504be0a686b687f71076e8e25ce320521e2ad644}
     ports:
       - "8545:8545"
     networks:
@@ -76,6 +95,34 @@ services:
       - dev
       - test
 
+  faucet:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.faucet
+    restart: unless-stopped
+    depends_on:
+      eth-node:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8080
+      - RPC_URL=http://eth-node:8545
+      - PRIVATE_KEY=ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+      - TOKENS=0x5fbdb2315678afecb367f032d93f642f64180aa3=100000000
+      - RATE_LIMIT_COOLDOWN_SECS=1
+    networks:
+      - zk-rollup
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    profiles:
+      - dev
+
   guild:
     build:
       context: ..
@@ -92,6 +139,9 @@ services:
       - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/postgres
       - HOST=0.0.0.0
       - PORT=8071
+      - APP_CONFIG_JSON_PATH=/app-config/config.json
+      - PRIMARY_CHAIN_ID=1337
+      - CHAINS=chain_id=1337,rpc=http://eth-node:8545,usdc=0x5fbdb2315678afecb367f032d93f642f64180aa3,across=0xb7f8bc63bbcad18155201308c8f3540b07f84f5e,rollup=0xdc64a140aa3e981100a9beca4e685f962f0cf6c9
       - BASE_EVM_RPC_URL=http://eth-node:8545
       - ROLLUP_CONTRACT_ADDRESS=${ROLLUP_CONTRACT_ADDRESS:-0xdc64a140aa3e981100a9beca4e685f962f0cf6c9}
       - USDC_CONTRACT_ADDRESS=${USDC_CONTRACT_ADDRESS:-0x5fbdb2315678afecb367f032d93f642f64180aa3}
@@ -99,6 +149,9 @@ services:
       - NODE_RPC_URL=http://node:8091
       - SKIP_PROOF=true
       - LOG_LEVEL=INFO
+      - DB_POOL_MAX_SIZE=${GUILD_DB_POOL_MAX_SIZE:-10}
+      - DB_POOL_TIMEOUT_SECS=${GUILD_DB_POOL_TIMEOUT_SECS:-30}
+      - DB_POOL_CONNECTION_TIMEOUT_SECS=${GUILD_DB_POOL_CONNECTION_TIMEOUT_SECS:-5}
       - ALFRED_URL=http://providers:8072/alfred
       - MANTECA_URL=http://providers:8072/manteca
       - RAIN_URL=http://providers:8072/rain

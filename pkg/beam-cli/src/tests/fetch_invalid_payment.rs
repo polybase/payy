@@ -44,6 +44,7 @@ async fn fetch_rejects_authless_mpp_problem_when_no_pay_is_set() {
             allowed_chains: Vec::new(),
             no_pay: true,
             dev: true,
+            private_payment: false,
         },
     )
     .await
@@ -86,6 +87,7 @@ async fn fetch_rejects_mpp_problem_with_mismatched_auth_challenge_id() {
             allowed_chains: Vec::new(),
             no_pay: true,
             dev: true,
+            private_payment: false,
         },
     )
     .await

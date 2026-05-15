@@ -18,9 +18,11 @@ into typed builders:
 The TypeScript examples use `defaultAccount()` and camelCase fields. The Rust
 examples use `default_account()` and snake_case fields, but the operation model,
 network presets, prepared-call shape, and claim-link formats are the same.
-Rust integrations use `bb-cli` by default on `payy-evm-client`; opt into
-`bb-bindings` with `default-features = false` when you want compiled
-Barretenberg bindings instead.
+Rust integrations use `bb-cli` by default on `payy-evm-client` and require
+`bb` version `3.0.0-manual.20251030` on `PATH`. The [Setup](setup.md) guide
+shows the `bbup` install command. Enable `bb-bindings` when you want compiled
+Barretenberg bindings instead; use `default-features = false` only if you also
+want to omit the default `bb-cli` dependency.
 
 {% hint style="info" %}
 The high-level TransactionBridge SDK namespace is reserved as `client.transactions()`, but those builders are not implemented in the current SDKs. See [Payy Transactions](../payy-transactions/README.md) for the placeholder contract-level docs.

@@ -4,7 +4,10 @@ use rustyline::history::History;
 
 use super::fixtures::test_app;
 use crate::{
-    commands::interactive::load_sanitized_history, commands::interactive_history::ReplHistory,
+    commands::{
+        interactive::load_sanitized_history,
+        interactive_history::{ReplHistory, should_persist_history},
+    },
     runtime::InvocationOverrides,
 };
 
@@ -38,4 +41,18 @@ async fn startup_history_scrub_rewrites_history_file_before_next_save() {
         reloaded.iter().cloned().collect::<Vec<_>>(),
         vec!["balance".to_string()]
     );
+}
+
+#[test]
+fn privacy_claim_artifacts_are_not_persisted_to_history() {
+    assert!(!should_persist_history(
+        "privacy claim payy:secret-artifact"
+    ));
+    assert!(!should_persist_history(
+        "privacy send --ephemeral USDC 1 --claim-link-message invoice"
+    ));
+    assert!(!should_persist_history(
+        "fetch --private-payment https://api.example.com/paid"
+    ));
+    assert!(should_persist_history("privacy balance USDC"));
 }

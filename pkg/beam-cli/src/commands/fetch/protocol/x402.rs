@@ -54,7 +54,7 @@ pub(super) fn describe_x402(challenge: &X402Challenge) -> String {
             sanitize_control_chars(offer.amount.raw()),
             sanitize_control_chars(&offer.asset),
             sanitize_control_chars(&offer.network),
-            sanitize_control_chars(&offer.pay_to),
+            sanitize_control_chars(offer.private_address.as_deref().unwrap_or(&offer.pay_to)),
             sanitize_control_chars(&offer.scheme),
         ));
     }
@@ -119,9 +119,25 @@ fn parse_x402_offer(raw: Value) -> Result<X402Offer> {
         asset: parsed.asset,
         network: parsed.network,
         pay_to: parsed.pay_to,
+        private_address: privacy_recipient_from_value(&raw),
         raw,
         scheme: parsed.scheme,
     })
+}
+
+fn privacy_recipient_from_value(value: &Value) -> Option<String> {
+    value
+        .get("payToPrivateAddress")
+        .or_else(|| value.get("privateAddress"))
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
+        .or_else(|| {
+            value
+                .get("privacy")
+                .and_then(|privacy| privacy.get("privateAddress"))
+                .and_then(Value::as_str)
+                .map(ToString::to_string)
+        })
 }
 
 fn amount_from_json(value: &Value) -> Result<AmountValue> {

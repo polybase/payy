@@ -215,6 +215,7 @@ fn fetch_args(max_fee: Option<&str>, allowed_chains: &[&str]) -> FetchArgs {
         allowed_chains: allowed_chains.iter().map(ToString::to_string).collect(),
         no_pay: false,
         dev: false,
+        private_payment: false,
     }
 }
 
@@ -236,6 +237,7 @@ fn payment_fixture(asset: PaymentAsset, amount: U256, gas_fee: U256) -> Prepared
         network: "eip155:8453".to_string(),
         payer: Address::from_low_u64_be(1),
         recipient: Address::from_low_u64_be(2),
+        private_recipient: None,
         selected_chain: Some(payment_chain(8453, "Base", "base", &["base-mainnet"])),
         scheme: "exact".to_string(),
     }
@@ -248,5 +250,6 @@ fn payment_chain(chain_id: u64, display_name: &str, key: &str, aliases: &[&str])
         display_name: display_name.to_string(),
         key: key.to_string(),
         native_symbol: "ETH".to_string(),
+        privacy: None,
     }
 }
