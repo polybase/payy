@@ -51,9 +51,11 @@ jobs:
             is_prerelease=false
           fi
 
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
-          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
-          echo "is_prerelease=${is_prerelease}" >> "$GITHUB_OUTPUT"
+          {
+            echo "version=${version}"
+            echo "tag=${tag}"
+            echo "is_prerelease=${is_prerelease}"
+          } >> "$GITHUB_OUTPUT"
 
           # Beam release tags are immutable: never rebuild or republish an existing version.
           if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
@@ -121,7 +123,10 @@ jobs:
         run: rustup show
 
       - name: Build beam release binary
-        run: cargo build --release --locked -p beam-cli --bin beam --target ${{ matrix.target }}
+        run: >
+          cargo build --release --locked -p beam-cli --bin beam
+          --features payy-evm-client/bb-bindings
+          --target ${{ matrix.target }}
 
       - name: Package release asset
         shell: bash

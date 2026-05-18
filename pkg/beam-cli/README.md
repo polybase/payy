@@ -11,13 +11,13 @@ The defaults and chain presets are tuned for Payy workflows.
 Install the latest public release:
 
 ```bash
-curl -L https://beam.payy.network | bash
+curl -L https://install.beam.payy.network | bash
 ```
 
 Install a specific version:
 
 ```bash
-curl -L https://beam.payy.network | bash -s -- 0.1.0
+curl -L https://install.beam.payy.network | bash -s -- 0.1.0
 ```
 
 The installer downloads the correct binary for:
@@ -29,6 +29,10 @@ The installer downloads the correct binary for:
 Before installing, the script selects the newest stable release that includes the current
 platform asset with a valid GitHub Release SHA-256 digest, then verifies the downloaded
 binary against that digest and aborts on any mismatch.
+
+Release binaries are built with the bundled Barretenberg bindings backend, so privacy
+operations do not require a local `bb` executable. Local development builds keep using the
+`bb` CLI backend by default.
 
 Local development install:
 
@@ -649,23 +653,39 @@ The release workflow only publishes a given `beam-v<version>` tag once. If that 
 exists, reruns skip publication rather than replacing assets, so cut a new Beam version
 before triggering another public release.
 
-## Serving `beam.payy.network`
+### Release Control
 
-`beam.payy.network` should serve `scripts/install-beam.sh` as the public installer entrypoint.
+Beam release versions are prepared in the source `polybase/zk-rollup` repository with
+release-plz. The `.github/workflows/beam.release-plz.yml` workflow opens a release PR for
+`pkg/beam-cli`, updates the crate version and `Cargo.lock`, and tags the merged release PR
+as `beam-source-v<version>` in the source repository. The source tag prefix is deliberately
+different from public `beam-v<version>` tags so that mirrored source tags cannot make the
+public release workflow think a user-facing Beam release already exists.
+
+release-plz is configured in git-only mode because `beam-cli` is a binary that is not
+published to crates.io. It intentionally does not create GitHub Releases; the public
+`polybase/payy` action owns the user-facing release. After Copybara mirrors the version
+change into `polybase/payy`, `.github/workflows/beam.release.yml` builds the platform
+binaries and publishes the public `beam-v<version>` GitHub Release assets that the
+installer and `beam update` consume.
+
+## Serving `install.beam.payy.network`
+
+`install.beam.payy.network` should serve `scripts/install-beam.sh` as the public installer entrypoint.
 
 One straightforward setup is:
 
 1. Publish `scripts/install-beam.sh` to a static host such as GitHub Pages.
 2. Configure the host to serve the script at `/`.
-3. Point the `beam.payy.network` DNS record at that static host.
+3. Point the `install.beam.payy.network` DNS record at that static host.
 4. Keep the script in sync with the current public GitHub Releases asset naming scheme.
 
 The release workflow lives in the internal repo but is mirrored into `polybase/payy` via
 Copybara so the public repo can publish the assets that `beam update` and the installer
 consume.
 
-If you use GitHub Pages, a simple `CNAME` record from `beam.payy.network` to the Pages host
-is enough as long as the root URL responds with the installer script body.
+If you use GitHub Pages, a simple `CNAME` record from `install.beam.payy.network` to the
+Pages host is enough as long as the root URL responds with the installer script body.
 
 ## Development
 
@@ -673,6 +693,7 @@ From the repository root:
 
 ```bash
 cargo check -p beam-cli
+cargo check -p beam-cli --features payy-evm-client/bb-bindings
 cargo test -p beam-cli
 ```
 

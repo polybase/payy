@@ -250,7 +250,7 @@ jobs:
             --locked \
             --workspace --all-targets \
             --feature-powerset \
-            --exclude-features bb_rs,bb_utxo,bb-bindings
+            --exclude-features bb_rs,bb_utxo,bb-bindings,release-bundled-bb
 
       - name: Verify rust-i18n translations
         run: cargo i18n

@@ -47,3 +47,7 @@ workspace-hack.workspace = true
 insta = { workspace = true }
 mockito = { workspace = true }
 serial_test = { workspace = true }
+
+[features]
+default = ["privacy-bb-cli"]
+privacy-bb-cli = ["payy-evm-client/bb-cli"]
