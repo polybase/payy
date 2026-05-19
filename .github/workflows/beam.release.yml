@@ -112,7 +112,7 @@ jobs:
             target: x86_64-unknown-linux-gnu
           - runner: macos-15-intel
             target: x86_64-apple-darwin
-          - runner: macos-14
+          - runner: macos-15
             target: aarch64-apple-darwin
     runs-on: ${{ matrix.runner }}
     steps:
@@ -121,6 +121,10 @@ jobs:
 
       - name: Setup Rust toolchain
         run: rustup show
+
+      - name: Set arm64 macOS deployment target
+        if: matrix.target == 'aarch64-apple-darwin'
+        run: echo "MACOSX_DEPLOYMENT_TARGET=14.5" >> "$GITHUB_ENV"
 
       - name: Build beam release binary
         run: >
