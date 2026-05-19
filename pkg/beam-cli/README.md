@@ -655,19 +655,28 @@ before triggering another public release.
 
 ### Release Control
 
-Beam release versions are prepared in the source `polybase/zk-rollup` repository with
-release-plz. The `.github/workflows/beam.release-plz.yml` workflow opens a release PR for
-`pkg/beam-cli`, updates the crate version and `Cargo.lock`, and tags the merged release PR
-as `beam-source-v<version>` in the source repository. The source tag prefix is deliberately
-different from public `beam-v<version>` tags so that mirrored source tags cannot make the
-public release workflow think a user-facing Beam release already exists.
+Beam release versions are prepared in the source `polybase/zk-rollup` repository. The
+`.github/workflows/beam.release.bump.yml` workflow opens a release PR for `pkg/beam-cli`
+and updates the crate version plus `Cargo.lock`.
 
-release-plz is configured in git-only mode because `beam-cli` is a binary that is not
-published to crates.io. It intentionally does not create GitHub Releases; the public
-`polybase/payy` action owns the user-facing release. After Copybara mirrors the version
-change into `polybase/payy`, `.github/workflows/beam.release.yml` builds the platform
-binaries and publishes the public `beam-v<version>` GitHub Release assets that the
-installer and `beam update` consume.
+Automatic release bumps run after releasable Beam runtime changes land on `main`. The
+workflow reads the current public `beam-v<version>` tag in `polybase/payy`, extracts the
+mirrored `FolderOrigin-RevId`, and compares that source revision with the current
+`zk-rollup` commit. This keeps the same release PR updating on each relevant source push
+until it is merged. Conventional commit text from that source range chooses the bump:
+`feat` prepares a minor release, breaking changes prepare a major release, and everything
+else prepares a patch release. Maintainers can also run the workflow manually with an exact
+version or a chosen semver bump.
+
+Before opening another bump PR, the workflow checks that the current Beam version already
+has a public `beam-v<version>` tag in `polybase/payy`. This avoids stacking source version
+bumps while the previous one is still waiting to be mirrored and published.
+
+The workflow intentionally does not create GitHub Releases. The public `polybase/payy`
+action owns the user-facing release. After Copybara mirrors the version change into
+`polybase/payy`, `.github/workflows/beam.release.yml` builds the platform binaries and
+publishes the public `beam-v<version>` GitHub Release assets that the installer and
+`beam update` consume.
 
 ## Serving `install.beam.payy.network`
 
