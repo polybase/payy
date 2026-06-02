@@ -192,7 +192,7 @@ Install/run postgres and create a db called `guild`.
 docker (recommended):
 
 ```bash
-docker run -it --rm -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=guild -e POSTGRES_USER=$USER -p 5432:5432 postgres:18
+docker run -it --rm -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=guild -e POSTGRES_USER=$USER -p 5432:5432 postgres:17
 ```
 
 macos:

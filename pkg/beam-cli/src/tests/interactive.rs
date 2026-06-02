@@ -3,7 +3,7 @@ use rustyline::highlight::Highlighter;
 
 use super::fixtures::test_app;
 use crate::{
-    cli::{ChainAction, Command, Erc20Action, RpcAction, WalletAction},
+    cli::{ChainAction, Command, Erc20Action, PrivacyAction, RpcAction, WalletAction},
     commands::interactive::{
         ParsedLine, is_exit_command, merge_overrides, parse_line, repl_command_args,
         set_repl_chain_override, should_persist_history,
@@ -85,6 +85,9 @@ fn recognizes_bare_repl_shortcuts_without_breaking_cli_subcommands() {
         repl_command_args("balance 0xabc").expect("parse balance with address"),
         None
     );
+    for command in ["privacy", "privacy address", "privacy clai", "privacy foo"] {
+        assert_eq!(repl_command_args(command).expect("parse privacy"), None);
+    }
 }
 
 #[test]
@@ -106,6 +109,33 @@ fn interactive_parser_preserves_clap_help_for_wallet_commands() {
     assert_eq!(err.kind(), clap::error::ErrorKind::DisplayHelp);
     assert!(!err.use_stderr());
     assert!(err.render().to_string().contains("Usage: beam wallets"));
+}
+
+#[test]
+fn interactive_parser_routes_privacy_to_clap() {
+    for command in ["privacy", "privacy clai", "privacy foo"] {
+        let parsed = parse_line(command).expect("parse invalid privacy");
+        assert!(matches!(parsed, ParsedLine::CliError(_)));
+    }
+
+    let parsed = parse_line("privacy --help").expect("parse privacy help");
+    let ParsedLine::CliError(err) = parsed else {
+        panic!("expected clap help output");
+    };
+    assert_eq!(err.kind(), clap::error::ErrorKind::DisplayHelp);
+    assert!(!err.use_stderr());
+    assert!(err.render().to_string().contains("Usage: beam privacy"));
+
+    let parsed = parse_line("privacy address").expect("parse privacy address");
+    let ParsedLine::Cli { cli, .. } = parsed else {
+        panic!("expected clap command");
+    };
+    assert!(matches!(
+        &cli.command,
+        Some(Command::Privacy {
+            action: PrivacyAction::Address,
+        })
+    ));
 }
 
 #[test]

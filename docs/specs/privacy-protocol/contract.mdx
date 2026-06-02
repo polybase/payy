@@ -1,0 +1,363 @@
+---
+depends_on:
+  - circuits.mdx
+impl:
+  - pkg/payy-evm/contracts
+  - pkg/payy-evm/src/evm/precompiles
+  - noir/evm/mint
+  - noir/evm/burn
+  - noir/evm/transfer_send
+  - noir/evm/transfer_claim
+  - noir/evm/common/src
+  - noir/common/src
+  - noir/Nargo.toml
+  - noir/generate_fixtures.sh
+---
+
+## Merkle Tree
+
+### Specification
+
+<Spec id="smirk-tree-parameters">
+The privacy pool uses the existing SMIRK (Sparse Merkle Tree) implementation:
+
+- **Depth**: 160 levels (capacity: 2^160)
+- **Hash function**: Poseidon (2-element)
+- **Leaf positioning**: Based on bit decomposition of the commitment (bit i: 0 = left, 1 = right)
+- **Empty leaf**: 0
+- **Path validation**: `root_from_leaf(commitment, path) == recent_root`
+</Spec>
+
+### On-Chain State
+
+<Spec id="merkle-tree-combined-commit-nullifier">
+The Merkle tree stores **both commitments and nullifiers** as leaves:
+
+- The `Rollup` contract manages the tree via SMIRK precompiles
+- A ring buffer of the last 1024 roots is maintained for proof validation windows
+- `isRecentRoot(root)` verifies a root is within the valid window
+- Commitments are inserted via `Rollup.add(commitment)` — creates spendable notes
+- Nullifiers are inserted via `Rollup.add(nullifier)` — marks notes as spent
+</Spec>
+
+<Invariant id="duplicate-element-insert-rejected">
+`!ROLLUP.exists(element)` is checked before inserting, preventing duplicates — this is the double-spend check for nullifiers and the duplicate-commitment check for outputs.
+</Invariant>
+
+### Nullifier Tracking
+
+<Spec id="nullifier-tracking-flow">
+Nullifiers are stored in the same Merkle tree as commitments. Before processing a proof:
+
+1. Verify each non-zero nullifier does not already exist in the tree: `!ROLLUP.exists(nullifier)`
+2. Insert each non-zero nullifier into the tree: `ROLLUP.add(nullifier)`
+
+This prevents double-spending: once a nullifier is in the tree, any proof reusing it will fail the existence check.
+</Spec>
+
+---
+
+## PrivacyBridge Contract Interface
+
+### Updated Interface
+
+<Spec id="bridge-externally-referenced-apis">
+Key externally referenced APIs:
+
+- <Symbol>updateChainPublicKey</Symbol> - governance-only chain public key rotation. <Failure id="update-chain-public-key-unauthorized-revert" kind="revert">Reverts when called by any account other than `GOVERNANCE`.</Failure>
+- <Symbol>getRoot</Symbol> - read the current Merkle root tracked by the bridge
+- <Symbol>getMerklePath</Symbol> - fetch the Merkle witness for a commitment against a recent root
+- <Symbol>elementExists</Symbol> - convenience membership check against the bridge Merkle tree
+- <Symbol>computeTxHash</Symbol> - pure helper for the canonical bridge `txnHash`
+- <Symbol>getTxnHashByNonceHash</Symbol> - lookup from `nonce_hash` to `txn_hash`
+- <Symbol>getTxnHashByCommitment</Symbol> - lookup from `commitment` to `txn_hash`
+- <Symbol>getTxnData</Symbol> - fetch stored `TxnData` by `txn_hash`
+- <Symbol>ExternalTransfer</Symbol> - event emitted by `transfer_send` carrying `{ prefix6, txHash }`
+</Spec>
+
+<Spec id="privacy-bridge-solidity-interface">
+```solidity
+contract PrivacyBridge {
+    // Circuit variant ids returned by privacy_proof_verify
+    uint8 constant KIND_TRANSFER_SEND = 1;
+    uint8 constant KIND_BURN = 2;
+    uint8 constant KIND_MINT = 3;
+    uint8 constant KIND_TRANSFER_CLAIM = 4;
+
+    // Chain encryption key (embedded-curve point)
+    uint256 public chainPublicKeyX;
+    uint256 public chainPublicKeyY;
+
+    // Transaction data lookups
+    mapping(bytes32 => bytes32) private _nonceHashToTxnHash;   // nonce_hash → txn_hash
+    mapping(bytes32 => bytes32) private _commitmentToTxnHash;  // commitment → txn_hash
+    mapping(bytes32 => TxnData) private _txnHashToData;          // txn_hash → transaction data
+
+    event ExternalTransfer(bytes6 indexed prefix6, bytes32 indexed txHash);
+
+    struct TxnData {
+        bytes32 verificationKeyHash;        // Identifies the circuit variant (unencrypted)
+        bytes32[5] senderEncryptedNote;     // Sender-visible output-note ciphertext
+        bytes32[5] recipientEncryptedNote;  // Recipient-visible output-note ciphertext; left unset outside transfer_send, reads as zero
+        bytes32[3] senderChainEncryptedKey; // Chain-encrypted key bundle for senderEncryptedNote
+        bytes32[3] recipientChainEncryptedKey; // Chain-encrypted key bundle for recipientEncryptedNote; left unset outside transfer_send, reads as zero
+        bytes32[4] userEncryptedKey;        // Sender self-decryption key bundle (128 bytes fixed)
+        bytes32[4] recipientEncryptedKey;   // Recipient key bundle (128 bytes fixed); left unset outside transfer_send, reads as zero
+        bytes32 memo;                       // Opaque memo word; only written when non-zero; absent values read as zero; not zk-bound
+    }
+
+    function transfer(
+        bytes32 verificationKeyHash,
+        bytes calldata proof,
+        bytes32[] calldata publicInputs,
+        bytes32[4] userEncryptedKey,      // Verified against user_encrypted_key_hash in public inputs
+        bytes32[4] recipientEncryptedKey, // Verified against recipient_encrypted_key_hash on transfer_send
+        bytes32 memo
+    ) external;
+
+    function burn(
+        bytes32 verificationKeyHash,
+        bytes calldata proof,
+        bytes32[] calldata publicInputs,
+        bytes32[4] userEncryptedKey
+    ) external;
+
+    function mint(
+        bytes32 verificationKeyHash,
+        bytes calldata proof,
+        bytes32[] calldata publicInputs,
+        bytes32[4] userEncryptedKey
+    ) external;
+
+    // Chain key management
+    function updateChainPublicKey(
+        uint256 newX,
+        uint256 newY
+    ) external; // restricted to GOVERNANCE (see deployment notes below)
+
+    // Merkle helpers
+    function elementExists(bytes32 element) external view returns (bool);
+
+    function computeTxHash(
+        bytes32 verificationKeyHash,
+        bytes calldata proof,
+        bytes32[] calldata publicInputs
+    ) external pure returns (bytes32);
+
+    function getMerklePath(
+        bytes32 commitment
+    ) external view returns (bytes32 root, bytes32[] memory siblings);
+
+    function getRoot() external view returns (bytes32 root);
+
+    // Lookups
+    function getTxnHashByNonceHash(
+        bytes32 nonceHash
+    ) external view returns (bytes32);
+
+    function getTxnHashByCommitment(
+        bytes32 commitment
+    ) external view returns (bytes32);
+
+    function getTxnData(
+        bytes32 txnHash
+    ) external view returns (TxnData memory);
+
+    function getChainPublicKey()
+        external view returns (uint256 x, uint256 y);
+}
+```
+</Spec>
+
+<Spec id="bridge-read-helper-surface">
+Beyond the transaction-data lookups, the bridge exposes a small Merkle-helper read
+surface used by SDKs and wallets:
+
+- `getRoot()` returns the current bridge Merkle root
+- `getMerklePath(commitment)` returns a recent root plus the sibling vector needed to
+  witness that commitment against that root
+- `elementExists(element)` returns whether the element is already present in the
+  bridge Merkle tree
+- `computeTxHash(verificationKeyHash, proof, publicInputs)` returns the canonical
+  `txnHash` identity the bridge would use for that proof payload
+
+These helpers are read-only conveniences over the bridge's current Merkle state and
+transaction-hash rules. They do not mutate bridge storage.
+</Spec>
+
+<Spec id="txn-data-storage-writes-are-variant-aware">
+`TxnData` is a fixed-width retrieval shape, not a zero-filled write contract. The bridge writes directly into the fresh `_txnHashToData[txnHash]` entry and omits semantically absent fields instead of explicitly storing zeroes for them:
+
+- all variants write `verificationKeyHash`, `senderEncryptedNote`, `senderChainEncryptedKey`, and `userEncryptedKey`
+- only `transfer_send` writes `recipientEncryptedNote`, `recipientChainEncryptedKey`, and `recipientEncryptedKey`
+- `memo` is written only when it is non-zero
+
+Unread storage defaults to zero, so `getTxnData(txnHash)` still returns the canonical zero value for omitted fields without paying redundant zero-value `SSTORE`s.
+</Spec>
+
+### Processing Flow
+
+<Spec id="bridge-processing-flow-sequence">
+For each transaction:
+
+1. Verify `publicInputs.length == CANONICAL_PUBLIC_INPUTS_LEN` (`33`). <Failure id="public-inputs-length-mismatch-revert" kind="revert">Reverts when the decoded public-inputs vector is not exactly 33 elements.</Failure>
+2. Verify proof via <Symbol>privacy_proof_verify</Symbol> precompile. <Failure id="proof-verification-failed-revert" kind="revert">Reverts when the barretenberg verifier rejects the proof for the registered verification key.</Failure>
+3. Decode `nonce_hash`, `chain_id`, `bridge_address`, `user_encrypted_key_hash`, `recipient_encrypted_key_hash`, `senderEncryptedNote`, `recipientEncryptedNote`, `senderChainEncryptedKey`, `recipientChainEncryptedKey`, `mint_from`, `token`, `burn_recipient`, `receive_prefix`, and other fields directly from the canonical `publicInputs` layout in [circuits.mdx](circuits.mdx). Any field word interpreted as an EVM address (`token`, `mint_from`, `burn_recipient`) whose raw value exceeds `type(uint160).max` is rejected by <Symbol>_fieldToAddress</Symbol> with the custom error <Failure id="address-field-overflow" kind="revert"><Symbol>AddressFieldOverflow</Symbol>(fieldWord). Without this, a prover could set high bits on these fields that silently truncate to a different address.</Failure>
+4. Verify `recent_root != 0`. <Failure id="recent-root-zero-revert" kind="revert">Reverts when the decoded `recent_root` is zero.</Failure>
+5. Verify `nonce_hash != 0`. <Failure id="nonce-hash-zero-revert" kind="revert">Reverts when the decoded `nonce_hash` is zero.</Failure>
+6. Verify `ROLLUP.isRecentRoot(recent_root)` is true. <Failure id="recent-root-outside-ring-buffer-revert" kind="revert">Reverts when `recent_root` is not within the last 1024 roots — the proof was built against a state the contract no longer considers recent.</Failure>
+7. Verify `chain_id == block.chainid` (prevents cross-chain replay). <Failure id="chain-id-mismatch-revert" kind="revert">Reverts when the proof's `chain_id` does not match `block.chainid`.</Failure>
+8. Verify `bridge_address == address(this)` (prevents cross-contract replay). <Failure id="bridge-address-mismatch-revert" kind="revert">Reverts when the proof's `bridge_address` is not this contract.</Failure>
+9. Verify `chain_public_key == (chainPublicKeyX, chainPublicKeyY)` (ensures encryption targets the real chain key). <Failure id="chain-public-key-mismatch-revert" kind="revert">Reverts when the proof's `chain_public_key` differs from the bridge's current storage — typically a proof built against an older key after rotation.</Failure>
+10. Verify `field_safe_hash(userEncryptedKey) == user_encrypted_key_hash` (prevents front-running substitution). <Failure id="user-encrypted-key-hash-mismatch-revert" kind="revert">Reverts when the calldata `userEncryptedKey` does not hash to the committed `user_encrypted_key_hash`.</Failure>
+11. Verify the decoded proof variant matches the called entrypoint. `burn` accepts only `KIND_BURN`, `mint` accepts only `KIND_MINT`, and `transfer` accepts only `KIND_TRANSFER_SEND` or `KIND_TRANSFER_CLAIM`. <Failure id="proof-category-entrypoint-mismatch-revert" kind="revert">Reverts when a proof variant is submitted to the wrong entrypoint.</Failure>
+12. For `mint` and `burn`, the bridge does not perform additional recipient-side `require(...)` checks beyond proof verification and entrypoint matching. Instead, the respective circuits constrain `recipient_encrypted_key_hash == 0`, `receive_prefix == 0`, and the unused recipient-side public-input slots to zero.
+13. For `transfer(...)`, branch on the decoded proof variant. When `kind == KIND_TRANSFER_CLAIM`, verify `recipient_encrypted_key_hash == 0`, `recipientEncryptedKey` is all zeroes, `receive_prefix == 0`, and `memo == bytes32(0)`.
+14. When `kind == KIND_TRANSFER_SEND`, verify `recipient_encrypted_key_hash != 0` and `field_safe_hash(recipientEncryptedKey) == recipient_encrypted_key_hash`. `receive_prefix` is not checked for non-zero at the bridge layer because the circuit already constrains it to `first6bytes(owner_be_bytes(output_note_recv.owner))`, and `0x000000000000` is a valid derived prefix for the rare recipient owner hash that begins with six zero bytes. Revert with `recipient-encrypted-key-hash-mismatch` when the recipient key bundle does not match the committed `recipient_encrypted_key_hash`.
+15. For burns: verify `burn_recipient != 0`. <Failure id="burn-recipient-zero-revert" kind="revert">Reverts when a burn proof has `burn_recipient == 0`.</Failure>
+16. For mints: verify `mint_value > 0` (<Failure id="mint-value-zero-revert" kind="revert">reverts when a mint proof has `mint_value == 0`</Failure>) and `mint_from == msg.sender` (<Failure id="mint-from-not-msg-sender-revert" kind="revert">reverts when the proof's `mint_from` is not the transaction's `msg.sender`, preventing a third party from consuming another account's ERC-20 approval</Failure>).
+17. For each non-zero nullifier: verify `!ROLLUP.exists(nullifier)` (<Failure id="duplicate-nullifier-revert" kind="revert">reverts on double-spend attempts where the nullifier is already in the tree</Failure>), then insert it via `ROLLUP.add(nullifier)`.
+18. For each non-zero output commitment: verify `!ROLLUP.exists(commitment)` (<Failure id="duplicate-commitment-revert" kind="revert">reverts when an output commitment collides with an existing tree element</Failure>), then insert it via `ROLLUP.add(commitment)`.
+19. Compute `txnHash` from the proof and public inputs (`keccak256(abi.encode(verificationKeyHash, proof, publicInputs))`).
+20. Verify `_nonceHashToTxnHash[nonceHash]` is empty (<Failure id="nonce-hash-slot-occupied-revert" kind="revert">reverts when another transaction has already claimed this `nonce_hash` slot</Failure>), then store `= txnHash`.
+21. Store: `_commitmentToTxnHash[commitment] = txnHash` for each non-zero output commitment
+22. Store transaction data under `_txnHashToData[txnHash]`: `verificationKeyHash`, `senderEncryptedNote`, `senderChainEncryptedKey`, and `userEncryptedKey` are always populated; `recipientEncryptedNote`, `recipientChainEncryptedKey`, and `recipientEncryptedKey` are populated only for `transfer_send`; `memo` is populated only when non-zero. Unwritten fields read back as zero.
+23. If `recipient_encrypted_key_hash != 0`, emit `ExternalTransfer(bytes6(uint48(receive_prefix)), txnHash)`
+</Spec>
+
+<Invariant id="padding-slot-nullifiers-circuit-zero">
+Padding-slot nullifiers must be circuit-constrained to `0` before this flow runs. The first-note `mint` branch constrains `input_nullifier == 0`, and the first-note `transfer_claim` branch constrains `input_nullifier_0 == 0`, so the bridge cannot be used to insert arbitrary non-note elements via padding inputs.
+</Invariant>
+
+<Spec id="bridge-burn-erc20-transfer-step">
+24. For burns: transfer `burn_value` of the token at `token` address to `burn_recipient` via a SafeERC20-style helper (<Symbol>_safeTransfer</Symbol>) that requires `token.code.length > 0` and tolerates both returning and non-returning ERC-20 implementations.
+</Spec>
+
+<Spec id="bridge-mint-erc20-pull-step">
+25. For mints: pull `mint_value` from `mint_from` via <Symbol>_pullExactTokens</Symbol>, which wraps the same SafeERC20-style helper and additionally measures the bridge's own token balance before and after. <Failure id="mint-balance-delta-mismatch-revert" kind="revert">Reverts if the bridge's token-balance delta is not exactly `mint_value` — this rejects fee-on-transfer / transfer-tax tokens, whose actual received amount would be less than `mint_value`.</Failure>
+</Spec>
+
+<Invariant id="mint-exact-delta-no-taxed-tokens">
+`_pullExactTokens` rejects fee-on-transfer / transfer-tax tokens, which would otherwise over-credit the privacy layer relative to assets actually received.
+</Invariant>
+
+<Spec id="mint-msg-sender-bound-as-mint-from">
+For `mint`, `msg.sender` is the public EVM funding account chosen by the app / wallet submission flow. The proof binds that account via `mint_from`, and the bridge verifies `mint_from == msg.sender` before pulling ERC-20 funds.
+</Spec>
+
+<Spec id="bridge-multi-token-via-public-input">
+The bridge is not hardcoded to a single pool token. It uses the token address carried in the verified public inputs for both `mint` and `burn`.
+</Spec>
+
+<Spec id="bridge-erc20-compatibility-narrow">
+Compatibility is narrower than "any ERC-20" in the strong sense:
+
+- `mint` rejects fee-on-transfer / transfer-tax tokens because `_pullExactTokens` requires the bridge's balance delta to equal `mint_value` exactly
+- `burn` uses `_safeTransfer` and assumes `transfer()` delivers the full `burn_value`; it does not enforce recipient-side exact delivery for taxed tokens
+</Spec>
+
+### Privacy Proof Verify Precompile
+
+<Spec id="privacy-proof-verify-precompile-role">
+The `privacy_proof_verify` precompile handles proof verification for all four circuit variants:
+
+- Each variant is registered with its verification key hash, category, and a shared `CANONICAL_PUBLIC_INPUTS_LEN = 33`
+- All four variants use the same public input ordering, so any contract can decode fields directly from `publicInputs` without variant-specific branching
+- The precompile only needs to verify the proof against the registered variant and return the variant identifier to the caller (encoded as a single byte in the rightmost slot of the 32-byte output word)
+- Zero-padding safety moves into the circuits themselves: any slot that is not semantically used by a variant must be constrained to `0`
+</Spec>
+
+<Spec id="privacy-proof-verify-gas-is-testnet-placeholder">
+`PRIVACY_PROOF_VERIFY_GAS` is currently set to `0`. See [Deployment Notes](#deployment-notes) — this is a testnet placeholder that must be replaced with a real gas schedule before mainnet, otherwise the precompile is a DoS vector.
+</Spec>
+
+---
+
+## Circuit-to-Sequencer Integration
+
+### Verification Key Registration
+
+<Spec id="verifier-config-registry-struct">
+Each circuit variant produces a distinct verification key. The `privacy_proof_verify` precompile maintains a registry:
+
+```rust
+struct VerifierConfig {
+    kind: u8,                          // Variant id: TRANSFER_SEND, BURN, MINT, TRANSFER_CLAIM
+    verification_key_hash: [u8; 32],
+    verification_key: &'static [u8],
+    oracle_hash_keccak: bool,
+}
+
+const CANONICAL_PUBLIC_INPUTS_LEN: usize = 33;  // Shared by all variants post-canonicalization
+```
+</Spec>
+
+### Fixture Generation
+
+<Spec id="fixture-generation-steps">
+After modifying any `.nr` circuit files:
+
+1. Run `nargo test` to verify circuit correctness
+2. Run `noir/generate_fixtures.sh` to regenerate verification keys and compiled programs
+3. The generated fixtures are embedded in `pkg/zk-circuits` via the existing macro system
+</Spec>
+
+### Shared Code (noir/common)
+
+<Spec id="shared-noir-common-modules">
+The following low-level modules from `noir/common/` are reused:
+
+- `merkle_path.nr` — Merkle path validation (unchanged)
+- `field_utils.nr` — Field utility functions
+- `bytes.nr` — Byte manipulation
+</Spec>
+
+<Spec id="evm-specific-common-modules">
+EVM-specific shared modules live under `noir/evm/common/`:
+
+- `EvmNote` and note commitment helpers
+- Nullifier computation
+- `nonce_hash` computation
+- `tx_commitment` helpers
+- Encryption utilities (Poseidon stream cipher, embedded-curve chain-key encryption)
+- Schnorr signature verification helpers
+</Spec>
+
+### New Circuit Location
+
+<Spec id="evm-circuit-directory-layout">
+All EVM circuits live under `noir/evm/`:
+
+```
+noir/evm/
+├── common/                # Shared EVM note / auth / encryption code
+├── mint/                  # Mint with Schnorr owner auth
+├── burn/                  # Burn with Schnorr owner auth
+├── transfer_send/         # Send with Schnorr owner auth
+├── transfer_claim/        # Claim with 2 Schnorr owner auth checks
+```
+</Spec>
+
+---
+
+## Deployment Notes
+
+<Spec id="deployment-notes-purpose">
+The current `payy-evm` deployment ships with three values that are acceptable on testnet but must change before mainnet. They are enumerated here — and in [\_meta/changelog.md](_meta/changelog.md) — rather than hidden so that integrators and reviewers can see the gap at a glance.
+</Spec>
+
+<Limitation id="testnet-governance-constant">
+`GOVERNANCE` is a Solidity compile-time `constant`, currently set to `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266` (Anvil/Hardhat account #0) in `PrivacyBridge.sol`. It authorizes `updateChainPublicKey` and cannot be changed without redeploying the contract.
+</Limitation>
+
+<Planned id="mainnet-governance-configurable">
+A production deployment must either make `GOVERNANCE` an `immutable` set in the constructor or read it from genesis-configurable storage, and the value itself must be a real governance address — not the test key.
+</Planned>
+
+<Limitation id="testnet-verify-gas-zero">
+`PRIVACY_PROOF_VERIFY_GAS = 0` in the precompile. Charging zero gas for ZK-proof verification invites DoS.
+</Limitation>
+
+<Planned id="mainnet-verify-gas-schedule">
+Mainnet needs a real `PRIVACY_PROOF_VERIFY_GAS` schedule that reflects the cost of running the barretenberg verifier on unbounded input.
+</Planned>

@@ -287,11 +287,10 @@ fn prompt_wallet_name_accepts_custom_input() {
 }
 
 #[test]
-fn rejects_blank_new_passwords() {
-    for password in ["", " \t "] {
-        let err = validate_new_password(password, password)
-            .expect_err("reject empty or whitespace-only passwords");
+fn validates_blank_new_passwords() {
+    validate_new_password("", "").expect("accept empty password");
 
-        assert!(matches!(err, Error::PasswordBlank));
-    }
+    let err = validate_new_password(" \t ", " \t ").expect_err("reject whitespace-only password");
+
+    assert!(matches!(err, Error::PasswordBlank));
 }

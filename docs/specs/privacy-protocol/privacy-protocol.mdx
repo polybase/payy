@@ -1,0 +1,75 @@
+---
+depends_on:
+  - data.mdx
+  - circuits.mdx
+  - encryption.mdx
+  - lookup.mdx
+  - contract.mdx
+  - wallet.mdx
+  - security.mdx
+impl:
+  - pkg/payy-evm
+  - noir/evm
+  - noir/Nargo.toml
+---
+
+# Payy-EVM Privacy Protocol Specification
+
+## Overview
+
+<Spec id="overview-zk-rollup-privacy-layer">
+Payy Network is an L2 ZK-rollup on Ethereum designed around privacy. The privacy layer uses a UTXO-like note model where users hold encrypted balances as note commitments in a sparse Merkle tree. Zero-knowledge proofs enforce value conservation, ownership, and correct encryption without revealing transaction details.
+</Spec>
+
+<Limitation id="testnet-breaking-changes-allowed">
+Payy Network is currently in **testnet**. Breaking changes to the privacy protocol, circuit inventory, note ownership model, and wallet integration flow are still acceptable at this stage while the design is being simplified and validated before mainnet.
+</Limitation>
+
+### Design Principles
+
+<Spec id="design-principle-wallet-boundary">
+**Wallet-boundary model**: The protocol assumes a <Term>Payy-aware wallet boundary</Term> that manages a <Term>Grumpkin</Term> keypair, signs the 32-byte big-endian encoding of `tx_commitment` using Schnorr on Grumpkin, and handles proof generation and note access on the user's behalf. This boundary may live inside the app, a native Payy wallet, an embedded auth wallet, or a compatibility proxy-backed wallet service. External ECDSA-only wallets are insufficient on their own.
+</Spec>
+
+<Spec id="design-principle-minimal-circuits">
+**Minimal circuits**: Circuits use conditional logic for padding vs real inputs (e.g., mint and transfer_claim handle both first-time and existing-note cases in a single circuit). The only ownership primitive is Schnorr on Grumpkin, so auth no longer forks the circuit set into ECDSA vs Schnorr variants.
+</Spec>
+
+<Spec id="design-principle-protocol-local-ownership">
+**Protocol-local ownership**: Note ownership is always `Poseidon(x, y)` over a Grumpkin public key point. Wallet and address surfaces use the compact 32-byte Grumpkin public key only for off-chain transmission; wallets and provers decode that compact form into affine `x/y` before deriving `owner` or preparing circuit inputs. EVM addresses remain relevant for token contracts, bridge replay protection, and burn recipients, but not for privacy-note authorization.
+</Spec>
+
+<Spec id="design-principle-note-chain-convention">
+**Standard note-chain convention**: Wallet-owned note chains aim to keep one active note per `(owner, token)` with sequential nonces for lookup and state progression. Incoming notes created by `transfer_send` are recipient-owned but live outside that active chain until the recipient merges them with `transfer_claim`; they are created with `nonce = 0`.
+</Spec>
+
+<Spec id="design-principle-output-scoped-encryption">
+**Output-scoped encryption**: Note data is encrypted per output note. The symmetric key for each output is encrypted with a chain public key using Noir's embedded-curve ops (verified in ZK) for compliance, and wallets additionally publish out-of-circuit encrypted key material for the parties that are intended to decrypt that output. `transfer_send` therefore carries separate sender and recipient decryption paths, but the protocol only hash-binds the recipient-side bundle; it does not prove that the bundle was produced from the same keypair whose public key hashed into the recipient owner.
+</Spec>
+
+### Relationship to Existing System
+
+<Spec id="v1-rollup-remains-production">
+The existing v1 rollup (`pkg/node`, `pkg/aggregator`, `pkg/prover`, `noir/utxo`, `noir/agg_*`) remains unchanged and in production.
+</Spec>
+
+<Spec id="payy-evm-new-circuit-layout">
+This spec defines the EVM privacy circuits for `payy-evm`:
+
+- New circuits live in `noir/evm/`
+- Shared low-level libraries (`noir/common/`, `pkg/zk-primitives/`, `pkg/zk-circuits/`) are reused where possible, but EVM-specific note / auth / encryption helpers should live under `noir/evm/common/` so they do not blur with other protocol models
+- Services are always distinct between v1 and EVM
+- The `noir/evm/erc20_transfer` circuit is retained as-is but is not part of this spec
+</Spec>
+
+---
+
+## Map
+
+- [data.mdx](data.mdx) — Note model and cryptographic primitives
+- [circuits.mdx](circuits.mdx) — Authentication model and circuit variants
+- [encryption.mdx](encryption.mdx) — In-circuit encryption
+- [lookup.mdx](lookup.mdx) — Nonce system and note lookup
+- [contract.mdx](contract.mdx) — Merkle tree, PrivacyBridge contract, sequencer integration
+- [wallet.mdx](wallet.mdx) — Wallet interaction
+- [security.mdx](security.mdx) — Security properties

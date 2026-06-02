@@ -1,0 +1,141 @@
+---
+depends_on:
+  - contract.mdx
+impl:
+  - noir/evm/common/src
+  - noir/evm/mint
+  - noir/evm/burn
+  - noir/evm/transfer_send
+  - noir/evm/transfer_claim
+  - pkg/zk-primitives/src/evm
+  - pkg/payy-evm/contracts
+---
+
+## Nonce System & Note Lookup
+
+### Standard Note Chain Convention
+
+<Spec id="nonce-chain-sequential-ordering">
+For standard wallet-owned note chains, the `nonce` field provides sequential ordering:
+
+- First note: `nonce = 0`
+- Each spend increments: `output.nonce = input.nonce + 1`
+- Recipient-owned incoming notes created by `transfer_send` use `nonce = 0` and are later merged into the standard chain with `transfer_claim`
+</Spec>
+
+### Nonce Hash (Verified Lookup Key)
+
+<Spec id="nonce-hash-purpose">
+The `nonce_hash` is a lookup key for finding encrypted note data on-chain.
+</Spec>
+
+<Invariant id="nonce-hash-computed-in-circuit">
+`nonce_hash` is computed in-circuit and emitted as a public input, preventing griefing attacks where a malicious user submits a dummy transaction under someone else's `nonce_hash`.
+</Invariant>
+
+<Spec id="nonce-hash-formula">
+```
+nonce_hash = Poseidon(kind, token, owner, output_nonce, input_psi)
+```
+
+Where `input_psi` is the psi of the input note being spent (the previous note's psi). For the first note (`nonce = 0`), there is no input note, so `input_psi` uses a deterministic value (see First Note Discovery below).
+</Spec>
+
+<Spec id="nonce-hash-to-txn-data-mapping">
+The contract stores: `nonce_hash → txn_hash → txn_data`.
+</Spec>
+
+### First Note Discovery
+
+<Invariant id="first-note-input-psi-zero">
+For the very first note of an `(owner, token)` pair, there is no input note, so `input_psi = 0` in the `nonce_hash`. This allows the wallet client to compute the first `nonce_hash` without any prior state.
+</Invariant>
+
+<Spec id="nonce-hash-chain-requires-prev-psi">
+For subsequent notes, the `input_psi` used in the nonce_hash is the previous note's psi — which is only known by decrypting the previous note. This creates a chain of discovery:
+
+```
+Note 0: nonce_hash = Poseidon(kind, token, owner, 0, 0)              // deterministic
+Note 1: nonce_hash = Poseidon(kind, token, owner, 1, note_0.psi)     // requires decrypting note 0
+Note 2: nonce_hash = Poseidon(kind, token, owner, 2, note_1.psi)     // requires decrypting note 1
+```
+</Spec>
+
+### Which Note's Nonce Hash
+
+<Invariant id="nonce-hash-targets-change-note">
+Each circuit variant computes the `nonce_hash` for the **wallet-chain output note** (the output note that continues the owner's standard chain). Recipient-owned incoming notes created in `transfer_send` are not indexed by `nonce_hash` — recipients discover them through the bridge's 6-byte prefix event log and then fetch [`getTxnData`](contract.mdx)`(txn_hash)`.
+</Invariant>
+
+<Spec id="incoming-note-log-prefix">
+The bridge emits an [`ExternalTransfer`](contract.mdx) recipient-discovery log for every `transfer_send` containing `{ prefix6, txHash }`, where `prefix6` is the first 6 bytes of the canonical big-endian encoding of `output_note_recv.owner`. The prefix is circuit-bound and collisions are expected; wallets must treat it as a bucket key, not as a unique recipient identifier. The discovery surface continues through [`getTxnData`](contract.mdx)`(txHash)`, which returns recipient-side encrypted fields for candidate logs, and through `transfer_claim`, which merges an accepted recipient-owned incoming note into the recipient's standard wallet chain.
+</Spec>
+
+<Delegated id="incoming-note-bucket-wallet-derivation" to="wallet">
+The wallet derives that bucket by decoding the user-facing compact public key into `(x, y)`, computing the same `owner = Poseidon(x, y)` used by notes and signatures, and then taking the first 6 bytes of that owner hash.
+</Delegated>
+
+### Psi Rotation
+
+<Delegated id="psi-rotation-wallet-policy-choice" to="wallet">
+The protocol does not constrain how often `psi` changes between notes. Wallet implementations decide their own rotation policy:
+
+- **Never rotate**: output note reuses input note's psi. Maximum lookup efficiency (binary search across all nonces). Trade-off: an app that learns the psi can compute all future nonce_hashes and track when each note is spent.
+- **Always rotate**: output note uses a fresh random psi. Maximum privacy (apps can only detect the next spend). Trade-off: lookup requires sequential decryption of every note.
+- **Periodic rotation**: rotate psi after privacy-sensitive interactions (e.g., after using an untrusted dApp). Balances efficiency and privacy.
+</Delegated>
+
+<Spec id="psi-revert-safe-nonces-unique">
+Reverting to a previously used psi is safe — nonce_hashes remain unique because the nonce always increments.
+</Spec>
+
+### Lookup Flow
+
+<Spec id="basic-sequential-lookup-flow">
+The basic lookup flow decrypts each note sequentially:
+
+1. Compute `nonce_hash` for nonce 0 with `input_psi = 0`
+2. Query [`getTxnHashByNonceHash`](contract.mdx)`(nonce_hash)` → `txn_hash`
+3. Query [`getTxnData`](contract.mdx)`(txn_hash)` → `{ verificationKeyHash, senderEncryptedNote, senderChainEncryptedKey, userEncryptedKey, ... }`
+4. Map `verificationKeyHash` → circuit variant → determine the output-note layout
+5. Decrypt `userEncryptedKey` using the wallet's private key → recover the sender output-note symmetric key → decrypt `senderEncryptedNote`
+6. Extract output note's `psi` → compute `nonce_hash` for the next nonce using this psi as `input_psi`
+7. Repeat until no more data found → latest note is the user's current state
+</Spec>
+
+### Incoming Transfer Discovery
+
+<Delegated id="incoming-discovery-flow" to="wallet">
+Wallets own the recipient-side search and decrypt loop for externally-sent notes:
+
+1. Start from the wallet's private-address keypair (compact public key + matching private key)
+2. Derive the wallet's `prefix6` bucket from that keypair
+3. Scan bridge logs for matching `{ prefix6, txHash }`
+4. For each matching `txHash`, query [`getTxnData`](contract.mdx)`(txHash)`
+5. Under the standard Payy wallet convention, attempt to decrypt `recipientEncryptedKey` with the wallet's private-address private key → if that succeeds, recover the recipient output-note symmetric key
+6. Attempt to decrypt `recipientEncryptedNote`
+7. Keep decryptions that yield a valid `kind = 1` note whose `owner` matches the wallet; discard the rest as prefix collisions or malformed candidates
+
+Because `prefix6` is only 48 bits, collisions are expected and non-fatal. Wallets must try candidate decryptions and discard failures locally.
+</Delegated>
+
+### Recommended Lookup Strategy (Optional)
+
+<Planned id="binary-search-lookup-strategy">
+When psi is not rotated on every transaction, the following strategy avoids decrypting every intermediate note:
+
+1. Compute `nonce_hash` for nonce 0 with `input_psi = 0`, look up and decrypt → get `psi`
+2. Check if `nonce_hash(nonce + 1, psi)` exists — if not, current note is the latest state
+3. If it exists, **binary search** forward: probe `nonce_hash(nonce + N, psi)` for increasing N to find the highest nonce where the hash exists with this `psi`
+4. Decrypt the note at the highest found nonce → get the output `psi`
+5. If `psi` changed (output psi differs from the psi used in the binary search), repeat from step 2 with the new `psi`
+6. If `psi` is unchanged, the decrypted note is the current state
+
+This reduces lookup from O(n) decryptions to O(k) where k is the number of psi rotations, with O(log n) hash lookups per rotation. For users who rarely rotate psi, this is significantly faster.
+</Planned>
+
+### Alternative Lookup
+
+<Spec id="alternative-lookup-by-commitment">
+[`getTxnHashByCommitment`](contract.mdx)`(commitment)` enables lookup by commitment hash when the commitment is already known (for example, from a wallet-local cache or a prior log scan).
+</Spec>

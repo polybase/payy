@@ -2,6 +2,9 @@ target/
 .DS_Store
 /.direnv/
 node_modules
+beam-apps/registry-bundle/
+__pycache__/
+*.pyc
 
 pkg/**/params
 dist/
@@ -28,3 +31,4 @@ temp_fixtures
 
 # Claude Code completion markers
 .done
+.vercel/

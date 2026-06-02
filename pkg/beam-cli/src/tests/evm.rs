@@ -207,12 +207,12 @@ fn pending_transaction() -> Transaction {
 }
 
 #[derive(Clone, Copy)]
-enum RpcScenario {
+pub(super) enum RpcScenario {
     Confirmed,
     Pending,
 }
 
-async fn spawn_rpc_server(
+pub(super) async fn spawn_rpc_server(
     scenario: RpcScenario,
 ) -> (String, Arc<Mutex<Vec<Value>>>, tokio::task::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0")
@@ -255,7 +255,7 @@ async fn handle_rpc_connection(
         .expect("write rpc response");
 }
 
-fn rpc_methods(calls: &[Value]) -> Vec<&str> {
+pub(super) fn rpc_methods(calls: &[Value]) -> Vec<&str> {
     calls
         .iter()
         .map(|call| call["method"].as_str().expect("rpc method"))

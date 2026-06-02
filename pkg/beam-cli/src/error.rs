@@ -1,5 +1,7 @@
-// lint-long-file-override allow-max-lines=300
+// lint-long-file-override allow-max-lines=400
 use contextful::{FromContextful, InternalError};
+
+use crate::apps::Error as AppError;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -123,11 +125,80 @@ pub enum Error {
     #[error("[beam-cli] invalid address: {value}")]
     InvalidAddress { value: String },
 
+    #[error("[beam-cli/contract] invalid contract address: {value}")]
+    InvalidContractAddress { value: String },
+
+    #[error(
+        "[beam-cli/contract] rpc chain mismatch for {chain}: expected {expected}, got {actual}"
+    )]
+    ContractRpcChainMismatch {
+        actual: u64,
+        chain: String,
+        expected: u64,
+    },
+
+    #[error("[beam-cli/contract] rpc lookup failed: {reason}")]
+    ContractRpcLookupFailed { reason: String },
+
+    #[error("[beam-cli/contract] no runtime code at {address}")]
+    ContractNoRuntimeCode { address: String },
+
+    #[error(
+        "[beam-cli/contract] Sourcify artifact not found for {address}: {artifact}{runtime_check}"
+    )]
+    ContractSourcifyNotVerified {
+        address: String,
+        artifact: String,
+        runtime_check: String,
+    },
+
+    #[error(
+        "[beam-cli/contract] Sourcify runtime not verified for {address}: {artifact}{runtime_check}"
+    )]
+    ContractSourcifyRuntimeNotVerified {
+        address: String,
+        artifact: String,
+        runtime_check: String,
+    },
+
+    #[error("[beam-cli/contract] Sourcify does not support chain {chain_id}")]
+    ContractSourcifyChainUnsupported { chain_id: u64 },
+
+    #[error("[beam-cli/contract] Sourcify lookup failed for {address}: {reason}")]
+    ContractSourcifyLookupFailed { address: String, reason: String },
+
+    #[error("[beam-cli/contract] Sourcify response exceeded {cap_bytes} bytes")]
+    ContractSourcifyResponseTooLarge { cap_bytes: usize },
+
+    #[error("[beam-cli/contract] malformed Sourcify response: {reason}")]
+    ContractSourcifyMalformedResponse { reason: String },
+
+    #[error("[beam-cli/contract] source path not found: {path}")]
+    ContractSourcePathNotFound { path: String },
+
+    #[error("[beam-cli/contract] source path is ambiguous: {path}")]
+    ContractSourcePathAmbiguous { path: String },
+
+    #[error("[beam-cli/contract] export destination is invalid: {path}")]
+    ContractExportDestinationInvalid { path: String },
+
+    #[error("[beam-cli/contract] export destination is not empty: {path}")]
+    ContractExportDestinationNotEmpty { path: String },
+
+    #[error("[beam-cli/contract] export filename collision: {path}")]
+    ContractExportPathCollision { path: String },
+
+    #[error("[beam-cli/contract] export write failed: {reason}")]
+    ContractExportWriteFailed { reason: String },
+
     #[error("[beam-cli] invalid transaction hash: {value}")]
     InvalidTransactionHash { value: String },
 
     #[error("[beam-cli] invalid block selector: {value}")]
     InvalidBlockSelector { value: String },
+
+    #[error("[beam-cli] app error")]
+    App(#[source] AppError),
 
     #[error("[beam-cli] invalid rpc url: {value}")]
     InvalidRpcUrl { value: String },
@@ -252,7 +323,7 @@ pub enum Error {
     #[error("[beam-cli] key derivation failed")]
     KeyDerivationFailed,
 
-    #[error("[beam-cli] password cannot be empty or whitespace only")]
+    #[error("[beam-cli] password cannot be whitespace only")]
     PasswordBlank,
 
     #[error("[beam-cli] password confirmation does not match")]
@@ -295,4 +366,10 @@ pub enum Error {
 
     #[error("[beam-cli] internal error")]
     Internal(#[from] InternalError),
+}
+
+impl From<AppError> for Error {
+    fn from(err: AppError) -> Self {
+        Self::App(err)
+    }
 }

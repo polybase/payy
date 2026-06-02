@@ -10,7 +10,7 @@ use crate::error::{Result, XTaskError};
 
 use crate::setup::{SetupArgs, path_to_string, run_expression, run_expression_unchecked};
 
-pub const DEFAULT_IMAGE: &str = "postgres:18";
+pub const DEFAULT_IMAGE: &str = "postgres:17";
 pub const DEFAULT_CONTAINER: &str = "polybase-pg";
 
 pub struct PostgresOutcome {

@@ -1,0 +1,199 @@
+---
+depends_on:
+  - contract.mdx
+  - wallet.mdx
+impl:
+  - noir/evm/common/src
+  - noir/evm/mint
+  - noir/evm/burn
+  - noir/evm/transfer_send
+  - noir/evm/transfer_claim
+  - pkg/payy-evm/contracts
+  - pkg/zk-primitives/src/evm
+---
+
+## In-Circuit Encryption
+
+### Purpose
+
+<Spec id="encryption-three-purposes">
+All note data is encrypted in-circuit and output as public data. This enables:
+
+1. **On-chain note discovery**: Users find their encrypted notes via `nonce_hash` lookups
+2. **Incoming-transfer discovery**: Recipients discover `transfer_send` notes via `{ prefix6, txHash }` logs and decrypt the recipient output from `TxnData`
+3. **Compliance access**: The chain key allows a TEE service (Phala) to decrypt every published output note for permissioned actors
+4. **Self-access**: Wallets decrypt their own output notes via their Payy-aware wallet boundary
+</Spec>
+
+### Encrypted Payload
+
+<Spec id="encrypted-payload-no-version-byte">
+Each encrypted payload contains exactly one output note and no version byte. The `verification_key_hash` (stored as unencrypted metadata, see [contract.mdx](contract.mdx)) identifies the circuit variant and therefore which payload slots are expected to be non-zero. Any change to the encryption structure produces a new circuit and a new verification key hash.
+</Spec>
+
+<Spec id="encrypted-payload-plaintext-layout">
+```
+plaintext = [
+  output_note.token,
+  output_note.nonce,                // kind omitted — hardcoded, known from verification_key_hash
+  output_note.psi,
+  output_note.owner,
+  output_note.value,
+]
+```
+</Spec>
+
+<Spec id="encrypted-payload-length-per-variant">
+Each encrypted note payload is always 5 fields. Variants publish up to two output-note payloads:
+
+| Variant | Fields | Length |
+|---------|--------|--------|
+| `mint` | 1 sender-visible output note | 5 |
+| `burn` | 1 sender-visible output note | 5 |
+| `transfer_send` | 1 sender-visible output note + 1 recipient-visible output note | 10 |
+| `transfer_claim` | 1 sender-visible output note | 5 |
+</Spec>
+
+<Spec id="encrypted-payload-wallet-side-interpretation">
+**Interpreting the layout**: Wallet clients map the `verification_key_hash` to a known circuit variant and then choose the relevant encrypted note slot:
+
+- `senderEncryptedNote` for the wallet-chain output
+- `recipientEncryptedNote` for the direct-send recipient output on `transfer_send`
+
+No version bytes, padding, or sentinel values are needed inside the decrypted payload itself.
+</Spec>
+
+### On-Chain Storage
+
+<Spec id="encrypted-note-data-on-chain-fixed-blobs">
+`TxnData` stores two fixed encrypted note blobs, each `5 × 32 = 160` bytes:
+
+- `senderEncryptedNote`
+- `recipientEncryptedNote`
+
+Variants with only one output note zero-fill the recipient blob.
+</Spec>
+
+<Invariant id="encrypted-data-literal-zero-tail">
+Unused encrypted note blobs and unused chain-encrypted key bundles are literal zeroes, not encrypted zeroes, so unused transfer slots are publicly verifiable as empty and cannot smuggle hidden data.
+</Invariant>
+
+<Spec id="wallet-recovers-payload-length-from-vk-hash">
+Wallet clients recover which note blob is meaningful for the selected circuit from `verification_key_hash` and decrypt only the slot relevant to them.
+</Spec>
+
+<Planned id="variable-length-encrypted-data-storage">
+Variable-length encrypted note storage remains a future optimization; the current spec keeps fixed-size note blobs for a simple bridge ABI and deterministic `TxnData` layout.
+</Planned>
+
+### Symmetric Encryption (In-Circuit)
+
+<Spec id="symmetric-encryption-poseidon-stream-cipher">
+Each output note is encrypted with its own Poseidon-based stream cipher, which is native to the proving field and adds minimal constraints:
+
+```
+keystream[i] = Poseidon(symmetric_key, i)
+ciphertext[i] = plaintext[i] + keystream[i]    // Field addition
+```
+
+Each `symmetric_key` is an ephemeral random field element generated per output note as a private input.
+</Spec>
+
+<Invariant id="symmetric-key-240-bit">
+Every output-note `symmetric_key` is range-checked to ≤240 bits in both note encryption and chain-key encryption. This bound is required because chain-key encryption also uses the same field element as the embedded-curve scalar, and the 240-bit limit matches the range used for note values.
+</Invariant>
+
+### Chain Key PKE (In-Circuit, Embedded Curve)
+
+<Spec id="chain-key-pke-scalar-is-sym-key">
+Each output-note symmetric key is encrypted with the chain public key using Noir's `std::embedded_curve_ops` helpers. The implementation uses that output's `symmetric_key` itself as the embedded-curve scalar:
+
+```
+// Chain keypair:
+//   chain_sk: scalar (held by Phala TEE)
+//   chain_pk: (x, y) = chain_sk * G  (published in PrivacyBridge contract)
+
+// In-circuit:
+scalar = symmetric_key
+shared_secret = scalar * chain_pk
+ephemeral_pk = scalar * G
+
+encrypted_symmetric_key = symmetric_key + Poseidon(shared_secret.x, shared_secret.y)
+chain_encrypted_key = (ephemeral_pk.x, ephemeral_pk.y, encrypted_symmetric_key)
+```
+</Spec>
+
+<Invariant id="chain-key-encryption-verified-in-zk">
+The circuit proves every published chain-key bundle is correctly formed, so the Phala TEE is guaranteed to be able to decrypt every output note's `symmetric_key`.
+</Invariant>
+
+<Spec id="chain-key-pke-tee-decryption">
+The Phala TEE decrypts:
+
+```
+shared_secret = chain_sk * ephemeral_pk
+symmetric_key = encrypted_symmetric_key - Poseidon(shared_secret.x, shared_secret.y)
+```
+</Spec>
+
+### User Key PKE (Out-of-Circuit, Wallet Side)
+
+<Spec id="user-key-pke-wallet-encrypts">
+The Payy-aware wallet boundary separately encrypts the sender-visible output-note symmetric key with the sender's own public key and publishes it as `userEncryptedKey`.
+</Spec>
+
+<Invariant id="user-key-encryption-out-of-circuit">
+User-key encryption is NOT verified in ZK — if the user encrypts incorrectly, they lose access to their own notes. Integrity against relayer substitution is instead enforced via `user_encrypted_key_hash`.
+</Invariant>
+
+<Spec id="user-pke-identity-convention">
+By Payy convention, the user-side encryption public key should correspond to the same Grumpkin keypair used for note ownership. Compatible wallets should therefore assume the public key used for self-decryption hashes into the wallet's standard owner identity. The compact public key is the user-facing private address; the Poseidon hash is the internal note owner. This is a wallet interoperability convention / Payy standard, not a circuit-enforced or contract-enforced rule.
+</Spec>
+
+<Spec id="user-pke-construction-open-size-bounded">
+The concrete PKE construction is still an out-of-circuit wallet choice exposed through [`publicKeyEncrypt`](wallet.mdx) / [`publicKeyDecrypt`](wallet.mdx), but compatible wallets should preserve the identity convention above unless they have an explicit bilateral integration that says otherwise. The encrypted output must fit in 128 bytes (`bytes32[4]`) - this fixed size prevents calldata spam and keeps the bridge interface bounded.
+</Spec>
+
+<Spec id="user-encrypted-key-hash-derivation">
+The encrypted user key is submitted as calldata (`bytes32[4]`). A field-safe hash of it
+(`user_encrypted_key_hash`) is included as a public input in all circuit variants, constrained to be
+non-zero, and included in `tx_commitment` (bound by every required owner signature):
+
+```
+user_encrypted_key_hash =
+  uint256(keccak256(abi.encodePacked(userEncryptedKey[0], ..., userEncryptedKey[3])))
+  % SNARK_SCALAR_FIELD
+```
+</Spec>
+
+<Invariant id="user-encrypted-key-hash-check">
+The `PrivacyBridge` contract recomputes the same reduction from calldata and verifies it against the proof's public inputs. This prevents both front-running substitution by relayers and poisoning by malicious wallet clients / provers.
+</Invariant>
+
+### Recipient Key PKE (Out-of-Circuit, Wallet Side)
+
+<Spec id="recipient-key-pke-direct-send">
+The sender encrypts the recipient-visible output-note symmetric key with the recipient's shared private-address public key and publishes it as `recipientEncryptedKey`. Like `userEncryptedKey`, this construction is out-of-circuit and wallet-defined, but it must fit in 128 bytes (`bytes32[4]`). The bridge and logs only ever see the derived owner hash and its 6-byte prefix; the full recipient private address is exchanged off-chain between users.
+
+`transfer_send` binds this bundle into the proof with:
+
+```text
+recipient_encrypted_key_hash =
+  uint256(keccak256(abi.encodePacked(recipientEncryptedKey[0], ..., recipientEncryptedKey[3])))
+  % SNARK_SCALAR_FIELD
+```
+
+Variants that do not create a recipient-visible output note constrain `recipient_encrypted_key_hash = 0` and publish an all-zero `recipientEncryptedKey`.
+</Spec>
+
+<Limitation>
+The proof and bridge only bind the submitted `recipientEncryptedKey` bundle by hash. They do not verify that this bundle was actually produced from the same Grumpkin public key whose Poseidon hash became `output_note_recv.owner`. Standard Payy wallets are expected to use that same keypair for recipient-side decryption, but this is a wallet convention rather than a protocol-enforced invariant.
+</Limitation>
+
+### Chain Public Key Management
+
+<Spec id="chain-pk-storage-and-rotation">
+- The chain's embedded-curve public key is stored in the `PrivacyBridge` contract
+- The corresponding private key is held in a Phala TEE
+- [`updateChainPublicKey`](contract.mdx) is restricted to `GOVERNANCE`; see [contract.mdx](contract.mdx) for the current deployment-address shape
+</Spec>

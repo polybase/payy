@@ -1,0 +1,109 @@
+{
+  "format_version": 1,
+  "generated_at": "2026-05-26T00:00:00Z",
+  "apps": [
+    {
+      "id": "uniswap",
+      "display_name": "Uniswap",
+      "publisher": "Payy",
+      "description": "Prepare public Uniswap swaps through Beam-mediated HTTP, chain, approval, and transaction planning.",
+      "latest_version": "1.0.0",
+      "min_beam_version": "0.1.2",
+      "detail_url": "https://registry.beam.payy.network/catalog/apps/uniswap.json",
+      "install_command": "beam apps install uniswap",
+      "pinned_install_command": "beam apps install uniswap --version 1.0.0",
+      "supported_chains": [
+        {
+          "id": "ethereum",
+          "label": "Ethereum",
+          "testnet": false,
+          "operations": [
+            "read",
+            "simulate",
+            "send-transaction",
+            "erc20-approval"
+          ]
+        },
+        {
+          "id": "base",
+          "label": "Base",
+          "testnet": false,
+          "operations": [
+            "read",
+            "simulate",
+            "send-transaction",
+            "erc20-approval"
+          ]
+        },
+        {
+          "id": "polygon",
+          "label": "Polygon",
+          "testnet": false,
+          "operations": [
+            "read",
+            "simulate",
+            "send-transaction",
+            "erc20-approval"
+          ]
+        },
+        {
+          "id": "bnb",
+          "label": "BNB",
+          "testnet": false,
+          "operations": [
+            "read",
+            "simulate",
+            "send-transaction",
+            "erc20-approval"
+          ]
+        },
+        {
+          "id": "arbitrum",
+          "label": "Arbitrum",
+          "testnet": false,
+          "operations": [
+            "read",
+            "simulate",
+            "send-transaction",
+            "erc20-approval"
+          ]
+        },
+        {
+          "id": "sepolia",
+          "label": "Sepolia",
+          "testnet": true,
+          "operations": [
+            "read",
+            "simulate",
+            "send-transaction",
+            "erc20-approval"
+          ]
+        }
+      ],
+      "capability_badges": [
+        "Swap",
+        "HTTP",
+        "Chain read",
+        "Simulate",
+        "Onchain TX",
+        "ERC-20 approval",
+        "App storage"
+      ],
+      "version": {
+        "version": "1.0.0",
+        "min_beam_version": "0.1.2"
+      },
+      "icon": {
+        "url": "https://registry.beam.payy.network/apps/uniswap/1.0.0/icon.svg",
+        "sha256": "sha256:a7588127f926d7f5aa352cdeca3ab596c4ed673df98fc964af3e9c9f27e65b0d",
+        "media_type": "image/svg+xml",
+        "alt": "Uniswap logo"
+      }
+    }
+  ],
+  "signature": {
+    "algorithm": "sha256-dev",
+    "key_id": "payy-dev-2026-05",
+    "value": "sha256:83a8fa8333089b3481f93f9caacd25bae6dab5bdd4d39cdfafaec2ccbc87efab"
+  }
+}

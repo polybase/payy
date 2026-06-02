@@ -1,4 +1,4 @@
-// lint-long-file-override allow-max-lines=300
+// lint-long-file-override allow-max-lines=340
 mod wallet_selector;
 
 #[cfg(unix)]
@@ -84,6 +84,14 @@ impl BeamApp {
     }
 
     pub async fn active_chain(&self) -> Result<ResolvedChain> {
+        let entry = self.active_chain_entry().await?;
+        let config = self.config_store.get().await;
+        let rpc_url = active_rpc_url(&self.overrides, &config, &entry)?;
+
+        Ok(ResolvedChain { entry, rpc_url })
+    }
+
+    pub async fn active_chain_entry(&self) -> Result<ChainEntry> {
         let config = self.config_store.get().await;
         let selection = self
             .overrides
@@ -91,10 +99,13 @@ impl BeamApp {
             .clone()
             .unwrap_or_else(|| config.default_chain.clone());
         let chains = self.chain_store.get().await;
-        let entry = find_chain(&selection, &chains)?;
-        let rpc_url = active_rpc_url(&self.overrides, &config, &entry)?;
 
-        Ok(ResolvedChain { entry, rpc_url })
+        find_chain(&selection, &chains)
+    }
+
+    pub async fn active_rpc_url_for_chain(&self, entry: &ChainEntry) -> Result<String> {
+        let config = self.config_store.get().await;
+        active_rpc_url(&self.overrides, &config, entry)
     }
 
     pub async fn active_chain_client(&self) -> Result<(ResolvedChain, Client)> {

@@ -1,4 +1,5 @@
 mod abi;
+mod apps;
 mod chains;
 mod cli;
 mod commands;
