@@ -7,15 +7,14 @@ use serde_json::json;
 
 pub(crate) use super::interactive_history::should_persist_history;
 #[cfg(test)]
-pub(crate) use super::interactive_history::uses_matching_prefix_history_search;
-#[cfg(test)]
 pub(crate) use super::interactive_parse::repl_command_args;
 pub(crate) use super::interactive_parse::{
     ParsedLine, is_exit_command, merge_overrides, normalized_repl_command, parse_line, repl_err,
 };
 use super::{
     interactive_helper::{BeamHelper, help_text},
-    interactive_history::{ReplHistory, bind_matching_prefix_history_search, sanitize_history},
+    interactive_history::{ReplHistory, sanitize_history},
+    interactive_history_navigation::bind_matching_prefix_history_search,
     interactive_interrupt::run_with_interrupt_owner,
     interactive_parse::{resolved_color_mode, resolved_output_mode},
     interactive_state::{capture_repl_state, reconcile_repl_state, repl_state_mutation},
@@ -35,13 +34,15 @@ pub async fn run(app: &BeamApp) -> Result<()> {
     let mut editor = Editor::<BeamHelper, ReplHistory>::with_history(config, ReplHistory::new())
         .context("create beam repl editor")?;
     editor.set_helper(Some(BeamHelper::new()));
-    bind_matching_prefix_history_search(&mut editor);
+    let history_navigation = bind_matching_prefix_history_search(&mut editor);
+    history_navigation.attach_to_history(editor.history_mut());
     load_sanitized_history(editor.history_mut(), &app.paths.history)
         .context("sanitize beam repl history")?;
     let mut overrides = app.overrides.clone();
     canonicalize_startup_wallet_override(app, &mut overrides).await?;
 
     loop {
+        history_navigation.reset();
         let session = session(app, &overrides);
         let prompt = prompt(&session).await?;
         if let Some(helper) = editor.helper_mut() {

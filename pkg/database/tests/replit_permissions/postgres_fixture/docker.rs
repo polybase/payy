@@ -59,7 +59,7 @@ impl DockerPostgres {
                 "-e",
                 "POSTGRES_DB=postgres",
                 "-P",
-                "postgres:18",
+                "postgres:17",
             ])
             .output()
             .context("launch postgres container for replit permissions test")?;

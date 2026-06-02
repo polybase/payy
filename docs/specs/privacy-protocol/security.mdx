@@ -1,0 +1,75 @@
+---
+depends_on:
+  - contract.mdx
+---
+
+## Security Properties
+
+### Value Conservation
+
+<Spec id="security-value-conservation">
+Every circuit variant enforces: no value is created or destroyed (except mint_value from EVM deposits and burn_value to EVM withdrawals). Output values fit in 240 bits to prevent field overflow.
+</Spec>
+
+### Double-Spend Prevention
+
+<Spec id="security-double-spend-prevention">
+Nullifiers are checked for uniqueness on-chain. Each note can only be spent once. The nullifier construction (`Poseidon(commitment, psi)`) is unlinkable — observers cannot determine which commitment was spent.
+</Spec>
+
+### Replay Protection
+
+<Spec id="security-replay-protection-mechanisms">
+- `recent_root` binds the proof to a specific Merkle tree state
+- Nullifiers prevent reuse of the same proof
+- `chain_id` is a public input verified against `block.chainid` — prevents cross-chain replay (e.g., after forks)
+- `bridge_address` is a public input verified against `address(this)` — prevents cross-contract replay
+- Both are included in `tx_commitment` and bound by the required owner signatures
+</Spec>
+
+### Front-Running Protection
+
+<Spec id="security-front-running-protection">
+- Burn recipient is bound via `burn_recipient_private == burn_recipient_public` — the recipient address is committed in the proof and cannot be modified
+- The tx_commitment signatures bind every spending owner to the exact set of commitments
+</Spec>
+
+### Address-Field Integrity
+
+<Invariant id="address-field-overflow-rejected">
+[`_fieldToAddress`](contract.mdx) on the bridge reverts with [`AddressFieldOverflow`](contract.mdx)`(fieldWord)` if any field word used for an EVM address (`token`, `mint_from`, `burn_recipient`) exceeds `type(uint160).max`.
+</Invariant>
+
+<Spec id="address-field-overflow-attack-rationale">
+Without this check, a prover could set high bits on the field word and have Solidity silently truncate to a *different* 20-byte address, substituting the token contract, funding account, or withdrawal recipient relative to what the circuit verified.
+</Spec>
+
+### Encryption Integrity
+
+<Spec id="security-encryption-integrity-asymmetry">
+- Chain key encryption is verified in ZK for every published output-note payload — the Phala TEE is guaranteed to be able to decrypt both sender and recipient outputs when present
+- Sender and recipient wallet key encryption are NOT verified in ZK — wallets are responsible for encrypting correctly
+- `user_encrypted_key_hash` and `recipient_encrypted_key_hash` bind the published wallet key bundles into the proof, preventing relayer substitution
+</Spec>
+
+### Privacy Guarantees
+
+<Spec id="security-privacy-encrypted-fields-hidden">
+Note values, owners, and token types are hidden inside the encrypted output-note payloads — except `token` and `value` are public for mint/burn because the bridge must perform on-chain ERC-20 transfers, while transfer circuits constrain those slots to zero.
+</Spec>
+
+<Spec id="security-privacy-nullifier-unlinkability">
+Nullifiers cannot be linked to commitments. The Merkle tree stores both commitments and nullifiers as opaque hashes.
+</Spec>
+
+<Spec id="security-privacy-nonce-hash-hides-identity">
+The `nonce_hash` lookup key does not reveal the owner or token (derived from private data).
+</Spec>
+
+<Spec id="security-privacy-transfer-send-recipient-bound">
+`transfer_send` cryptographically binds the recipient note owner through `output_note_recv.owner`, binds the discovery bucket through `receive_prefix`, and separately binds the submitted `recipientEncryptedKey` bundle by hash through `recipient_encrypted_key_hash`. The protocol does **not** prove that the submitted `recipientEncryptedKey` was actually constructed from the same private-address public key whose hash became `output_note_recv.owner`; that mapping remains a wallet interoperability convention layered on top of the proof.
+</Spec>
+
+<Spec id="security-recipient-discovery-prefix-and-memo">
+Recipient discovery is now a protocol concern: `transfer_send` emits a circuit-bound `{ prefix6, txHash }` log, where `prefix6` is the first 6 bytes of the recipient owner hash. This leaks a stable 48-bit bucket identifier for incoming transfers, but not the full private address exchanged off-chain between users. The circuit also requires `output_note_recv.value > 0`, so funded senders cannot publish zero-value recipient candidates under arbitrary prefix buckets while keeping the full balance in their own continuation note. Optional `memo` data is stored as a single unauthenticated `bytes32` word in `TxnData`; clients may interpret that word as plain or encrypted application data, but the proof does not authenticate its contents.
+</Spec>

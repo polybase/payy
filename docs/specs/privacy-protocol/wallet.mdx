@@ -1,0 +1,79 @@
+---
+impl:
+  - pkg/zk-primitives/src/evm
+  - pkg/payy-evm/tests/common
+  - pkg/payy-evm/tests/bbjs
+---
+
+## Wallet Interaction
+
+### Transaction Flow
+
+<Planned id="wallet-boundary-method-surface">
+When the Payy-aware wallet boundary is exposed through a provider / RPC interface, the expected wallet-facing method surface is the extended `eth_*` API defined in [wallet-apis.md](../wallet-app-integrations/wallet-apis.md).
+</Planned>
+
+<Spec id="wallet-transaction-flow-steps">
+```
+1. The Payy-aware wallet boundary determines the operation (mint/burn/transfer)
+2. It selects the circuit variant based on the inputs
+3. It constructs private inputs (notes, Merkle paths, owner signatures, encryption keys)
+4. It computes the versioned `tx_commitment` using `tx_commitment_kind = 1` and the public transaction bindings defined in [data.mdx](data.mdx)
+5. It signs `tx_commitment` with every required Schnorr owner key
+6. It generates the ZK proof using the selected circuit
+7. It encrypts each output-note symmetric key for the parties that need it:
+   - sender/self-access via `user_encrypted_key`
+   - recipient access via `recipient_encrypted_key` on `transfer_send`
+8. For `transfer_send`, it also derives `receive_prefix = first6bytes(owner_be_bytes(output_note_recv.owner))` and prepares any optional opaque `bytes32` memo word (plain or encrypted)
+9. For `mint` / `burn`, it returns proof artifacts / bridge calldata to the app for normal Ethereum transaction submission
+10. For `transfer_send`, it may instead use the dedicated private-transfer command that owns submission and recipient-address handling end-to-end
+```
+</Spec>
+
+### Wallet Primitives Required
+
+<Spec id="wallet-primitive-schnorr-signing">
+**Schnorr signing** — sign the 32-byte big-endian encoding of `tx_commitment` using Schnorr on Grumpkin (compatible with Noir stdlib `std::schnorr::verify_signature`; canonical off-chain helper is barretenberg `schnorrConstructSignature` / `BarretenbergSync#schnorrConstructSignature()`).
+</Spec>
+
+<Spec id="wallet-primitive-public-key-export">
+**Public key export** — expose and share the compact 32-byte Grumpkin public key as the canonical user-facing <Term>private address</Term>. Wallet internals then decode that key to affine `x/y`, derive `owner = Poseidon(x, y)`, derive recipient-discovery prefixes from that owner hash, and pass `x/y` into circuit inputs.
+</Spec>
+
+<Delegated id="wallet-primitive-user-pke-identity-convention" to="wallet">
+**User PKE identity convention** — for self-decryption and direct-send receipt, compatible wallets should treat the public key used for `publicKeyEncrypt` / `publicKeyDecrypt` as belonging to the same Grumpkin keypair that defines the wallet's owner identity, unless an integration explicitly documents a different mapping. The protocol does not prove this mapping for `recipientEncryptedKey`; wallets still need successful decryption and owner checks on the recovered note before accepting an incoming candidate as theirs.
+</Delegated>
+
+<Spec id="wallet-primitive-recipient-address-sharing">
+**Recipient-address sharing** — wallets must be able to share the compact 32-byte Grumpkin public key used as the recipient's private address. Other users consume that key off-chain, derive the recipient owner hash from it, and encrypt the recipient-side key material for `transfer_send`.
+</Spec>
+
+<Delegated id="wallet-primitives-required-key-pke" to="wallet">
+**Public-key encryption / decryption**:
+- <Symbol>publicKeyEncrypt</Symbol> — encrypt data with a public key
+- <Symbol>publicKeyDecrypt</Symbol> — decrypt data with the wallet's key
+
+Wallets need these primitives to:
+
+- produce sender-side self-decryption material for `userEncryptedKey`
+- produce recipient-side decryption material for `recipientEncryptedKey` on `transfer_send`
+- decrypt sender-side and recipient-side note data during normal wallet lookup / receive flows
+
+The concrete PKE construction remains wallet-defined and out-of-circuit, but these primitives are part of the active wallet contract rather than an optional future extension. Depending on the integration mode, they may live inside the combined app, a native Payy wallet, an embedded auth wallet, or a compatibility proxy-backed wallet service.
+</Delegated>
+
+### Integration Placement
+
+<Spec id="wallet-integration-placement-responsibilities">
+The exact component boundary depends on the integration mode described in [wallet-app-integrations.md](../wallet-app-integrations/wallet-app-integrations.md). Regardless of mode, the Payy-aware wallet boundary:
+
+- holds or derives the user's Grumpkin keypair
+- decrypts notes and fetches Merkle paths
+- produces the required Schnorr signatures for each transaction
+- generates the ZK proof and the bridge call data used by the app's `mint` / `burn` transaction
+- may also execute `transfer_send` end-to-end when using the dedicated private-transfer command
+</Spec>
+
+<Spec id="wallet-app-data-separation">
+Apps do not need direct access to raw note data, Merkle paths, or signing keys unless they intentionally implement the combined app + wallet mode.
+</Spec>

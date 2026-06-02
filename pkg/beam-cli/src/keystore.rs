@@ -146,7 +146,14 @@ pub fn prompt_wallet_name(default_name: &str) -> Result<String> {
 }
 
 pub fn prompt_new_password() -> Result<String> {
-    let password = prompt_secret("beam password: ", "read beam password")?;
+    let password = prompt_secret(
+        "beam password (empty for no password): ",
+        "read beam password",
+    )?;
+    if password.is_empty() {
+        return Ok(password);
+    }
+
     let confirmation = prompt_secret("confirm beam password: ", "read beam password confirmation")?;
     validate_new_password(&password, &confirmation).map(|_| password)
 }
@@ -167,7 +174,10 @@ where
 }
 
 pub(crate) fn validate_new_password(password: &str, confirmation: &str) -> Result<()> {
-    match (password.trim().is_empty(), password == confirmation) {
+    match (
+        !password.is_empty() && password.trim().is_empty(),
+        password == confirmation,
+    ) {
         (true, _) => Err(Error::PasswordBlank),
         (false, true) => Ok(()),
         (false, false) => Err(Error::PasswordConfirmationMismatch),

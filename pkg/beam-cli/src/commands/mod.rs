@@ -1,12 +1,16 @@
+pub mod apps;
 pub mod balance;
 pub mod block;
 pub mod call;
 pub mod chain;
+pub mod contract;
 pub mod erc20;
 pub mod fetch;
+pub mod gas;
 pub mod interactive;
 pub(crate) mod interactive_helper;
 pub(crate) mod interactive_history;
+pub(crate) mod interactive_history_navigation;
 pub(crate) mod interactive_interrupt;
 pub(crate) mod interactive_parse;
 pub(crate) mod interactive_state;
@@ -31,12 +35,16 @@ pub async fn run(app: &BeamApp, command: Command) -> Result<()> {
         Command::Chain { action } => chain::run(app, action).await,
         Command::Rpc { action } => rpc::run(app, action).await,
         Command::Tokens { action } => tokens::run(app, action).await,
+        Command::Apps { action } => apps::run(app, action).await,
+        Command::X(args) => apps::run_app(app, args).await,
         Command::Privacy { action } => privacy::run(app, action).await,
         Command::Balance(args) => balance::run(app, args).await,
         Command::Transfer(args) => transfer::run(app, args).await,
+        Command::Gas { action } => gas::run(app, action).await,
         Command::Txn(args) => txn::run(app, args).await,
         Command::Block(args) => block::run(app, args).await,
         Command::Erc20 { action } => erc20::run(app, action).await,
+        Command::Contract { action } => contract::run(app, action).await,
         Command::Call(args) => call::run_read(app, args).await,
         Command::Send(args) => call::run_write(app, args).await,
         Command::Fetch(args) => fetch::run(app, args).await,

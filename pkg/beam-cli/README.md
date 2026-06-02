@@ -75,6 +75,14 @@ Send native gas token:
 beam --chain sepolia --from alice transfer 0x1111111111111111111111111111111111111111 0.01
 ```
 
+Estimate gas without signing or submitting a transaction:
+
+```bash
+beam --chain sepolia --from alice gas transfer 0x1111111111111111111111111111111111111111 0.01
+beam --chain base --from alice gas erc20 transfer USDC 0x1111111111111111111111111111111111111111 1.5
+beam --chain base --from alice gas send 0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48 "transfer(address,uint256)" 0x1111111111111111111111111111111111111111 1000000
+```
+
 Check an ERC20 balance:
 
 ```bash
@@ -103,6 +111,24 @@ Inspect a transaction or block:
 beam txn 0xabc123...
 beam block latest
 ```
+
+Inspect deployed contracts:
+
+```bash
+beam --chain ethereum contract info 0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+beam --chain ethereum contract bytecode 0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48 --block latest
+beam --chain ethereum contract abi 0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+beam --chain ethereum contract source 0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48 FiatTokenProxy.sol
+beam --chain ethereum contract export 0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48 ./usdc-source
+```
+
+Contract inspection accepts only literal `0x` EVM addresses. `bytecode` reads runtime bytecode from
+the active RPC after verifying the RPC chain id; `abi`, `source`, and `export` read runtime-verified
+artifacts from Sourcify without explorer API keys. Proxy information is reported as a tip when
+Sourcify provides it, but Beam always inspects the exact address you passed. Artifact stdout is
+pipeable: `bytecode`, `abi`, and `source <address> <source-path>` print only the requested artifact
+in default and compact modes. The bytecode command has no `code` alias. Use `--` before a
+`source-path` or `destination` value that begins with `-`.
 
 Start the interactive REPL:
 
@@ -194,6 +220,75 @@ beam --from alice --chain payy-testnet fetch --private-payment https://paywall.e
 beam fetch -v -L https://api.example.com/redirect
 ```
 
+## Apps
+
+Beam apps are Payy-controlled WASM extensions installed from the Beam registry at
+`https://registry.beam.payy.network`. Beam verifies registry signatures and SHA-256
+digests before caching app artifacts under `~/.beam/apps`.
+
+Common commands:
+
+```bash
+beam apps install uniswap
+beam apps list
+beam apps info uniswap
+beam apps permissions uniswap
+beam apps update uniswap
+beam apps remove uniswap
+```
+
+Install shows the app publisher, version, registry source, WASM digest, HTTP origins,
+chain scopes, contract scopes, function selectors, spender scopes, wallet capabilities,
+storage permissions, and privacy capabilities before asking for approval. Use
+`--dry-run` to show the same permission summary without activating the app:
+
+```bash
+beam apps install uniswap --dry-run --format json
+```
+
+Run app commands with the short `x` alias or the explicit lifecycle form:
+
+```bash
+beam x uniswap --help
+```
+
+Product app business logic lives outside Beam CLI in `beam-apps/apps/<app>`.
+Beam CLI owns the generic registry, cache, WASM validation, permission checks,
+approval records, and execution of approved action plans. The Uniswap app is
+built into the registry as WASM, but `beam x uniswap swap ...` remains behind the
+generic guest host-ABI invocation milestone; Beam CLI no longer contains a
+Uniswap-specific built-in planner.
+
+The Uniswap app will use Beam-mediated HTTPS requests to the Uniswap Trading
+API. Release registry builds inject the Payy-managed public Trading API key into
+the app artifact from CI:
+
+```bash
+export BEAM_UNISWAP_PUBLIC_API_KEY=...
+```
+
+The built artifact contains the key, so it is public, rotatable product
+configuration rather than a user secret.
+
+For tests and controlled deployments, a registry app manifest can declare a
+compatible mocked Trading API endpoint. Beam still enforces the installed app's
+declared HTTPS permissions, redirect containment, response limits, chain scopes,
+selectors, and spender scopes.
+
+Wallet-affecting app actions are approved by Beam, not by the app. Agents and other
+non-interactive callers should prepare a continuation, inspect it, then explicitly
+approve and execute it:
+
+```bash
+beam --chain base --from alice x <app> <command> --prepare --format json
+beam apps approvals show <approval-id>
+beam apps approvals approve <approval-id> --execute
+```
+
+`--no-prompt` fails closed for wallet-affecting app commands unless the command is
+preparing a continuation. Removing an app keeps app-local data by default; pass
+`--purge-data` to delete `~/.beam/apps/data/<app>` as well.
+
 ## Privacy
 
 Beam privacy support is configured per chain. Built-in Payy privacy-capable chains include a
@@ -255,7 +350,7 @@ Notes:
 - Use `--private-key-stdin` for pipelines and `--private-key-fd <fd>` for redirected file descriptors.
 - `beam wallets create` prompts for a wallet name when you omit `[name]`, suggesting the next available `wallet-N` alias and accepting it when you press Enter.
 - `beam wallets import` uses a verified ENS reverse record as the default wallet name when one resolves back to the imported address; otherwise it falls back to the next `wallet-N` alias.
-- The CLI prompts for a password when creating/importing a wallet and rejects empty or whitespace-only values.
+- The CLI prompts for a password when creating/importing a wallet. Press Enter at the password prompt to create a wallet with no password; whitespace-only passwords are rejected.
 - Beam trims surrounding whitespace and sanitizes terminal control characters in wallet names, rejecting aliases that become empty after normalization.
 - Commands that need signing prompt for the keystore password again before decrypting.
 - `beam privacy address` uses the same password prompt and keystore integrity checks before
@@ -452,6 +547,11 @@ beam erc20 transfer <token> <to> <amount>
 beam erc20 approve <token> <spender> <amount>
 beam call <contract> <function-sig> [args...]
 beam send [--value <amount>] <contract> <function-sig> [args...]
+beam contract info <address>
+beam contract bytecode <address> [--block <block>]
+beam contract abi <address>
+beam contract source <address> [source-path]
+beam contract export <address> <destination>
 beam privacy address
 beam privacy balance [token|token-address]
 beam privacy incoming list [--from-block <n>] [--to-block <n>] [--include-spent]
@@ -539,9 +639,9 @@ removed selectors fall back cleanly instead of killing the session. If you later
 chains, Beam falls back to the newly selected chain's configured RPC unless you also choose
 another RPC for that chain. The `help` shortcut prints the full CLI help text plus the
 REPL-only `exit` command, and both tab completion and inline suggestions follow the same
-command tree while also surfacing matching history values. When you have typed part of a
-command, `Up` / `Down` search only history entries with that prefix; on an empty prompt they
-cycle through previously submitted commands.
+command tree while also surfacing matching history values. On an empty prompt, `Up` / `Down`
+cycle through previously submitted commands. When you type part of a command before pressing
+an arrow key, `Up` / `Down` search only history entries with that typed prefix.
 The `balance` shortcut prints the full tracked-token report for the current session owner, and
 the regular CLI form still handles one-off selectors such as `balance USDC` or `tokens add ...`.
 Privacy commands use the regular CLI form under `privacy ...`; tab completion surfaces the privacy
@@ -682,19 +782,26 @@ publishes the public `beam-v<version>` GitHub Release assets that the installer 
 
 `install.beam.payy.network` should serve `scripts/install-beam.sh` as the public installer entrypoint.
 
-One straightforward setup is:
+Production serving is owned by the Cloudflare Worker in
+`infrastructure/cloudflare/beam-installer`. The Worker embeds
+`scripts/install-beam.sh` at deploy time and serves it from `/`, `/install.sh`,
+and `/install-beam.sh`.
 
-1. Publish `scripts/install-beam.sh` to a static host such as GitHub Pages.
-2. Configure the host to serve the script at `/`.
-3. Point the `install.beam.payy.network` DNS record at that static host.
-4. Keep the script in sync with the current public GitHub Releases asset naming scheme.
+The deploy workflow is `.github/workflows/beam-installer.release.yml`. It runs on merges
+to `main` that touch the installer script, the Worker, or its workflow, and publishes with
+Wrangler using the `CLOUDFLARE_API_TOKEN` GitHub secret. The Cloudflare account and zone
+ids are configured in the Worker's `wrangler.jsonc`.
+
+After deployment, verify that the public host still serves the canonical script:
+
+```bash
+curl -fsSL https://install.beam.payy.network | shasum -a 256
+shasum -a 256 scripts/install-beam.sh
+```
 
 The release workflow lives in the internal repo but is mirrored into `polybase/payy` via
 Copybara so the public repo can publish the assets that `beam update` and the installer
 consume.
-
-If you use GitHub Pages, a simple `CNAME` record from `install.beam.payy.network` to the
-Pages host is enough as long as the root URL responds with the installer script body.
 
 ## Development
 

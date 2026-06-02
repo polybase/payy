@@ -1,0 +1,134 @@
+{
+  "format_version": 1,
+  "id": "uniswap",
+  "display_name": "Uniswap",
+  "version": "1.0.0",
+  "publisher": "Payy",
+  "description": "Prepare public Uniswap swaps through Beam-mediated HTTP, chain, approval, and transaction planning.",
+  "min_beam_version": "0.1.2",
+  "wasm": {
+    "sha256": "sha256:b155ff4bbbab293085ee393fc12cd9ddcda0e531694521909cd8b5c433ecb927",
+    "entrypoint": "beam_app_main"
+  },
+  "catalog": {
+    "capability_badges": [
+      "Swap",
+      "HTTP",
+      "Chain read",
+      "Simulate",
+      "Onchain TX",
+      "ERC-20 approval",
+      "App storage"
+    ]
+  },
+  "permissions": {
+    "http": [
+      {
+        "url": "https://trade-api.gateway.uniswap.org/v1/*"
+      }
+    ],
+    "chains": [
+      {
+        "chain": "ethereum",
+        "operations": [
+          "read",
+          "simulate",
+          "send-transaction",
+          "erc20-approval"
+        ],
+        "selectors": [
+          "0x095ea7b3",
+          "*"
+        ]
+      },
+      {
+        "chain": "base",
+        "operations": [
+          "read",
+          "simulate",
+          "send-transaction",
+          "erc20-approval"
+        ],
+        "selectors": [
+          "0x095ea7b3",
+          "*"
+        ]
+      },
+      {
+        "chain": "polygon",
+        "operations": [
+          "read",
+          "simulate",
+          "send-transaction",
+          "erc20-approval"
+        ],
+        "selectors": [
+          "0x095ea7b3",
+          "*"
+        ]
+      },
+      {
+        "chain": "bnb",
+        "operations": [
+          "read",
+          "simulate",
+          "send-transaction",
+          "erc20-approval"
+        ],
+        "selectors": [
+          "0x095ea7b3",
+          "*"
+        ]
+      },
+      {
+        "chain": "arbitrum",
+        "operations": [
+          "read",
+          "simulate",
+          "send-transaction",
+          "erc20-approval"
+        ],
+        "selectors": [
+          "0x095ea7b3",
+          "*"
+        ]
+      },
+      {
+        "chain": "sepolia",
+        "operations": [
+          "read",
+          "simulate",
+          "send-transaction",
+          "erc20-approval"
+        ],
+        "selectors": [
+          "0x095ea7b3",
+          "*"
+        ]
+      }
+    ],
+    "wallet": {
+      "read_balances": true,
+      "propose_transactions": true,
+      "erc20_approval": true
+    },
+    "storage": {
+      "app_local": true
+    },
+    "privacy": []
+  },
+  "host_api": {
+    "privacy_reserved": true
+  },
+  "icon": {
+    "url": "https://registry.beam.payy.network/apps/uniswap/1.0.0/icon.svg",
+    "sha256": "sha256:a7588127f926d7f5aa352cdeca3ab596c4ed673df98fc964af3e9c9f27e65b0d",
+    "media_type": "image/svg+xml",
+    "alt": "Uniswap logo"
+  },
+  "signature": {
+    "algorithm": "sha256-dev",
+    "key_id": "payy-dev-2026-05",
+    "value": "sha256:bac5e146237b53395f744e1097794b73abaa94a4ec75c6096ab3404e1e738a06"
+  }
+}

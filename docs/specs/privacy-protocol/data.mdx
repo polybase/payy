@@ -1,0 +1,217 @@
+---
+depends_on:
+  - lookup.mdx
+  - wallet.mdx
+impl:
+  - noir/evm/common/src
+  - noir/evm/burn
+  - noir/evm/mint
+  - pkg/zk-primitives/src/evm
+  - pkg/payy-evm/tests/common
+  - pkg/payy-evm/tests/bbjs
+---
+
+## Note Model
+
+### Note Structure
+
+<Spec id="note-six-field-structure">
+A note carries six fields — all field elements — that together define its kind, token, position in the owner's chain, entropy, ownership, and balance:
+
+```
+Note {
+  kind:  Field,   // 0 for padding; 1 for the current live-note kind
+  token: Field,   // ERC-20 contract address (as field element)
+  nonce: Field,   // Standard wallet-chain position; direct-send recipient notes start at 0
+  psi:   Field,   // Random entropy (prevents brute-force, ensures unique commitments)
+  owner: Field,   // Owner hash derived from a Grumpkin public key
+  value: Field,   // Token balance (max 240 bits)
+}
+```
+</Spec>
+
+### Field Definitions
+
+<Spec id="note-field-definitions-table">
+| Field | Description |
+|-------|-------------|
+| `kind` | Version flag for future-proofing. A <Term>padding note</Term> uses `kind = 0`. Any non-padding note is runtime-constrained to `kind = 1` by `note_commitment` and the current circuit variants, so new live kinds require new circuit variants and are rejected by the current ones. |
+| `token` | The ERC-20 contract address represented as a field element. Identifies which token this note holds. |
+| `nonce` | Position marker for the wallet's standard `(owner, token)` chain. Standard wallet notes start at `0` and increment by `1` on each spend. Recipient-owned notes created by `transfer_send` use `nonce = 0` and are merged into the wallet chain later via `transfer_claim`. |
+| `psi` | Random entropy generated per note. Ensures unique commitments even for identical (owner, token, value) combinations. Also used in the nonce_hash lookup chain (see [lookup.mdx](lookup.mdx)) and nullifier derivation. Wallet implementations may choose to reuse psi across transactions for faster lookups (see [lookup.mdx](lookup.mdx)). |
+| `owner` | Identity field. This is always `Poseidon(x, y)` over a Grumpkin public key point (see Owner Derivation). Cross-user sends start from the recipient's shared <Term>private address</Term>, decode it to the public-key point, derive the recipient owner hash from that point, and write that hash here. |
+| `value` | Token balance. Constrained to 240 bits maximum to prevent field overflow on addition (`2 × 2^240 < field_modulus`). |
+</Spec>
+
+<Invariant id="note-value-240-bit">
+`value` is constrained to 240 bits in every circuit variant so that additions of two note values cannot overflow the BN254 scalar field (`2 × 2^240 < field_modulus`).
+</Invariant>
+
+### Padding Notes
+
+<Spec id="padding-note-shape-and-commitment">
+A padding note has all six fields (`kind`, `token`, `nonce`, `psi`, `owner`, `value`) set to `0`. Its commitment is defined as `0` (the zero field element).
+</Spec>
+
+<Invariant id="padding-note-all-zero">
+The `note_commitment` helper rejects any `kind == 0` note with a non-zero field, so the all-zero shape is enforced by construction whenever a circuit invokes `note_commitment` on an input.
+</Invariant>
+
+<Spec id="padding-note-fills-unused-slots">
+Padding notes are used to fill unused input/output slots in fixed-size circuits.
+</Spec>
+
+### Zero-Value Notes
+
+<Spec id="zero-value-note-shape">
+A <Term>zero-value note</Term> has `kind = 1` and `value = 0`. Unlike padding notes, zero-value notes have a real non-zero commitment (Poseidon hash of all fields) and exist in the Merkle tree.
+</Spec>
+
+<Spec id="zero-value-note-produced-by-full-burn">
+Zero-value notes are produced when a burn withdraws the entire balance — the change note has zero value but maintains the nonce chain.
+</Spec>
+
+<Spec id="zero-value-note-can-be-spent-via-mint">
+A zero-value note can be spent later via `mint` to receive new funds without breaking the nonce sequence.
+</Spec>
+
+### Cross-User Receive Notes
+
+<Spec id="incoming-note-recipient-owned">
+The canonical cross-user flow is a <Term>recipient-owned incoming note</Term>. `transfer_send` creates `output_note_recv` directly under the recipient owner hash, which the sender derives from the recipient's off-chain shared private address. The note remains a regular `kind = 1` note and is later merged into the recipient's standard wallet chain via `transfer_claim`.
+</Spec>
+
+<Spec id="incoming-note-nonce-zero">
+`transfer_send` creates the recipient-owned incoming note with `nonce = 0`. The sender does not know the recipient's current wallet-chain position, so direct sends do not attempt to continue that chain in place.
+</Spec>
+
+<Spec target="wallet-primitive-public-key-export">
+The user-facing private address is the compact 32-byte Grumpkin public key rendered as hex when serialized as a string. The note's `owner` field is not that 32-byte encoding; wallets decode the compact key to its public-key point, compute `Poseidon(x, y)`, and place that hash into the note.
+</Spec>
+
+<Spec id="incoming-note-cross-user-transfer-flow">
+The recipient shares a 32-byte compact Grumpkin public key off-chain as their private address. Senders use that key in two ways: derive `output_note_recv.owner` from it for the received note, and encrypt the recipient-visible output to that same public key. The recipient later merges the note into their standard chain with `transfer_claim`.
+</Spec>
+
+<Spec id="incoming-note-not-distinguished-at-commitment">
+The protocol does not distinguish recipient-owned incoming notes, standard wallet notes, or optional one-time-key notes at the commitment layer. The distinction is lifecycle and discovery, not note shape.
+</Spec>
+
+---
+
+## Cryptographic Primitives
+
+### Note Commitment
+
+<Spec id="note-commitment-poseidon-six">
+The commitment is a 6-element Poseidon hash of all note fields. Padding notes produce a zero commitment.
+
+```
+commitment(note) =
+  if note.kind == 0:
+    0
+  else:
+    Poseidon(note.kind, note.token, note.nonce, note.psi, note.owner, note.value)
+```
+</Spec>
+
+### Nullifier
+
+<Spec id="nullifier-poseidon-commit-psi">
+The nullifier binds the spent commitment with the note's `psi` under Poseidon:
+
+```
+nullifier(note, commitment) =
+  if commitment == 0:
+    0
+  else:
+    Poseidon(commitment, note.psi)
+```
+</Spec>
+
+<Invariant id="nullifier-unlinkable-via-private-psi">
+The nullifier is derived from the commitment and `psi`. Since `psi` is private, observers cannot link nullifiers to commitments. Zero commitments produce zero nullifiers (padding).
+</Invariant>
+
+### Owner Derivation
+
+<Invariant id="owner-from-grumpkin-pk">
+The `owner` field is always derived from the decoded Grumpkin public-key point:
+
+```
+owner = Poseidon(pubkey_x, pubkey_y)
+```
+
+Off-chain transmission uses the compact 32-byte Grumpkin public key. Wallets and provers deterministically decode that compact form into `(pubkey_x, pubkey_y)` before applying the owner formula. All notes use the same owner formula. The protocol never hashes private keys directly into the `owner` field, and it never stores the compact public-key bytes directly in the note.
+</Invariant>
+
+<Spec id="owner-derivation-note-types">
+Standard wallet notes, direct-send incoming notes, and optional one-time-key notes differ only in how the key material is shared and later spent.
+
+| Note Type | Key Source | Owner | Spend Authorization |
+|-----------|------------|-------|---------------------|
+| **Standard** | User's primary Payy wallet keypair | `Poseidon(wallet_pubkey_x, wallet_pubkey_y)` | Schnorr signature over `tx_commitment` |
+| **Direct-send incoming** | Recipient's shared private address (compact Grumpkin pubkey) | `Poseidon(recipient_pubkey_x, recipient_pubkey_y)` after decoding the compact key | Recipient Schnorr signature(s) during `transfer_claim` |
+| **Optional one-time-key** | One-time keypair generated by an integration | `Poseidon(one_time_pubkey_x, one_time_pubkey_y)` | Schnorr signature over `tx_commitment` using that one-time key |
+</Spec>
+
+### Signature Structure
+
+<Invariant id="spend-auth-schnorr-grumpkin">
+All spend authorization uses Schnorr on Grumpkin. Off-chain transport may use the compact 32-byte Grumpkin public key, but ownership checks and circuit private inputs use the corresponding decoded affine `x/y` coordinates.
+</Invariant>
+
+<Spec id="owner-signature-shape">
+The signature bundle passed to the circuit as private input is:
+
+```
+OwnerSignature {
+  signature:    [u8; 64],   // Barretenberg Schnorr signature bytes (`s || e`)
+  public_key_x: Field,      // Signer's Grumpkin public key x-coordinate
+  public_key_y: Field,      // Signer's Grumpkin public key y-coordinate
+}
+```
+
+Wallet-facing APIs and private-address exchange still use the compact 32-byte public key. The wallet/prover decodes that compact key into affine coordinates before passing this bundle into the circuit.
+</Spec>
+
+<Spec id="owner-signature-barretenberg-helper">
+Wallets produce signatures compatible with this verifier; the canonical off-chain helper is barretenberg's `schnorrConstructSignature`, also exposed as `BarretenbergSync#schnorrConstructSignature()` via `bb.js`. The transport-facing public-key representation remains the compact 32-byte form even though the proving path decodes it into `x/y` before curve verification.
+</Spec>
+
+### Transaction Commitment (Signed Message)
+
+<Spec id="tx-commitment-twelve-element-poseidon">
+The required owners sign a Poseidon hash of all note commitments and recipient-discovery bindings in the transaction. The hash always takes 12 elements; missing commitments and non-applicable fields are zero-filled:
+
+```
+tx_commitment_kind = 1              // Static version tag for the tx_commitment layout
+
+tx_commitment = Poseidon(
+  tx_commitment_kind,               // Domain/version separator for future tx_commitment changes
+  chain_id,                        // Prevents cross-chain replay (e.g., after forks)
+  bridge_address,                  // Prevents cross-contract replay
+  input_commitment_0       or 0,   // Zero if no input at this slot
+  input_commitment_1       or 0,   // Zero if no input at this slot
+  output_commitment_0      or 0,   // Zero if no output at this slot
+  output_commitment_1      or 0,   // Zero if no output at this slot
+  burn_recipient           or 0,   // Zero for non-burn circuits
+  mint_from                or 0,   // Zero for non-mint circuits
+  user_encrypted_key_hash,         // Binds sender self-decryption key material to the owner signatures
+  recipient_encrypted_key_hash,    // Zero outside transfer_send; binds recipient key material when present
+  receive_prefix                   // Zero outside transfer_send; binds the emitted 6-byte recipient discovery prefix
+)
+```
+</Spec>
+
+<Invariant id="tx-commitment-kind-tag">
+`tx_commitment_kind` is currently hardcoded to `1`; if the tx-commitment layout needs to change in the future, the protocol can introduce a new kind value without colliding with old hashes.
+</Invariant>
+
+<Spec id="tx-commitment-field-inclusion-rationale">
+`burn_recipient`, `mint_from`, `recipient_encrypted_key_hash`, and `receive_prefix` are included because they are public bindings not transitively covered by the note commitments. Without `burn_recipient`, a malicious prover could redirect a burn withdrawal to a different address. Without `mint_from`, the proof would not be bound to a specific public ERC-20 funding account. Without `recipient_encrypted_key_hash`, a relayer could substitute recipient decryption material on `transfer_send`. Without `receive_prefix`, a relayer could emit a log under the wrong recipient bucket. `chain_id` and `bridge_address` prevent replay on forks or alternate deployments. Mint values and token addresses are already bound by the commitments (which include the note's value and token fields).
+</Spec>
+
+<Spec id="tx-commitment-raw-32-byte-big-endian-signing">
+Every required owner signs the raw 32-byte big-endian encoding of the `tx_commitment` field element directly using Schnorr on Grumpkin (no EIP-191 prefix, no keccak wrapping). Which component performs those signatures depends on the integration mode, but it always happens inside the Payy-aware wallet boundary described in [wallet-app-integrations.md](../wallet-app-integrations/wallet-app-integrations.md).
+</Spec>

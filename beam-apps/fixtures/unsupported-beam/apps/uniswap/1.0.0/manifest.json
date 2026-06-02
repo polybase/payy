@@ -1,0 +1,295 @@
+{
+  "format_version": 1,
+  "id": "uniswap",
+  "display_name": "Uniswap",
+  "version": "1.0.0",
+  "publisher": "Payy",
+  "description": "Prepare public Uniswap swaps through Beam-mediated HTTP, chain, approval, and transaction planning.",
+  "min_beam_version": "999.0.0",
+  "wasm": {
+    "sha256": "sha256:b155ff4bbbab293085ee393fc12cd9ddcda0e531694521909cd8b5c433ecb927",
+    "entrypoint": "beam_app_main"
+  },
+  "catalog": {
+    "capability_badges": [
+      "Swap",
+      "HTTP",
+      "Chain read",
+      "Simulate",
+      "Onchain TX",
+      "ERC-20 approval",
+      "App storage"
+    ]
+  },
+  "commands": [
+    {
+      "name": "swap",
+      "about": "Fetch a quote and prepare an exact-approval Uniswap swap",
+      "usage": "swap <sell-token> <buy-token> <amount> [--min-receive <amount>] [--max-gas <wei>] [--slippage-bps <bps>] [--recipient <wallet-or-address>] [--deadline-seconds <seconds>] [--unlimited-approval]",
+      "sensitive_args": [],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "sell_token",
+          "buy_token",
+          "amount"
+        ],
+        "properties": {
+          "sell_token": {
+            "type": "string"
+          },
+          "buy_token": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string"
+          },
+          "min_receive": {
+            "type": "string"
+          },
+          "max_gas": {
+            "type": "string"
+          },
+          "slippage_bps": {
+            "type": "integer"
+          },
+          "recipient": {
+            "type": "string"
+          },
+          "deadline_seconds": {
+            "type": "integer"
+          },
+          "unlimited_approval": {
+            "type": "boolean"
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": [
+          "state",
+          "steps"
+        ],
+        "properties": {
+          "state": {
+            "enum": [
+              "prepared",
+              "pending",
+              "confirmed",
+              "dropped"
+            ]
+          },
+          "steps": {
+            "type": "array"
+          },
+          "transaction_hash": {
+            "type": "string"
+          }
+        }
+      },
+      "docs": {
+        "summary": "Fetch a quote and prepare an exact-approval Uniswap swap",
+        "invocation": "beam x uniswap swap <sell-token> <buy-token> <amount> [--min-receive <amount>] [--max-gas <wei>] [--slippage-bps <bps>] [--recipient <wallet-or-address>] [--deadline-seconds <seconds>] [--unlimited-approval]",
+        "arguments": [
+          {
+            "name": "sell-token",
+            "kind": "string",
+            "required": true,
+            "sensitive": false,
+            "description": "Token to spend, provided as a symbol, Beam token alias, or address."
+          },
+          {
+            "name": "buy-token",
+            "kind": "string",
+            "required": true,
+            "sensitive": false,
+            "description": "Token to receive, provided as a symbol, Beam token alias, or address."
+          },
+          {
+            "name": "amount",
+            "kind": "string",
+            "required": true,
+            "sensitive": false,
+            "description": "Sell amount in human token units."
+          }
+        ],
+        "options": [
+          {
+            "name": "--min-receive",
+            "value_name": "amount",
+            "kind": "string",
+            "required": false,
+            "sensitive": false,
+            "description": "Minimum acceptable output amount; floors slippage."
+          },
+          {
+            "name": "--max-gas",
+            "value_name": "wei",
+            "kind": "wei",
+            "required": false,
+            "sensitive": false,
+            "description": "Reject the plan if the estimated gas exceeds this value."
+          },
+          {
+            "name": "--slippage-bps",
+            "value_name": "bps",
+            "kind": "integer",
+            "required": false,
+            "sensitive": false,
+            "description": "Maximum slippage in basis points."
+          },
+          {
+            "name": "--recipient",
+            "value_name": "wallet-or-address",
+            "kind": "string",
+            "required": false,
+            "sensitive": false,
+            "description": "Send output to another Beam wallet name, ENS name, or EVM address."
+          },
+          {
+            "name": "--deadline-seconds",
+            "value_name": "seconds",
+            "kind": "integer",
+            "required": false,
+            "sensitive": false,
+            "description": "Quote and transaction deadline window."
+          },
+          {
+            "name": "--unlimited-approval",
+            "kind": "flag",
+            "required": false,
+            "default": "false",
+            "sensitive": false,
+            "description": "Request an unlimited ERC-20 approval instead of Beam's default exact approval."
+          }
+        ],
+        "examples": [
+          {
+            "title": "Swap on Base",
+            "command": "beam x uniswap swap USDC ETH 100 --chain base --from alice",
+            "description": "Prepare and approve a public swap from the alice wallet on Base."
+          },
+          {
+            "title": "Prepare for an agent",
+            "command": "beam x uniswap swap USDC ETH 100 --chain base --from alice --prepare --format json",
+            "description": "Create a continuation for non-interactive review and explicit approval."
+          }
+        ],
+        "output_notes": [
+          "Returns structured output with state prepared, pending, confirmed, or dropped.",
+          "Includes the typed steps Beam executed and a transaction_hash once broadcast."
+        ]
+      }
+    }
+  ],
+  "permissions": {
+    "http": [
+      {
+        "url": "https://trade-api.gateway.uniswap.org/v1/*"
+      }
+    ],
+    "chains": [
+      {
+        "chain": "ethereum",
+        "operations": [
+          "read",
+          "simulate",
+          "send-transaction",
+          "erc20-approval"
+        ],
+        "selectors": [
+          "0x095ea7b3",
+          "*"
+        ]
+      },
+      {
+        "chain": "base",
+        "operations": [
+          "read",
+          "simulate",
+          "send-transaction",
+          "erc20-approval"
+        ],
+        "selectors": [
+          "0x095ea7b3",
+          "*"
+        ]
+      },
+      {
+        "chain": "polygon",
+        "operations": [
+          "read",
+          "simulate",
+          "send-transaction",
+          "erc20-approval"
+        ],
+        "selectors": [
+          "0x095ea7b3",
+          "*"
+        ]
+      },
+      {
+        "chain": "bnb",
+        "operations": [
+          "read",
+          "simulate",
+          "send-transaction",
+          "erc20-approval"
+        ],
+        "selectors": [
+          "0x095ea7b3",
+          "*"
+        ]
+      },
+      {
+        "chain": "arbitrum",
+        "operations": [
+          "read",
+          "simulate",
+          "send-transaction",
+          "erc20-approval"
+        ],
+        "selectors": [
+          "0x095ea7b3",
+          "*"
+        ]
+      },
+      {
+        "chain": "sepolia",
+        "operations": [
+          "read",
+          "simulate",
+          "send-transaction",
+          "erc20-approval"
+        ],
+        "selectors": [
+          "0x095ea7b3",
+          "*"
+        ]
+      }
+    ],
+    "wallet": {
+      "read_balances": true,
+      "propose_transactions": true,
+      "erc20_approval": true
+    },
+    "storage": {
+      "app_local": true
+    },
+    "privacy": []
+  },
+  "host_api": {
+    "privacy_reserved": true
+  },
+  "icon": {
+    "url": "https://registry.beam.payy.network/apps/uniswap/1.0.0/icon.svg",
+    "sha256": "sha256:a7588127f926d7f5aa352cdeca3ab596c4ed673df98fc964af3e9c9f27e65b0d",
+    "media_type": "image/svg+xml",
+    "alt": "Uniswap logo"
+  },
+  "signature": {
+    "algorithm": "sha256-dev",
+    "key_id": "payy-dev-2026-05",
+    "value": "sha256:fe22b97b09a983b2f31844a57dce22187c9fbf08ca4a175d944c10bf4e9a2beb"
+  }
+}

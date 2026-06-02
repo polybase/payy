@@ -107,6 +107,7 @@ keccak = { version = "0.1", default-features = false, features = ["asm"] }
 lalrpop-util = { version = "0.20" }
 lazy_static = { version = "1", default-features = false, features = ["spin_no_std"] }
 libc = { version = "0.2" }
+libm = { version = "0.2" }
 libz-sys = { version = "1", default-features = false, features = ["libc", "static"] }
 lock_api = { version = "0.4", features = ["arc_lock", "serde"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
@@ -165,6 +166,7 @@ similar = { version = "2", features = ["inline"] }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde", "union"] }
 socket2-3b31131e45eafb45 = { package = "socket2", version = "0.6", default-features = false, features = ["all"] }
 socket2-d8f496e17d97b5cb = { package = "socket2", version = "0.5", default-features = false, features = ["all"] }
+spin = { version = "0.9", default-features = false, features = ["once", "rwlock", "spin_mutex", "std"] }
 strum = { version = "0.27", features = ["derive"] }
 subtle = { version = "2" }
 sync_wrapper = { version = "1", default-features = false, features = ["futures"] }
@@ -299,6 +301,7 @@ keccak = { version = "0.1", default-features = false, features = ["asm"] }
 lalrpop-util = { version = "0.20" }
 lazy_static = { version = "1", default-features = false, features = ["spin_no_std"] }
 libc = { version = "0.2" }
+libm = { version = "0.2" }
 libz-sys = { version = "1", default-features = false, features = ["libc", "static"] }
 lock_api = { version = "0.4", features = ["arc_lock", "serde"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
@@ -360,6 +363,7 @@ similar = { version = "2", features = ["inline"] }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde", "union"] }
 socket2-3b31131e45eafb45 = { package = "socket2", version = "0.6", default-features = false, features = ["all"] }
 socket2-d8f496e17d97b5cb = { package = "socket2", version = "0.5", default-features = false, features = ["all"] }
+spin = { version = "0.9", default-features = false, features = ["once", "rwlock", "spin_mutex", "std"] }
 strum = { version = "0.27", features = ["derive"] }
 subtle = { version = "2" }
 syn-dff4ba8e3ae991db = { package = "syn", version = "1", features = ["extra-traits", "full", "visit"] }

@@ -1,0 +1,452 @@
+---
+depends_on:
+  - contract.mdx
+impl:
+  - noir/evm/mint
+  - noir/evm/burn
+  - noir/evm/transfer_send
+  - noir/evm/transfer_claim
+  - noir/evm/common/src
+  - noir/Nargo.toml
+  - pkg/payy-evm/contracts
+  - pkg/payy-evm/src/evm/precompiles
+  - pkg/payy-evm/tests/common
+---
+
+## Authentication Model
+
+### Overview
+
+<Spec id="auth-model-single-primitive">
+All note ownership and spend authorization use the same primitive: Schnorr verification on Grumpkin against a public key whose owner hash becomes the note owner. Wallet-facing interfaces use the compact 32-byte public-key form only for off-chain transmission; circuits consume the decoded affine `x/y` coordinates and derive `owner = Poseidon(x, y)`. Circuits verify one signature for each distinct non-padding owner participating in the transaction. In practice:
+
+- `mint`, `burn`, and `transfer_send` verify one owner signature
+- `transfer_claim` verifies two owner signatures: the recipient's wallet-chain owner key and the incoming-note owner key
+</Spec>
+
+### Owner Auth (Schnorr)
+
+<Spec id="owner-auth-schnorr-steps">
+For each required owner authorization, the circuit:
+
+1. Takes the signature and decoded public key coordinates as private input
+2. Verifies the Schnorr signature over the 32-byte big-endian encoding of `tx_commitment` using Noir stdlib `std::schnorr::verify_signature`
+3. Derives `signer = Poseidon(public_key_x, public_key_y)`
+4. Asserts `signer` matches the owner field of the note or output chain being authorized
+</Spec>
+
+<Spec id="output-notes-authenticated-via-signer-binding">
+Output notes are not authenticated by a separate primitive. Instead, the relevant owner signature binds the signer to the transaction and the circuit asserts that the signed owner matches the output note owner where required.
+</Spec>
+
+### Auth Rules Per Circuit Category
+
+<Spec id="auth-rules-per-circuit-table">
+| Circuit | Required owner signatures | Notes |
+|---------|---------------------------|-------|
+| **Mint** | Output owner | Required even when the input is padding, to prevent nonce-hash griefing. When the input is real, `output.owner == input.owner` so the same signature authorizes both. |
+| **Burn** | Input/change owner | Authorizes the spend and binds the change note owner. |
+| **Transfer** (send) | Sender owner | Authorizes the sender input and its continuing change note. The recipient output is already recipient-owned and is later merged via `transfer_claim`. |
+| **Transfer** (claim) | Recipient chain owner + incoming-note owner | The recipient owner binds the merged output / nonce chain. The second check authorizes spending the incoming note and may reuse the same recipient key when the incoming note is already recipient-owned. |
+</Spec>
+
+<Invariant id="mint-requires-output-owner-signature">
+`mint` always requires an output-owner signature, even when the input is padding — otherwise a malicious user could mint a note for another owner's address and occupy their `nonce_hash = 0` slot.
+</Invariant>
+
+<Invariant id="transfer-claim-requires-recipient-signature">
+`transfer_claim` always requires a recipient-owner signature, even when the user's own input is padding — otherwise someone who learns an incoming note and its Merkle data could claim it into another owner's nonce chain.
+</Invariant>
+
+---
+
+## Circuit Categories & Variants
+
+### Design Principle
+
+<Spec id="variant-set-fixed-cost-rationale">
+ZK circuits have fixed cost — unused branches still consume constraints. The protocol therefore keeps a small fixed set of operation-shape variants rather than multiplying circuits by auth scheme or minor note-shape differences. The wallet client selects the matching circuit variant for the transaction shape. The `payy-evm` sequencer accepts any valid variant for its category.
+</Spec>
+
+<Spec id="four-variants-padding-absorbs-first-note">
+There are four circuit variants in scope: `mint`, `burn`, `transfer_send`, and `transfer_claim`. `mint` and `transfer_claim` each absorb their first-note vs existing-note cases internally via padding branches; `transfer` is the only category that still splits into two distinct variants. Auth no longer creates additional circuit forks. Each variant has a distinct verification key hash. The [`privacy_proof_verify`](contract.mdx) precompile maps each key hash to a distinct variant id, but all four variants still share the exact same public-input vector shape.
+</Spec>
+
+### Public Input Ordering Convention
+
+<Invariant id="canonical-33-public-inputs">
+All variants expose the same 33 public inputs in the same order, so the bridge and any other consumer can decode `publicInputs` directly without branching on proof-specific layouts.
+</Invariant>
+
+<Spec id="canonical-public-input-vector">
+```
+ 1. chain_id
+ 2. bridge_address
+ 3. recent_root
+ 4. input_nullifier_0
+ 5. input_nullifier_1
+ 6. output_commitment_0
+ 7. output_commitment_1
+ 8. nonce_hash
+ 9. user_encrypted_key_hash
+10. recipient_encrypted_key_hash
+11. sender_encrypted_note_0
+12. sender_encrypted_note_1
+13. sender_encrypted_note_2
+14. sender_encrypted_note_3
+15. sender_encrypted_note_4
+16. recipient_encrypted_note_0
+17. recipient_encrypted_note_1
+18. recipient_encrypted_note_2
+19. recipient_encrypted_note_3
+20. recipient_encrypted_note_4
+21. sender_chain_encrypted_key_0
+22. sender_chain_encrypted_key_1
+23. sender_chain_encrypted_key_2
+24. recipient_chain_encrypted_key_0
+25. recipient_chain_encrypted_key_1
+26. recipient_chain_encrypted_key_2
+27. chain_public_key_x
+28. chain_public_key_y
+29. token
+30. burn_recipient
+31. value
+32. mint_from
+33. receive_prefix
+```
+</Spec>
+
+<Spec id="kind-implicit-from-vk-hash">
+`kind` remains implicit from `verification_key_hash` and is not included in the public inputs.
+</Spec>
+
+<Invariant id="unused-public-input-slots-constrained-zero">
+Every variant publishes all 33 entries. Any field that is not semantically used by a variant must be set to `0` and circuit-constrained to `0`. This applies to:
+
+- missing nullifier / commitment slots
+- the entire recipient note / key / prefix surface outside `transfer_send`
+- `token`, `burn_recipient`, `value`, and `mint_from` on transfer circuits
+- `burn_recipient` on mint
+- `mint_from` on burn
+</Invariant>
+
+### Mint Category
+
+<Spec id="mint-category-purpose">
+Deposits funds from the EVM layer into the privacy pool. A single `mint` circuit handles both first-time deposits (padding input) and deposits to an existing note.
+</Spec>
+
+<Invariant id="mint-value-conservation">
+`output_note.value == input_note.value + mint_value`
+</Invariant>
+
+#### Variant: `mint`
+
+<Spec id="mint-variant-io-and-constraints">
+```
+Private Inputs:
+  input_note:         Note           // Existing note, or padding (kind=0) for first deposit
+  input_merkle_path:  [Field; 160]
+  output_note:        Note
+  owner_signature:    OwnerSignature // Schnorr owner signature (see [data.mdx](data.mdx))
+  sender_symmetric_key: Field
+
+Public Inputs:
+  canonical_public_inputs:  [Field; 33]    // Shared canonical vector
+  non_zero_slots:
+    recent_root
+    input_nullifier_0       // Zero for padding input
+    output_commitment_0
+    nonce_hash
+    user_encrypted_key_hash
+    sender_encrypted_note[0..4]
+    sender_chain_encrypted_key[0..2]
+    chain_public_key_x
+    chain_public_key_y
+    token                   // ERC-20 contract address
+    value                   // mint_value
+    mint_from               // Public EVM account funding the deposit
+  zero_constrained_slots:
+    input_nullifier_1
+    output_commitment_1
+    recipient_encrypted_key_hash
+    receive_prefix
+    recipient_encrypted_note[0..4]
+    recipient_chain_encrypted_key[0..2]
+    burn_recipient
+
+Constraints:
+  1. output_note.kind == 1
+  2. output_note.value == input_note.value + mint_value
+  3. Verify Schnorr owner_signature over tx_commitment
+  4. Poseidon(owner_signature.public_key_x, owner_signature.public_key_y) == output_note.owner
+  5. output_note.token == token
+  6. input_note.value fits in 240 bits
+  7. output_note.value fits in 240 bits
+  8. mint_value fits in 240 bits
+  9. mint_value > 0
+  10. mint_from != 0
+  11. user_encrypted_key_hash != 0
+  12. recipient_encrypted_key_hash == 0
+  13. receive_prefix == 0
+  14. If input is padding (kind == 0):
+       a. input_note fields are all 0              // Enforced by note_commitment — prevents value inflation and other padding-slot tampering
+       b. output_note.nonce == 0
+       c. input_nullifier == 0                    // Prevents publishing arbitrary tree elements via padding
+       d. nonce_hash == Poseidon(kind, token, owner, 0, 0) (see [lookup.mdx](lookup.mdx))
+  15. If input is real (kind == 1):
+       a. input_note.kind == 1
+       b. output_note.nonce == input_note.nonce + 1
+       c. output_note.owner == input_note.owner
+       d. output_note.token == input_note.token
+       e. input_note.token == token
+       f. commitment(input_note) verified against recent_root via input_merkle_path
+       g. nullifier(input_note, commitment(input_note)) == input_nullifier
+       h. nonce_hash == Poseidon(kind, token, owner, output_note.nonce, input_note.psi) (see [lookup.mdx](lookup.mdx))
+  16. commitment(output_note) == output_commitment
+  17. Encrypt output_note → sender_encrypted_note
+  18. Encrypt sender_symmetric_key with chain_public_key → sender_chain_encrypted_key
+```
+</Spec>
+
+### Burn Category
+
+<Spec id="burn-category-purpose">
+Withdraws funds from the privacy pool to an EVM address.
+</Spec>
+
+<Invariant id="burn-value-conservation">
+`input_value == output_value + burn_value`
+</Invariant>
+
+#### Variant: `burn`
+
+<Spec id="burn-variant-io-and-constraints">
+```
+Private Inputs:
+  input_note:             Note
+  input_merkle_path:      [Field; 160]
+  output_note:            Note            // Change note (may be zero-value)
+  owner_signature:        OwnerSignature  // Schnorr owner signature (see [data.mdx](data.mdx))
+  burn_recipient_private: Field           // Prevents front-running
+  sender_symmetric_key:   Field
+
+Public Inputs:
+  canonical_public_inputs:  [Field; 33]    // Shared canonical vector
+  non_zero_slots:
+    recent_root
+    input_nullifier_0
+    output_commitment_0
+    nonce_hash
+    user_encrypted_key_hash
+    sender_encrypted_note[0..4]
+    sender_chain_encrypted_key[0..2]
+    chain_public_key_x
+    chain_public_key_y
+    token
+    burn_recipient          // EVM address receiving the withdrawal
+    value                   // burn_value
+  zero_constrained_slots:
+    input_nullifier_1
+    output_commitment_1
+    recipient_encrypted_key_hash
+    receive_prefix
+    recipient_encrypted_note[0..4]
+    recipient_chain_encrypted_key[0..2]
+    mint_from
+
+Constraints:
+  1. input_note.kind == 1
+  2. output_note.kind == 1
+  3. input_note.value == output_note.value + burn_value
+  4. output_note.nonce == input_note.nonce + 1
+  5. output_note.owner == input_note.owner
+  6. output_note.token == input_note.token
+  7. input_note.token == token
+  8. input_note.value fits in 240 bits
+  9. output_note.value fits in 240 bits
+  10. burn_value fits in 240 bits
+  11. burn_value > 0
+  12. user_encrypted_key_hash != 0
+  13. recipient_encrypted_key_hash == 0
+  14. receive_prefix == 0
+  15. burn_recipient_private == burn_recipient
+  16. Verify Schnorr owner_signature over tx_commitment
+  17. Poseidon(owner_signature.public_key_x, owner_signature.public_key_y) == input_note.owner
+  18. commitment(input_note) verified against recent_root via input_merkle_path
+  19. nullifier(input_note, commitment(input_note)) == input_nullifier
+  20. commitment(output_note) == output_commitment
+  21. nonce_hash == Poseidon(kind, token, owner, output_note.nonce, input_note.psi) (see [lookup.mdx](lookup.mdx))
+  22. Encrypt output_note → sender_encrypted_note
+  23. Encrypt sender_symmetric_key with chain_public_key → sender_chain_encrypted_key
+```
+</Spec>
+
+### Transfer Category
+
+<Spec id="transfer-category-purpose">
+Moves value within the privacy pool. Covers: sending to another user (recipient-owned incoming note), claiming a received note into the wallet chain, and self-transfers (re-randomize psi).
+</Spec>
+
+<Invariant id="transfer-value-conservation">
+`sum(input_values) == sum(output_values)`
+</Invariant>
+
+#### Variant: `transfer_send`
+
+<Spec id="transfer-send-direct-recipient-distribution">
+Spend own note, create a recipient-owned incoming note, and publish an on-chain discovery log. The sender receives an encrypted continuation note for their own wallet chain. The recipient receives a separately encrypted incoming note whose `owner` is already the owner hash derived from the recipient's shared private address. The bridge emits `{ prefix6, txHash }`, where `prefix6` is derived from that owner hash and is circuit-bound.
+</Spec>
+
+<Spec id="transfer-send-variant-io-and-constraints">
+```
+Private Inputs:
+  input_note:         Note              // Sender's current note
+  input_merkle_path:  [Field; 160]
+  output_note_self:   Note              // Sender's updated note (change)
+  output_note_recv:   Note              // Recipient-owned incoming note
+  owner_signature:    OwnerSignature    // Schnorr sender signature (see [data.mdx](data.mdx))
+  sender_symmetric_key:    Field
+  recipient_symmetric_key: Field
+
+Public Inputs:
+  canonical_public_inputs:  [Field; 33]    // Shared canonical vector
+  non_zero_slots:
+    recent_root
+    input_nullifier_0
+    output_commitment_0     // Sender's new commitment
+    output_commitment_1     // Recipient-owned incoming commitment
+    nonce_hash
+    user_encrypted_key_hash
+    recipient_encrypted_key_hash
+    receive_prefix
+    sender_encrypted_note[0..4]
+    recipient_encrypted_note[0..4]
+    sender_chain_encrypted_key[0..2]
+    recipient_chain_encrypted_key[0..2]
+    chain_public_key_x
+    chain_public_key_y
+  zero_constrained_slots:
+    input_nullifier_1
+    token
+    burn_recipient
+    value
+    mint_from
+
+Constraints:
+  1. input_note.kind == 1
+  2. output_note_self.kind == 1
+  3. output_note_recv.kind == 1
+  4. input_note.value == output_note_self.value + output_note_recv.value
+  5. output_note_recv.value > 0
+  6. output_note_self.nonce == input_note.nonce + 1
+  7. output_note_self.owner == input_note.owner
+  8. output_note_self.token == input_note.token
+  9. output_note_recv.token == input_note.token
+  10. output_note_recv.nonce == 0
+  11. input_note.value, output_note_self.value, output_note_recv.value all fit in 240 bits
+  12. user_encrypted_key_hash != 0
+  13. recipient_encrypted_key_hash != 0
+  14. Verify Schnorr owner_signature over tx_commitment
+  15. Poseidon(owner_signature.public_key_x, owner_signature.public_key_y) == input_note.owner
+  16. commitment(input_note) verified against recent_root via input_merkle_path
+  17. nullifier(input_note, commitment(input_note)) == input_nullifier
+  18. commitment(output_note_self) == output_commitment_0
+  19. commitment(output_note_recv) == output_commitment_1
+  20. nonce_hash == Poseidon(kind, token, owner, output_note_self.nonce, input_note.psi) (see [lookup.mdx](lookup.mdx))
+  21. receive_prefix == first6bytes(owner_be_bytes(output_note_recv.owner))
+  22. Encrypt output_note_self → sender_encrypted_note
+  23. Encrypt output_note_recv → recipient_encrypted_note
+  24. Encrypt sender_symmetric_key with chain_public_key → sender_chain_encrypted_key
+  25. Encrypt recipient_symmetric_key with chain_public_key → recipient_chain_encrypted_key
+```
+</Spec>
+
+<Spec id="transfer-send-incoming-nonce-zero">
+`transfer_send` fixes `output_note_recv.nonce = 0`. Recipient-owned incoming notes are discovered through the prefix log and later merged into the recipient's standard wallet chain with `transfer_claim`.
+</Spec>
+
+<Invariant id="transfer-send-recipient-value-positive">
+`transfer_send` requires `output_note_recv.value > 0`. Zero-value direct sends are rejected so funded senders cannot roll their own wallet note forward while publishing recipient-discovery logs and recipient-side ciphertext for arbitrary prefixes without actually transferring value. Zero-value continuation notes remain allowed in other flows, such as a full-balance burn that leaves zero change.
+</Invariant>
+
+<Invariant id="transfer-send-recipient-bound">
+`transfer_send` creates a recipient-owned incoming note. The proof binds the recipient owner through `output_note_recv.owner`, binds its discovery bucket through `receive_prefix`, and binds the submitted recipient key bundle by hash through `recipient_encrypted_key_hash`. It does not prove that this bundle was constructed from the same public key whose Poseidon hash became the note owner.
+</Invariant>
+
+#### Variant: `transfer_claim`
+
+<Spec id="transfer-claim-dual-signature-purpose">
+Claim an incoming note. A single circuit handles both claiming into an existing note (merge) and claiming as a first note for this token (padding input). The circuit still verifies two Schnorr signatures, but in the direct-send case both checks may use the same recipient key and identical signature bytes.
+</Spec>
+
+<Spec id="transfer-claim-variant-io-and-constraints">
+```
+Private Inputs:
+  input_note_own:       Note            // User's current note, or padding (kind=0) for first claim
+  input_note_incoming:  Note            // Incoming note being claimed
+  input_merkle_path_own:[Field; 160]
+  input_merkle_path_incoming:[Field; 160]
+  output_note:          Note            // User's updated note (merged value)
+  recipient_signature:  OwnerSignature  // Recipient owner signature (see [data.mdx](data.mdx))
+  incoming_note_signature: OwnerSignature  // Incoming note owner signature (see [data.mdx](data.mdx))
+  sender_symmetric_key: Field
+
+Public Inputs:
+  canonical_public_inputs:  [Field; 33]    // Shared canonical vector
+  non_zero_slots:
+    recent_root
+    input_nullifier_0       // Nullifier for own note (zero for padding)
+    input_nullifier_1       // Nullifier for incoming note
+    output_commitment_0
+    nonce_hash
+    user_encrypted_key_hash
+    sender_encrypted_note[0..4]
+    sender_chain_encrypted_key[0..2]
+    chain_public_key_x
+    chain_public_key_y
+  zero_constrained_slots:
+    output_commitment_1
+    recipient_encrypted_key_hash
+    receive_prefix
+    recipient_encrypted_note[0..4]
+    recipient_chain_encrypted_key[0..2]
+    token
+    burn_recipient
+    value
+    mint_from
+
+Constraints:
+  1. output_note.kind == 1
+  2. input_note_incoming.kind == 1
+  3. input_note_own.value + input_note_incoming.value == output_note.value
+  4. Verify recipient_signature over tx_commitment
+  5. Poseidon(recipient_signature.public_key_x, recipient_signature.public_key_y) == output_note.owner
+  6. Verify incoming_note_signature over tx_commitment
+  7. Poseidon(incoming_note_signature.public_key_x, incoming_note_signature.public_key_y) == input_note_incoming.owner
+  8. commitment(input_note_incoming) verified against recent_root via input_merkle_path_incoming
+  9. nullifier(input_note_incoming, commitment) == input_nullifier_1
+  10. input_note_own.value, input_note_incoming.value, output_note.value all fit in 240 bits
+  11. output_note.token == input_note_incoming.token
+  12. user_encrypted_key_hash != 0
+  13. recipient_encrypted_key_hash == 0
+  14. receive_prefix == 0
+  15. If input_own is padding (kind == 0):
+       a. input_note_own fields are all 0          // Enforced by note_commitment — prevents value inflation and other padding-slot tampering
+       b. output_note.nonce == 0
+       c. input_nullifier_0 == 0                  // Prevents publishing arbitrary tree elements via padding
+       d. nonce_hash == Poseidon(kind, token, owner, 0, 0) (see [lookup.mdx](lookup.mdx))
+  16. If input_own is real (kind == 1):
+       a. input_note_own.kind == 1
+       b. output_note.nonce == input_note_own.nonce + 1
+       c. output_note.owner == input_note_own.owner
+       d. output_note.token == input_note_own.token
+       e. input_note_incoming.token == input_note_own.token
+       f. commitment(input_note_own) verified against recent_root via input_merkle_path_own
+       g. nullifier(input_note_own, commitment) == input_nullifier_0
+       h. nonce_hash == Poseidon(kind, token, owner, output_note.nonce, input_note_own.psi) (see [lookup.mdx](lookup.mdx))
+  17. commitment(output_note) == output_commitment
+  18. Encrypt output_note → sender_encrypted_note
+  19. Encrypt sender_symmetric_key with chain_public_key → sender_chain_encrypted_key
+```
+</Spec>

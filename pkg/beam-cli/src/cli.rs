@@ -1,8 +1,12 @@
-// lint-long-file-override allow-max-lines=300
+// lint-long-file-override allow-max-lines=330
+mod apps;
 mod chain;
+mod contract;
 mod fetch;
+mod gas;
 mod normalize;
 mod privacy;
+mod wallet;
 
 pub mod util;
 
@@ -10,11 +14,15 @@ use clap::{Args, Parser, Subcommand};
 
 use crate::{display::ColorMode, output::OutputMode, runtime::InvocationOverrides};
 
+pub use apps::*;
 pub use chain::*;
+pub use contract::*;
 pub use fetch::FetchArgs;
+pub use gas::*;
 pub(crate) use normalize::normalize_cli_args;
 pub use privacy::*;
 use util::UtilAction;
+pub use wallet::*;
 
 #[derive(Debug, Parser)]
 #[command(name = "beam", version, about = "Ethereum wallet CLI")]
@@ -76,6 +84,13 @@ pub enum Command {
         #[command(subcommand)]
         action: Option<TokenAction>,
     },
+    /// Manage Beam apps
+    Apps {
+        #[command(subcommand)]
+        action: AppsAction,
+    },
+    /// Run a Beam app
+    X(AppRunArgs),
     /// Work with private balances and transfers
     Privacy {
         #[command(subcommand)]
@@ -85,6 +100,12 @@ pub enum Command {
     Balance(BalanceArgs),
     /// Send the native token
     Transfer(TransferArgs),
+    /// Estimate gas for a native transfer or contract transaction
+    #[command(name = "gas", visible_aliases = ["estimate-gas", "estimate"])]
+    Gas {
+        #[command(subcommand)]
+        action: GasAction,
+    },
     /// Inspect a transaction
     #[command(name = "txn", visible_alias = "tx")]
     Txn(TxnArgs),
@@ -94,6 +115,11 @@ pub enum Command {
     Erc20 {
         #[command(subcommand)]
         action: Erc20Action,
+    },
+    /// Inspect deployed contracts
+    Contract {
+        #[command(subcommand)]
+        action: ContractAction,
     },
     /// Run a read-only contract call
     Call(CallArgs),
@@ -105,49 +131,6 @@ pub enum Command {
     Update,
     #[command(name = "__refresh-update-status", hide = true)]
     RefreshUpdateStatus,
-}
-
-#[derive(Debug, Subcommand)]
-pub enum WalletAction {
-    /// Create a new wallet
-    Create { name: Option<String> },
-    /// Import a wallet from a private key
-    Import {
-        #[command(flatten)]
-        private_key_source: PrivateKeySourceArgs,
-        #[arg(long)]
-        name: Option<String>,
-    },
-    /// List stored wallets
-    List,
-    /// Rename a stored wallet
-    Rename { name: String, new_name: String },
-    /// Derive an address from a private key
-    Address {
-        #[command(flatten)]
-        private_key_source: PrivateKeySourceArgs,
-    },
-    /// Set the default wallet
-    Use { name: String },
-}
-
-#[derive(Clone, Debug, Default, Args, PartialEq, Eq)]
-pub struct PrivateKeySourceArgs {
-    #[arg(
-        long,
-        default_value_t = false,
-        conflicts_with = "private_key_fd",
-        help = "Read the private key from stdin instead of prompting"
-    )]
-    pub private_key_stdin: bool,
-
-    #[arg(
-        long,
-        value_name = "FD",
-        conflicts_with = "private_key_stdin",
-        help = "Read the private key from an already-open file descriptor"
-    )]
-    pub private_key_fd: Option<u32>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -265,12 +248,6 @@ impl Command {
             Self::Fetch(args) => args.private_payment,
             _ => false,
         }
-    }
-}
-
-impl WalletAction {
-    pub(crate) fn is_sensitive(&self) -> bool {
-        matches!(self, Self::Import { .. } | Self::Address { .. })
     }
 }
 

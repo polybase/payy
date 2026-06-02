@@ -1,6 +1,6 @@
 [package]
 name = "beam-cli"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
 publish = false
 
@@ -37,9 +37,13 @@ serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 shlex = { workspace = true }
 sha2 = { workspace = true }
+sourcify-client-reqwest = { workspace = true }
+sourcify-interface = { workspace = true }
 thiserror = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
+url = { workspace = true }
+wasmi = { workspace = true }
 web3 = { workspace = true }
 workspace-hack.workspace = true
 

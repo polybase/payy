@@ -1,4 +1,3 @@
-// lint-long-file-override allow-max-lines=300
 #[path = "interactive_history_sensitive.rs"]
 mod sensitive;
 
@@ -6,16 +5,17 @@ use std::path::Path;
 
 use clap::Parser;
 use rustyline::{
-    Cmd, ConditionalEventHandler, Config, Editor, Event, EventContext, EventHandler, Helper,
-    KeyCode, KeyEvent, Modifiers, RepeatCount,
+    Config,
     history::{DefaultHistory, History, SearchDirection, SearchResult},
 };
 
+use super::interactive_history_navigation::HistoryNavigationStateHandle;
 use crate::cli::{Cli, normalize_cli_args};
 use sensitive::looks_like_sensitive_command;
 
 pub(crate) struct ReplHistory {
     inner: DefaultHistory,
+    navigation_state: Option<HistoryNavigationStateHandle>,
 }
 
 impl ReplHistory {
@@ -26,11 +26,16 @@ impl ReplHistory {
     pub(crate) fn with_config(config: &Config) -> Self {
         Self {
             inner: DefaultHistory::with_config(config),
+            navigation_state: None,
         }
     }
 
     pub(crate) fn iter(&self) -> impl DoubleEndedIterator<Item = &String> + '_ {
         self.inner.iter()
+    }
+
+    pub(super) fn set_navigation_state(&mut self, state: HistoryNavigationStateHandle) {
+        self.navigation_state = Some(state);
     }
 }
 
@@ -46,7 +51,14 @@ impl History for ReplHistory {
         index: usize,
         dir: SearchDirection,
     ) -> rustyline::Result<Option<SearchResult<'_>>> {
-        self.inner.get(index, dir)
+        let result = self.inner.get(index, dir)?;
+        if let (Some(state), Some(result)) = (&self.navigation_state, &result) {
+            let mut state = state
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            state.set_cycled_entry(result.entry.as_ref());
+        }
+        Ok(result)
     }
 
     fn add(&mut self, line: &str) -> rustyline::Result<bool> {
@@ -108,12 +120,20 @@ impl History for ReplHistory {
         start: usize,
         dir: SearchDirection,
     ) -> rustyline::Result<Option<SearchResult<'_>>> {
-        Ok(self.inner.starts_with(term, start, dir)?.map(|mut result| {
-            // Accepted prefix-history matches should behave like completed input:
-            // the cursor belongs at the end of the inserted command.
-            result.pos = result.entry.len();
-            result
-        }))
+        if let Some(state) = &self.navigation_state {
+            let mut state = state
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some(prefix) = state.take_prefix_search_term(term) {
+                if let Some(mut result) = self.inner.starts_with(&prefix, start, dir)? {
+                    result.pos = result.entry.len();
+                    return Ok(Some(result));
+                }
+                return Ok(None);
+            }
+        }
+
+        self.inner.starts_with(term, start, dir)
     }
 }
 
@@ -135,48 +155,6 @@ pub(crate) fn sanitize_history(history: &mut ReplHistory) -> rustyline::Result<b
     }
     history.ignore_dups(true)?;
     Ok(true)
-}
-
-pub(crate) fn bind_matching_prefix_history_search<H, I>(editor: &mut Editor<H, I>)
-where
-    H: Helper,
-    I: History,
-{
-    bind_history_search(
-        editor,
-        KeyEvent(KeyCode::Up, Modifiers::NONE),
-        SearchDirection::Reverse,
-    );
-    bind_history_search(
-        editor,
-        KeyEvent(KeyCode::Down, Modifiers::NONE),
-        SearchDirection::Forward,
-    );
-}
-
-pub(crate) fn uses_matching_prefix_history_search(line: &str, pos: usize) -> bool {
-    line.get(..pos).is_some_and(|prefix| {
-        pos == line.len() && !line.contains('\n') && !prefix.trim().is_empty()
-    })
-}
-
-pub(crate) fn history_navigation_command(
-    line: &str,
-    pos: usize,
-    direction: SearchDirection,
-    repeat_count: RepeatCount,
-) -> Cmd {
-    if uses_matching_prefix_history_search(line, pos) {
-        match direction {
-            SearchDirection::Reverse => Cmd::HistorySearchBackward,
-            SearchDirection::Forward => Cmd::HistorySearchForward,
-        }
-    } else {
-        match direction {
-            SearchDirection::Reverse => Cmd::LineUpOrPreviousHistory(repeat_count),
-            SearchDirection::Forward => Cmd::LineDownOrNextHistory(repeat_count),
-        }
-    }
 }
 
 pub(crate) fn should_persist_history(line: &str) -> bool {
@@ -203,38 +181,4 @@ pub(crate) fn should_persist_history(line: &str) -> bool {
         .map(ToString::to_string)
         .collect::<Vec<_>>();
     !looks_like_sensitive_command(&args)
-}
-
-fn bind_history_search<H, I>(editor: &mut Editor<H, I>, key: KeyEvent, direction: SearchDirection)
-where
-    H: Helper,
-    I: History,
-{
-    editor.bind_sequence(
-        key,
-        EventHandler::Conditional(Box::new(PrefixHistorySearchHandler { direction })),
-    );
-}
-
-struct PrefixHistorySearchHandler {
-    direction: SearchDirection,
-}
-
-impl ConditionalEventHandler for PrefixHistorySearchHandler {
-    fn handle(
-        &self,
-        event: &Event,
-        n: RepeatCount,
-        positive: bool,
-        ctx: &EventContext,
-    ) -> Option<Cmd> {
-        let _ = (event, n, positive);
-
-        Some(history_navigation_command(
-            ctx.line(),
-            ctx.pos(),
-            self.direction,
-            n,
-        ))
-    }
 }

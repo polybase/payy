@@ -1,0 +1,32 @@
+{
+  "format_version": 1,
+  "generated_at": "2026-05-26T00:00:00Z",
+  "apps": [
+    {
+      "id": "uniswap",
+      "name": "Uniswap",
+      "publisher": "Payy",
+      "description": "Prepare public Uniswap swaps through Beam-mediated HTTP, chain, approval, and transaction planning.",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "min_beam_version": "0.1.2",
+          "manifest_url": "https://registry.beam.payy.network/apps/uniswap/1.0.0/manifest.json",
+          "manifest_sha256": "sha256:9b1e84f51ef0e5afd88a79aaaaa9ebf24b8d15a0a321c0ffa93c6da0ba5c8ede",
+          "module_url": "https://registry.beam.payy.network/apps/uniswap/1.0.0/module.wasm",
+          "module_sha256": "sha256:b155ff4bbbab293085ee393fc12cd9ddcda0e531694521909cd8b5c433ecb927",
+          "signature": {
+            "algorithm": "sha256-dev",
+            "key_id": "payy-dev-2026-05",
+            "value": "sha256:5b8c5aa5f89bf386efbbcdb3a8c670e24bf7a583c9ed0f9c327dedcdeb5a87f0"
+          }
+        }
+      ]
+    }
+  ],
+  "signature": {
+    "algorithm": "sha256-dev",
+    "key_id": "payy-dev-2026-05",
+    "value": "sha256:de6a24df0daabff15742faa1754c8c254a1d4157a55107766cee0a873e914411"
+  }
+}

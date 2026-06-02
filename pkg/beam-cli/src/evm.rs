@@ -1,4 +1,6 @@
-// lint-long-file-override allow-max-lines=300
+// lint-long-file-override allow-max-lines=400
+mod gas;
+
 use contextful::ResultContextExt;
 use contracts::{Address, Client, ERC20Contract, U256};
 use web3::{
@@ -6,6 +8,7 @@ use web3::{
     types::{Bytes, CallRequest, TransactionParameters, TransactionReceipt},
 };
 
+use self::gas::resolve_transaction_gas;
 pub use crate::units::{format_units, parse_units, validate_unit_decimals};
 use crate::{
     abi::{decode_output, encode_input, parse_function, tokens_to_json},
@@ -13,6 +16,7 @@ use crate::{
     signer::Signer,
     transaction::{TransactionExecution, TransactionStatusUpdate, submit_and_wait},
 };
+pub use gas::{TransactionGas, estimate_function_gas, estimate_native_gas};
 
 #[derive(Clone, Debug)]
 pub struct CallOutcome {
@@ -35,10 +39,12 @@ pub struct FunctionCall<'a> {
     pub value: U256,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct TransactionGas {
-    pub gas_limit: U256,
-    pub gas_price: U256,
+#[derive(Clone, Debug)]
+pub struct CalldataTransaction {
+    pub data: Vec<u8>,
+    pub to: Address,
+    pub value: U256,
+    pub gas: Option<TransactionGas>,
 }
 
 pub async fn native_balance(client: &Client, address: Address) -> Result<U256> {
@@ -58,6 +64,39 @@ pub async fn erc20_balance(client: &Client, token: Address, owner: Address) -> R
         .await
         .context("fetch beam erc20 balance")?;
     Ok(balance)
+}
+
+pub async fn erc20_allowance(
+    client: &Client,
+    token: Address,
+    owner: Address,
+    spender: Address,
+) -> Result<U256> {
+    let function = parse_function(
+        "allowance(address,address):(uint256)",
+        StateMutability::View,
+    )?;
+    let outcome = call_function(
+        client,
+        Some(owner),
+        token,
+        &function,
+        &[format!("{owner:#x}"), format!("{spender:#x}")],
+    )
+    .await?;
+    let decoded = outcome
+        .decoded
+        .ok_or_else(|| Error::InvalidFunctionSignature {
+            signature: "allowance(address,address):(uint256)".to_string(),
+        })?;
+    let value = decoded[0]
+        .as_str()
+        .ok_or_else(|| Error::InvalidFunctionSignature {
+            signature: "allowance(address,address):(uint256)".to_string(),
+        })?
+        .parse::<U256>()
+        .context("parse beam erc20 allowance")?;
+    Ok(value)
 }
 
 pub async fn erc20_decimals(client: &Client, token: Address) -> Result<u8> {
@@ -164,6 +203,49 @@ pub async fn send_function_with_gas<S: Signer>(
     submit_transaction(client, signer, tx, on_status, cancel).await
 }
 
+pub async fn send_calldata_with_gas<S: Signer>(
+    client: &Client,
+    signer: &S,
+    transaction: CalldataTransaction,
+    on_status: impl FnMut(TransactionStatusUpdate),
+    cancel: impl std::future::Future,
+) -> Result<TransactionExecution> {
+    let tx = prepare_transaction(
+        client,
+        signer.address(),
+        transaction.to,
+        transaction.data,
+        transaction.value,
+        transaction.gas,
+    )
+    .await?;
+    submit_transaction(client, signer, tx, on_status, cancel).await
+}
+
+pub async fn simulate_calldata(
+    client: &Client,
+    from: Address,
+    to: Address,
+    data: Vec<u8>,
+    value: U256,
+) -> Result<()> {
+    client
+        .eth_call(
+            CallRequest {
+                data: Some(Bytes(data)),
+                from: Some(from),
+                to: Some(to),
+                value: Some(value),
+                ..Default::default()
+            },
+            None,
+        )
+        .await
+        .context("simulate beam transaction")?;
+
+    Ok(())
+}
+
 async fn prepare_transaction(
     client: &Client,
     from: Address,
@@ -201,63 +283,6 @@ async fn fill_transaction(
         value,
         ..Default::default()
     })
-}
-
-async fn resolve_transaction_gas(
-    client: &Client,
-    from: Address,
-    to: Address,
-    data: &[u8],
-    value: U256,
-    gas: Option<TransactionGas>,
-) -> Result<TransactionGas> {
-    match gas {
-        Some(gas) => Ok(gas),
-        None => estimate_transaction_gas(client, from, to, data, value).await,
-    }
-}
-
-async fn estimate_transaction_gas(
-    client: &Client,
-    from: Address,
-    to: Address,
-    data: &[u8],
-    value: U256,
-) -> Result<TransactionGas> {
-    let gas_limit = estimate_gas_limit(client, from, to, data, value).await?;
-    let gas_price = client
-        .fast_gas_price()
-        .await
-        .context("fetch beam gas price")?;
-
-    Ok(TransactionGas {
-        gas_limit,
-        gas_price,
-    })
-}
-
-async fn estimate_gas_limit(
-    client: &Client,
-    from: Address,
-    to: Address,
-    data: &[u8],
-    value: U256,
-) -> Result<U256> {
-    let gas = client
-        .estimate_gas(
-            CallRequest {
-                data: Some(Bytes(data.to_vec())),
-                from: Some(from),
-                to: Some(to),
-                value: Some(value),
-                ..Default::default()
-            },
-            None,
-        )
-        .await
-        .context("estimate beam transaction gas")?;
-
-    Ok(gas + gas / 5)
 }
 
 async fn submit_transaction<S: Signer>(

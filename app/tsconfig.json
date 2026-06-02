@@ -35,6 +35,7 @@
     "**/*.tsx"
   ],
   "exclude": [
+    "packages/beam-site",
     "packages/link",
     "packages/network",
     "packages/privacy-vault",

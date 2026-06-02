@@ -46,6 +46,15 @@
 ## Protocol
 
 * [Architecture](protocol/architecture.md)
+* [Specs](protocol/specs/README.md)
+  * [Payy-EVM Privacy Protocol](protocol/specs/privacy-protocol/privacy-protocol.mdx)
+    * [Data](protocol/specs/privacy-protocol/data.mdx)
+    * [Circuits](protocol/specs/privacy-protocol/circuits.mdx)
+    * [Encryption](protocol/specs/privacy-protocol/encryption.mdx)
+    * [Lookup](protocol/specs/privacy-protocol/lookup.mdx)
+    * [Contract](protocol/specs/privacy-protocol/contract.mdx)
+    * [Wallet](protocol/specs/privacy-protocol/wallet.mdx)
+    * [Security](protocol/specs/privacy-protocol/security.mdx)
 * [Sequencers](protocol/sequencers.md)
 * [Provers](protocol/provers.md)
 * [Data Availability](protocol/data-availability.md)
