@@ -16,6 +16,7 @@ mod output;
 mod privacy;
 mod privacy_config;
 mod prompts;
+mod recovery_phrase;
 mod runtime;
 mod signer;
 mod table;

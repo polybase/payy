@@ -39,14 +39,19 @@
 //! }
 //! ```
 
+use std::ffi::OsString;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::process;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use tokio::fs;
 #[cfg(unix)]
+use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
@@ -198,7 +203,12 @@ where
         data.clone()
     }
 
-    /// Updates the state using a closure and persists the changes atomically
+    /// Updates the state using a closure and persists the changes atomically.
+    ///
+    /// The updated value is written and renamed into place before the
+    /// in-memory state is swapped. If persistence fails, callers receive the
+    /// error and subsequent reads from the same store instance continue to see
+    /// the last committed value.
     ///
     /// # Arguments
     /// * `update_fn` - A closure that takes a mutable reference to the state
@@ -209,15 +219,20 @@ where
     where
         F: FnOnce(&mut T) + Send,
     {
-        {
-            let mut data = self.data.write().await;
-            update_fn(&mut *data);
-        }
-
-        self.persist().await
+        let mut data = self.data.write().await;
+        let mut new_state = data.clone();
+        update_fn(&mut new_state);
+        self.persist_state(&new_state).await?;
+        *data = new_state;
+        Ok(())
     }
 
-    /// Replaces the entire state with a new value and persists it atomically
+    /// Replaces the entire state with a new value and persists it atomically.
+    ///
+    /// The replacement becomes visible through [`Self::get`] only after the
+    /// JSON file write and atomic rename succeed. This gives callers
+    /// transaction-like rollback semantics for a single store instance when the
+    /// filesystem rejects the write.
     ///
     /// # Arguments
     /// * `new_state` - The new state to replace the current one
@@ -225,12 +240,36 @@ where
     /// # Returns
     /// Result indicating success or failure of the set operation
     pub async fn set(&self, new_state: T) -> Result<(), JsonStoreError> {
-        {
-            let mut data = self.data.write().await;
-            *data = new_state;
-        }
+        let mut data = self.data.write().await;
+        self.persist_state(&new_state).await?;
+        *data = new_state;
+        Ok(())
+    }
 
-        self.persist().await
+    /// Replace state, or recover to a caller-supplied state if persistence fails.
+    ///
+    /// Higher-level stores use this when a failed final commit must abandon a
+    /// prepared in-memory attempt rather than exposing stale pending state. The
+    /// recovery state is also persisted when the filesystem permits it. If both
+    /// writes fail, the same store instance still swaps to `recovery_state` so
+    /// subsequent in-process reads observe the caller's rollback decision.
+    pub async fn set_with_recovery_on_error(
+        &self,
+        new_state: T,
+        recovery_state: T,
+    ) -> Result<(), JsonStoreError> {
+        let mut data = self.data.write().await;
+        match self.persist_state(&new_state).await {
+            Ok(()) => {
+                *data = new_state;
+                Ok(())
+            }
+            Err(error) => {
+                let _ = self.persist_state(&recovery_state).await;
+                *data = recovery_state;
+                Err(error)
+            }
+        }
     }
 
     /// Persists the current state to the JSON file atomically
@@ -238,19 +277,21 @@ where
     /// This method writes to a temporary file first, then atomically moves it
     /// to the target location to ensure consistency.
     async fn persist(&self) -> Result<(), JsonStoreError> {
-        let data = self.data.read().await;
+        let data = self.data.read().await.clone();
+        self.persist_state(&data).await
+    }
 
+    async fn persist_state(&self, data: &T) -> Result<(), JsonStoreError> {
         // Serialize the data
-        let json_content = serde_json::to_string_pretty(&*data)?;
+        let json_content = serde_json::to_string_pretty(data)?;
 
-        // Create a temporary file in the same directory as the target file
-        let temp_path = self.file_path.with_extension("tmp");
+        let temp_path =
+            write_json_temp_file(&self.file_path, &json_content, self.file_access).await?;
 
-        // Write to temporary file
-        write_json_file(&temp_path, &json_content, self.file_access).await?;
-
-        // Atomically move the temporary file to the target location
-        fs::rename(&temp_path, &self.file_path).await?;
+        if let Err(error) = fs::rename(&temp_path, &self.file_path).await {
+            let _ = fs::remove_file(&temp_path).await;
+            return Err(error.into());
+        }
         ensure_file_access(&self.file_path, self.file_access).await?;
 
         debug!("Successfully persisted state to: {:?}", self.file_path);
@@ -276,33 +317,81 @@ where
     }
 }
 
-async fn write_json_file(
-    path: &Path,
+static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+async fn write_json_temp_file(
+    target_path: &Path,
     content: &str,
     file_access: FileAccess,
-) -> Result<(), std::io::Error> {
-    if matches!(file_access, FileAccess::OwnerOnly) {
-        return write_owner_only_json_file(path, content).await;
+) -> Result<PathBuf, std::io::Error> {
+    for _ in 0..16 {
+        let temp_path = unique_temp_path(target_path)?;
+        let result = if matches!(file_access, FileAccess::OwnerOnly) {
+            write_owner_only_json_file(&temp_path, content).await
+        } else {
+            write_shared_json_file(&temp_path, content).await
+        };
+        match result {
+            Ok(()) => return Ok(temp_path),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) => {
+                let _ = fs::remove_file(&temp_path).await;
+                return Err(error);
+            }
+        }
     }
 
-    fs::write(path, content).await
+    Err(std::io::Error::new(
+        std::io::ErrorKind::AlreadyExists,
+        "could not create a unique json-store temp file",
+    ))
+}
+
+fn unique_temp_path(target_path: &Path) -> Result<PathBuf, std::io::Error> {
+    let parent = target_path.parent().unwrap_or_else(|| Path::new("."));
+    let file_name = target_path.file_name().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "missing json-store file name",
+        )
+    })?;
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_nanos());
+    let counter = TEMP_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let mut temp_name = OsString::from(".");
+    temp_name.push(file_name);
+    temp_name.push(format!(".tmp-{}-{nanos}-{counter}", process::id()));
+
+    Ok(parent.join(temp_name))
 }
 
 #[cfg(unix)]
 async fn write_owner_only_json_file(path: &Path, content: &str) -> Result<(), std::io::Error> {
-    let mut options = fs::OpenOptions::new();
-    options.create(true).truncate(true).write(true).mode(0o600);
+    let mut options = OpenOptions::new();
+    options.create_new(true).write(true).mode(0o600);
 
-    let mut file = options.open(path).await?;
-    file.write_all(content.as_bytes()).await?;
-    file.flush().await?;
-    drop(file);
+    {
+        let mut file = options.open(path).await?;
+        file.write_all(content.as_bytes()).await?;
+        file.flush().await?;
+    }
     ensure_file_access(path, FileAccess::OwnerOnly).await
 }
 
 #[cfg(not(unix))]
 async fn write_owner_only_json_file(path: &Path, content: &str) -> Result<(), std::io::Error> {
-    fs::write(path, content).await
+    write_shared_json_file(path, content).await
+}
+
+async fn write_shared_json_file(path: &Path, content: &str) -> Result<(), std::io::Error> {
+    let mut file = fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(path)
+        .await?;
+    file.write_all(content.as_bytes()).await?;
+    file.flush().await
 }
 
 async fn ensure_file_access(path: &Path, file_access: FileAccess) -> Result<(), std::io::Error> {

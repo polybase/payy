@@ -2088,6 +2088,7 @@ dependencies = [
  "argon2",
  "async-trait",
  "base64 0.22.1",
+ "bip39",
  "clap",
  "contextful",
  "contracts",
@@ -2278,6 +2279,17 @@ dependencies = [
  "rustc-hash 2.1.1",
  "shlex",
  "syn 2.0.112",
+]
+
+[[package]]
+name = "bip39"
+version = "2.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90dbd31c98227229239363921e60fcf5e558e43ec69094d46fc4996f08d1d5bc"
+dependencies = [
+ "bitcoin_hashes",
+ "serde",
+ "unicode-normalization",
 ]
 
 [[package]]
@@ -13985,6 +13997,7 @@ name = "workspace-hack"
 version = "0.1.0"
 dependencies = [
  "actix-router",
+ "aead",
  "ahash",
  "aho-corasick",
  "allocator-api2",
@@ -14015,6 +14028,7 @@ dependencies = [
  "ark-std 0.5.0",
  "arrayvec",
  "async-compression",
+ "axum",
  "base64 0.13.1",
  "bindgen 0.71.1",
  "bitflags 2.10.0",
@@ -14043,6 +14057,7 @@ dependencies = [
  "darling_core 0.21.3",
  "dashmap",
  "data-encoding",
+ "der",
  "derive_more 2.1.1",
  "derive_more-impl 2.1.1",
  "digest 0.10.7",
@@ -14114,6 +14129,7 @@ dependencies = [
  "once_cell",
  "openssl",
  "openssl-sys",
+ "p256",
  "parity-scale-codec",
  "parking_lot 0.12.5",
  "percent-encoding",
@@ -14166,6 +14182,7 @@ dependencies = [
  "socket2 0.5.10",
  "socket2 0.6.1",
  "spin 0.9.8",
+ "spki",
  "strum 0.27.2",
  "subtle",
  "syn 1.0.109",
@@ -14198,6 +14215,7 @@ dependencies = [
  "windows-sys 0.60.2",
  "windows-sys 0.61.2",
  "winnow 0.7.14",
+ "x25519-dalek 2.0.1",
  "zeroize",
  "zstd",
  "zstd-safe",

@@ -5,27 +5,73 @@ use crate::{
             ActionPlan, ActionStep, AppManifest, AppPermissions, ChainOperation, InstalledApp,
         },
         permissions::ensure_chain_scope,
+        store::now,
     },
     error::Result,
     runtime::BeamApp,
 };
 
-pub(super) async fn plan_for_command(
-    _app: &BeamApp,
+pub(super) async fn validate_guest_plan(
+    app: &BeamApp,
     manifest: &AppManifest,
-    _installed: &InstalledApp,
-    args: &[String],
-) -> Result<ActionPlan> {
-    match (manifest.id.as_str(), args.first().map(String::as_str)) {
-        (_, Some(command)) => Err(AppError::UnsupportedAppCommand {
-            command: command.to_string(),
+    installed: &InstalledApp,
+    command_args: &[String],
+    plan: &ActionPlan,
+) -> Result<()> {
+    let expected_command = command_args
+        .first()
+        .ok_or_else(|| AppError::InvalidGuestOutput {
+            reason: "guest plan missing command".to_string(),
+        })?;
+    if !plan.command.starts_with(expected_command) {
+        return Err(AppError::InvalidGuestOutput {
+            reason: format!(
+                "guest plan command `{}` does not match invocation `{expected_command}`",
+                plan.command
+            ),
         }
-        .into()),
-        (_, None) => Err(AppError::UnsupportedAppCommand {
-            command: "<missing>".to_string(),
-        }
-        .into()),
+        .into());
     }
+    if plan.app_id != manifest.id
+        || plan.app_version != installed.active_version
+        || plan.manifest_sha256 != installed.manifest_sha256
+        || plan.wasm_sha256 != installed.module_sha256
+    {
+        return Err(AppError::InvalidGuestOutput {
+            reason: "guest plan artifact identity does not match installed app".to_string(),
+        }
+        .into());
+    }
+    if plan.expires_at <= now() {
+        return Err(AppError::InvalidGuestOutput {
+            reason: "guest plan is already expired".to_string(),
+        }
+        .into());
+    }
+
+    let active_chain = app.active_chain().await?;
+    if plan.chain != active_chain.entry.key {
+        return Err(AppError::InvalidGuestOutput {
+            reason: format!(
+                "guest plan chain `{}` does not match active chain `{}`",
+                plan.chain, active_chain.entry.key
+            ),
+        }
+        .into());
+    }
+    if let Some(wallet) = plan.wallet.as_ref() {
+        let active_wallet = format!("{:#x}", app.active_address().await?);
+        if !wallet.eq_ignore_ascii_case(&active_wallet) {
+            return Err(AppError::InvalidGuestOutput {
+                reason: format!(
+                    "guest plan wallet `{wallet}` does not match active wallet `{active_wallet}`"
+                ),
+            }
+            .into());
+        }
+    }
+
+    Ok(())
 }
 
 pub(super) fn validate_plan_permissions(

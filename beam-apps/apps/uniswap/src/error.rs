@@ -25,4 +25,13 @@ pub enum Error {
 
     #[error("[beam-app-uniswap] address value is invalid: {value}")]
     InvalidAddress { value: String },
+
+    #[error("[beam-app-uniswap] host call failed: {message}")]
+    HostCallFailed { message: String },
+
+    #[error("[beam-app-uniswap] host response is invalid: {reason}")]
+    InvalidHostResponse { reason: String },
+
+    #[error("[beam-app-uniswap] serialization failed: {reason}")]
+    Serialization { reason: String },
 }

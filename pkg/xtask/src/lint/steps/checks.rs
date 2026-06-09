@@ -1,3 +1,4 @@
+// lint-long-file-override allow-max-lines=240
 use std::io::ErrorKind;
 use std::path::Path;
 use std::time::Instant;

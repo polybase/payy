@@ -1,11 +1,13 @@
-// lint-long-file-override allow-max-lines=300
-use std::{fs, io::Read, path::Path};
-
+// lint-long-file-override allow-max-lines=400
 use contextful::ResultContextExt;
-use contracts::Secp256k1SecretKey;
-use rand::RngCore;
 use serde_json::json;
 
+use super::{
+    wallet_private_key, wallet_recovery,
+    wallet_secret::{generate_secret_key, load_secret_key},
+};
+#[cfg(test)]
+use crate::keystore::validate_new_password;
 use crate::{
     cli::{PrivateKeySourceArgs, WalletAction},
     ens::{import_wallet_name, validate_wallet_name_for_address},
@@ -13,7 +15,7 @@ use crate::{
     human_output::{normalize_human_name, sanitize_control_chars},
     keystore::{
         StoredWallet, encrypt_private_key, next_wallet_name, prompt_new_password,
-        prompt_private_key, prompt_wallet_name, wallet_address,
+        prompt_wallet_name, wallet_address,
     },
     output::CommandOutput,
     runtime::BeamApp,
@@ -26,6 +28,25 @@ pub async fn run(app: &BeamApp, action: WalletAction) -> Result<()> {
             private_key_source,
             name,
         } => import_wallet(app, name, &private_key_source).await,
+        WalletAction::ExportPrivateKey { wallet } => {
+            wallet_private_key::export_private_key(app, wallet).await
+        }
+        WalletAction::ExportRecoveryPhrase { wallet } => {
+            wallet_recovery::export_recovery_phrase(app, wallet).await
+        }
+        WalletAction::ImportRecoveryPhrase {
+            expected_address,
+            phrase_source,
+            name,
+        } => {
+            wallet_recovery::import_recovery_phrase(
+                app,
+                name,
+                &phrase_source,
+                expected_address.as_deref(),
+            )
+            .await
+        }
         WalletAction::List => list_wallets(app).await,
         WalletAction::Rename { name, new_name } => rename_wallet(app, &name, &new_name).await,
         WalletAction::Address { private_key_source } => {
@@ -189,11 +210,41 @@ async fn use_wallet(app: &BeamApp, name: &str) -> Result<()> {
     .print(app.output_mode)
 }
 
-async fn store_wallet(
+pub(super) async fn store_wallet(
     app: &BeamApp,
     requested_name: Option<String>,
     secret_key: &[u8],
 ) -> Result<()> {
+    let prepared = prepare_wallet_store(app, requested_name, secret_key).await?;
+    let password = prompt_new_password()?;
+    persist_prepared_wallet(app, prepared, secret_key, &password)
+        .await?
+        .print(app.output_mode)
+}
+
+#[cfg(test)]
+pub(super) async fn store_wallet_with_password(
+    app: &BeamApp,
+    requested_name: Option<String>,
+    secret_key: &[u8],
+    password: &str,
+) -> Result<CommandOutput> {
+    let prepared = prepare_wallet_store(app, requested_name, secret_key).await?;
+    validate_new_password(password, password)?;
+
+    persist_prepared_wallet(app, prepared, secret_key, password).await
+}
+
+struct PreparedWalletStore {
+    address: String,
+    name: String,
+}
+
+async fn prepare_wallet_store(
+    app: &BeamApp,
+    requested_name: Option<String>,
+    secret_key: &[u8],
+) -> Result<PreparedWalletStore> {
     let keystore = app.keystore_store.get().await;
     let address = wallet_address(secret_key)?;
     let name = import_wallet_name(app, &keystore, requested_name, address).await?;
@@ -208,8 +259,17 @@ async fn store_wallet(
         return Err(Error::WalletAddressAlreadyExists { address });
     }
 
-    let password = prompt_new_password()?;
-    let encrypted_private_key = encrypt_private_key(secret_key, &password)?;
+    Ok(PreparedWalletStore { address, name })
+}
+
+async fn persist_prepared_wallet(
+    app: &BeamApp,
+    prepared: PreparedWalletStore,
+    secret_key: &[u8],
+    password: &str,
+) -> Result<CommandOutput> {
+    let PreparedWalletStore { address, name } = prepared;
+    let encrypted_private_key = encrypt_private_key(secret_key, password)?;
     let wallet = StoredWallet {
         address: address.clone(),
         encrypted_key: encrypted_private_key.encrypted_key,
@@ -232,65 +292,16 @@ async fn store_wallet(
     }
 
     let display_name = sanitize_control_chars(&wallet.name);
-    CommandOutput::new(
+    Ok(CommandOutput::new(
         format!("Created wallet {display_name} ({address})"),
         json!({
             "address": wallet.address,
             "name": wallet.name,
         }),
     )
-    .compact(format!("{display_name} {address}"))
-    .print(app.output_mode)
+    .compact(format!("{display_name} {address}")))
 }
 
 pub(crate) fn normalize_wallet_name(name: &str) -> Result<String> {
     normalize_human_name(name).ok_or(Error::WalletNameBlank)
-}
-
-fn load_secret_key(private_key_source: &PrivateKeySourceArgs) -> Result<Vec<u8>> {
-    let private_key = read_private_key(private_key_source)?;
-    let secret_key = parse_secret_key(&private_key)?;
-    Ok(secret_key)
-}
-
-fn read_private_key(private_key_source: &PrivateKeySourceArgs) -> Result<String> {
-    if private_key_source.private_key_stdin {
-        return read_private_key_from_stdin();
-    }
-
-    if let Some(fd) = private_key_source.private_key_fd {
-        return read_private_key_from_fd(fd);
-    }
-
-    prompt_private_key()
-}
-
-fn read_private_key_from_stdin() -> Result<String> {
-    let mut private_key = String::new();
-    std::io::stdin()
-        .read_to_string(&mut private_key)
-        .context("read beam private key from stdin")?;
-    Ok(private_key)
-}
-
-pub(crate) fn read_private_key_from_fd(fd: u32) -> Result<String> {
-    let path = Path::new("/dev/fd").join(fd.to_string());
-    Ok(fs::read_to_string(path).context("read beam private key from file descriptor")?)
-}
-
-fn parse_secret_key(private_key: &str) -> Result<Vec<u8>> {
-    let decoded = hex::decode(private_key.trim().trim_start_matches("0x"))
-        .map_err(|_| Error::InvalidPrivateKey)?;
-    let _ = Secp256k1SecretKey::from_slice(&decoded).map_err(|_| Error::InvalidPrivateKey)?;
-    Ok(decoded)
-}
-
-fn generate_secret_key() -> [u8; 32] {
-    loop {
-        let mut secret_key = [0u8; 32];
-        rand::thread_rng().fill_bytes(&mut secret_key);
-        if Secp256k1SecretKey::from_slice(&secret_key).is_ok() {
-            return secret_key;
-        }
-    }
 }

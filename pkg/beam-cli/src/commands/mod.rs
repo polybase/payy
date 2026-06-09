@@ -25,6 +25,9 @@ pub mod txn;
 pub mod update;
 pub mod util;
 pub mod wallet;
+pub(crate) mod wallet_private_key;
+pub(crate) mod wallet_recovery;
+pub(crate) mod wallet_secret;
 
 use crate::{cli::Command, error::Result, runtime::BeamApp};
 

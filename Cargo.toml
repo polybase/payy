@@ -48,6 +48,8 @@ test-spy-macros = { path = "./pkg/test-spy-macros" }
 block-store = { path = "./pkg/block-store" }
 contracts = { path = "./pkg/contracts" }
 constants = { path = "./pkg/constants" }
+contract-test = { path = "./pkg/contract-test" }
+contract-test-macro = { path = "./pkg/contract-test-macro" }
 country = { path = "./pkg/country" }
 client-http = { path = "./pkg/client-http" }
 client-http-longpoll = { path = "./pkg/client-http-longpoll" }
@@ -70,6 +72,14 @@ hash-poseidon = { path = "./pkg/hash-poseidon" }
 hmac-sha256-json = { path = "./pkg/hmac-sha256-json" }
 json-store = { path = "./pkg/json-store" }
 json-with-logging = { path = "./pkg/json-with-logging" }
+jws-es256-interface = { path = "./pkg/jws-es256-interface" }
+jws-es256-p256 = { path = "./pkg/jws-es256-p256" }
+time-interface = { path = "./pkg/time-interface" }
+time-system = { path = "./pkg/time-system" }
+email-interface = { path = "./pkg/email-interface" }
+email-memory = { path = "./pkg/email-memory" }
+evm-json-rpc-interface = { path = "./pkg/evm-json-rpc-interface" }
+evm-json-rpc-reqwest = { path = "./pkg/evm-json-rpc-reqwest" }
 serde_yaml = { path = "./pkg/serde_yaml" }
 node = { path = "./pkg/node" }
 node-client-http = { path = "./pkg/node-client-http" }
@@ -102,6 +112,56 @@ posthog-interface = { path = "./pkg/posthog-interface" }
 posthog = { path = "./pkg/posthog" }
 kyc = { path = "./pkg/kyc" }
 primitives = { path = "./pkg/primitives" }
+payy-auth-embedded-wallet-document = { path = "./pkg/payy-auth-embedded-wallet-document" }
+payy-auth-app-admission-interface = { path = "./pkg/payy-auth-app-admission-interface" }
+payy-auth-app-admission-catalog = { path = "./pkg/payy-auth-app-admission-catalog" }
+payy-auth-app-catalog-interface = { path = "./pkg/payy-auth-app-catalog-interface" }
+payy-auth-app-catalog-memory = { path = "./pkg/payy-auth-app-catalog-memory" }
+payy-auth-app-catalog-server = { path = "./pkg/payy-auth-app-catalog-server" }
+payy-auth-app-catalog-test-support = { path = "./pkg/payy-auth-app-catalog-test-support" }
+payy-auth-app-client-scope-interface = { path = "./pkg/payy-auth-app-client-scope-interface" }
+payy-auth-app-client-scope = { path = "./pkg/payy-auth-app-client-scope" }
+payy-auth-client-access-interface = { path = "./pkg/payy-auth-client-access-interface" }
+payy-auth-client-access-catalog = { path = "./pkg/payy-auth-client-access-catalog" }
+payy-auth-client-access-test-support = { path = "./pkg/payy-auth-client-access-test-support" }
+payy-auth-user-interface = { path = "./pkg/payy-auth-user-interface" }
+payy-auth-session-interface = { path = "./pkg/payy-auth-session-interface" }
+payy-auth-login-commit-interface = { path = "./pkg/payy-auth-login-commit-interface" }
+payy-auth-login-commit-policy-catalog = { path = "./pkg/payy-auth-login-commit-policy-catalog" }
+payy-auth-login-commit-test-support = { path = "./pkg/payy-auth-login-commit-test-support" }
+payy-auth-refresh-session-core = { path = "./pkg/payy-auth-refresh-session-core" }
+payy-auth-passwordless-interface = { path = "./pkg/payy-auth-passwordless-interface" }
+payy-auth-passwordless-test-support = { path = "./pkg/payy-auth-passwordless-test-support" }
+payy-auth-passwordless = { path = "./pkg/payy-auth-passwordless" }
+payy-auth-passwordless-code-os-rng = { path = "./pkg/payy-auth-passwordless-code-os-rng" }
+payy-auth-passwordless-challenge-memory = { path = "./pkg/payy-auth-passwordless-challenge-memory" }
+payy-auth-passwordless-rate-limit-allow-all = { path = "./pkg/payy-auth-passwordless-rate-limit-allow-all" }
+payy-auth-passwordless-policy-catalog = { path = "./pkg/payy-auth-passwordless-policy-catalog" }
+payy-auth-passwordless-fail-closed = { path = "./pkg/payy-auth-passwordless-fail-closed" }
+payy-auth-passwordless-email = { path = "./pkg/payy-auth-passwordless-email" }
+payy-auth-session-memory = { path = "./pkg/payy-auth-session-memory" }
+payy-auth-api-request-interface = { path = "./pkg/payy-auth-api-request-interface" }
+payy-auth-api-gate = { path = "./pkg/payy-auth-api-gate" }
+payy-auth-wallet-interface = { path = "./pkg/payy-auth-wallet-interface" }
+payy-auth-wallet = { path = "./pkg/payy-auth-wallet" }
+payy-auth-wallet-p256 = { path = "./pkg/payy-auth-wallet-p256" }
+payy-auth-wallet-custody-local = { path = "./pkg/payy-auth-wallet-custody-local" }
+payy-auth-wallet-storage-core = { path = "./pkg/payy-auth-wallet-storage-core" }
+payy-auth-wallet-storage-json = { path = "./pkg/payy-auth-wallet-storage-json" }
+payy-auth-wallet-storage-memory = { path = "./pkg/payy-auth-wallet-storage-memory" }
+payy-auth-wallet-test-support = { path = "./pkg/payy-auth-wallet-test-support" }
+payy-auth-wallet-transaction-evm-json-rpc = { path = "./pkg/payy-auth-wallet-transaction-evm-json-rpc" }
+payy-auth-api-bin = { path = "./pkg/payy-auth-api-bin" }
+payy-auth-api-http = { path = "./pkg/payy-auth-api-http" }
+payy-auth-api-interface = { path = "./pkg/payy-auth-api-interface" }
+payy-auth-api-test-support = { path = "./pkg/payy-auth-api-test-support" }
+payy-auth-local = { path = "./pkg/payy-auth-local" }
+payy-auth-runtime-system = { path = "./pkg/payy-auth-runtime-system" }
+payy-auth-session = { path = "./pkg/payy-auth-session" }
+payy-auth-session-test-support = { path = "./pkg/payy-auth-session-test-support" }
+payy-auth-session-storage-memory = { path = "./pkg/payy-auth-session-storage-memory" }
+payy-auth-backend-interface = { path = "./pkg/payy-auth-backend-interface" }
+payy-auth-api-server = { path = "./pkg/payy-auth-api-server" }
 prover = { path = "./pkg/prover" }
 providers-interface = { path = "./pkg/providers-interface" }
 rpc = { path = "./pkg/rpc" }
@@ -123,6 +183,7 @@ eip7702 = { path = "./pkg/eip7702" }
 payy_core = { path = "./pkg/payy_core" }
 payy_core_types = { path = "./pkg/payy_core_types" }
 payy-app-interface = { path = "./pkg/payy-app-interface" }
+payy-auth-app-interface = { path = "./pkg/payy-auth-app-interface" }
 payy-app-wallet-mobile = { path = "./pkg/payy-app-wallet-mobile" }
 payy-note = { path = "./pkg/payy-note" }
 payy-evm-parse-link = { path = "./pkg/payy-evm-parse-link" }
@@ -222,6 +283,7 @@ base64 = "0.22.1"
 bb_rs = { package = "polybase_bb_rs", git = "https://github.com/polybase/aztec-packages", rev = "14afe4c5e350ca8a650f8e5929385a27a0294275" } # v3.0.0-manual.20251030-polybase
 benchy = "0.1.1"
 bigdecimal = { version = "0.4.8", features = ["serde"] }
+bip39 = "2.2.2"
 bitvec = "1.0.1"
 blake2b_simd = "1.0"
 bs58 = "0.5.1"
@@ -262,6 +324,7 @@ futures-timer = "3.0.2"
 futures-util = "0.3.29"
 halo2curves = "0.1.0"
 hex = { version = "0.4", features = ["serde"] }
+hpke = "0.13.0"
 hmac = "0.12"
 home = "0.5.11"
 indoc = "2"
@@ -288,7 +351,9 @@ num-bigint = "0.4.6"
 num-traits = "0.2"
 openssl = { version = "0.10.75", default-features = false }
 once_cell = "1.19.0"
+p256 = { version = "0.13.2", features = ["pkcs8", "pem"] }
 parking_lot = "0.12.1"
+percent-encoding = "2.3.2"
 phonenumber = "0.3"
 pretty-hex = "0.3.0"
 proptest = "1.11.0"
@@ -297,6 +362,7 @@ quote = "1.0"
 quickcheck = "1.0.3"
 rand = "0.8.5"
 rand_chacha = "0.3.1"
+rand_chacha_09 = { package = "rand_chacha", version = "0.9.0" }
 rand_xorshift = "0.4"
 reqwest = { version = "0.12", features = ["json", "multipart", "stream"] }
 rlp = "0.6.1"
@@ -310,6 +376,7 @@ sentry = "0.46.0"
 sentry-tracing = "0.46.2"
 serde = { version = "1.0.221", features = ["derive"] }
 serde_json = "1.0.145"
+serde_json_canonicalizer = "0.3.2"
 serde_urlencoded = "0.7.1"
 serde_qs = "0.15.0"
 serde_bytes = "0.11.19"
@@ -326,6 +393,7 @@ sha1 = "0.10.1"
 sha2 = "0.10.6"
 sha3 = "0.10.1"
 zstd = "0.13.3"
+zeroize = "1"
 self-replace = "1.5.0"
 spinoff = "0.8.0"
 syn = { version = "2.0", features = ["full", "extra-traits"] }

@@ -250,14 +250,17 @@ Run app commands with the short `x` alias or the explicit lifecycle form:
 
 ```bash
 beam x uniswap --help
+beam x uniswap swap --help
+beam --chain base --from alice x uniswap swap USDC ETH 100 --prepare
+beam apps run uniswap swap USDC ETH 100 --chain base --from alice --prepare
 ```
 
 Product app business logic lives outside Beam CLI in `beam-apps/apps/<app>`.
 Beam CLI owns the generic registry, cache, WASM validation, permission checks,
-approval records, and execution of approved action plans. The Uniswap app is
-built into the registry as WASM, but `beam x uniswap swap ...` remains behind the
-generic guest host-ABI invocation milestone; Beam CLI no longer contains a
-Uniswap-specific built-in planner.
+host ABI, approval records, and execution of approved action plans. The Uniswap
+app is built into the registry as WASM and `beam x uniswap swap ...` runs through
+the generic guest command path; Beam CLI no longer contains a Uniswap-specific
+built-in planner.
 
 The Uniswap app will use Beam-mediated HTTPS requests to the Uniswap Trading
 API. Release registry builds inject the Payy-managed public Trading API key into
@@ -285,9 +288,18 @@ beam apps approvals show <approval-id>
 beam apps approvals approve <approval-id> --execute
 ```
 
-`--no-prompt` fails closed for wallet-affecting app commands unless the command is
-preparing a continuation. Removing an app keeps app-local data by default; pass
-`--purge-data` to delete `~/.beam/apps/data/<app>` as well.
+Uniswap token arguments can be configured token labels, `native`, native chain
+symbols, or EVM token addresses. Swap options include `--min-receive`,
+`--slippage-bps`, `--deadline-seconds`, `--recipient`, `--max-gas`, and
+`--unlimited-approval`. Approvals default to the exact amount required and the
+swap is only sent after an approval is confirmed or skipped because fresh
+allowance is already sufficient. Execution output reports confirmed, pending,
+dropped, or skipped transaction state as Beam receives it from the active RPC
+path; confirmed receipts include the reported transaction status.
+
+`--no-prompt` fails closed for wallet-affecting app commands unless the command
+is preparing a continuation. Removing an app keeps app-local data by default;
+pass `--purge-data` to delete `~/.beam/apps/data/<app>` as well.
 
 ## Privacy
 
@@ -336,6 +348,9 @@ Supported wallet commands:
 ```bash
 beam wallets create [name]
 beam wallets import [--name <name>] [--private-key-stdin | --private-key-fd <fd>]
+beam wallets export-private-key [wallet]
+beam wallets export-recovery-phrase [wallet]
+beam wallets import-recovery-phrase [--name <name>] [--expected-address <address>] [--phrase-stdin | --phrase-fd <fd>]
 beam wallets list
 beam wallets rename <name|address|ens> <new-name>
 beam wallets address [--private-key-stdin | --private-key-fd <fd>]
@@ -348,6 +363,29 @@ Notes:
 - Each wallet record stores its KDF metadata alongside the encrypted key so future beam releases can keep decrypting older wallets after Argon2 tuning changes.
 - `beam wallets import` and `beam wallets address` read the private key from a hidden prompt by default.
 - Use `--private-key-stdin` for pipelines and `--private-key-fd <fd>` for redirected file descriptors.
+- `beam wallets export-private-key [wallet]` prints the stored wallet's raw primary EVM private key after prompting for the keystore password. When `[wallet]` is omitted, Beam exports the active wallet: the configured default unless `--from` overrides it.
+- **Important:** The exported private key gives full control over that wallet. Do not paste it into command arguments, shell variables, issue trackers, chat, screenshots, or logs.
+- The exported private key is the primary EVM private key stored by Beam.
+- `beam wallets export-recovery-phrase [wallet]` exports a 24-word BIP39 phrase for the selected
+  stored wallet. If `[wallet]` is omitted, Beam exports the active wallet: the configured default
+  unless `--from` overrides it.
+- `beam wallets import-recovery-phrase` imports a wallet from a recovery phrase. By default the
+  phrase is read from a hidden prompt; use `--phrase-stdin` for pipelines and `--phrase-fd <fd>`
+  for already-open file descriptors.
+- Importing a recovery phrase prints the derived EVM wallet address before asking for the new
+  wallet password. Use `--expected-address <address>` to fail before persistence if the phrase
+  derives a different address than expected.
+- Recovery phrases are Payy-compatible entropy backups: Beam maps the 32-byte EVM private key
+  directly to and from a 24-word BIP39 phrase. This is not a MetaMask or HD-wallet seed flow; no
+  derivation path, account index, or seed expansion is used.
+- Importing a recovery phrase restores the same EVM address and the same Payy private address,
+  because Beam derives Payy privacy keys from the EVM private key. It does not restore local Beam
+  config, scan state, history, custom RPCs, token labels, or pending claim artifacts.
+- Treat the phrase exactly like the private key. Avoid storing it in plaintext files; `--phrase-fd`
+  is mainly useful for secret-manager streams and tests.
+- Do not paste recovery phrases into command arguments or shell variables. Shell history can persist
+  those values. Prefer the hidden prompt, `--phrase-stdin` from a secret manager, or `--phrase-fd`
+  with an already-open descriptor.
 - `beam wallets create` prompts for a wallet name when you omit `[name]`, suggesting the next available `wallet-N` alias and accepting it when you press Enter.
 - `beam wallets import` uses a verified ENS reverse record as the default wallet name when one resolves back to the imported address; otherwise it falls back to the next `wallet-N` alias.
 - The CLI prompts for a password when creating/importing a wallet. Press Enter at the password prompt to create a wallet with no password; whitespace-only passwords are rejected.
@@ -368,8 +406,14 @@ Examples:
 ```bash
 beam wallets import --name alice
 beam wallets rename alice primary
-printf '%s\n' "$BEAM_PRIVATE_KEY" | beam wallets import --private-key-stdin --name alice
+beam --format compact wallets export-private-key alice
+beam wallets import --private-key-fd 3 --name alice 3< ~/.config/beam/private-key.txt
 beam wallets address --private-key-fd 3 3< ~/.config/beam/private-key.txt
+beam wallets export-recovery-phrase alice
+beam wallets import-recovery-phrase --name alice
+beam wallets import-recovery-phrase --expected-address 0x1111111111111111111111111111111111111111 --name alice
+pass show beam/alice/recovery-phrase | beam wallets import-recovery-phrase --phrase-stdin --name alice
+beam wallets import-recovery-phrase --phrase-fd 3 --name alice 3< <(pass show beam/alice/recovery-phrase)
 ```
 
 The signing flow is built on a `Signer` abstraction so hardware-wallet implementations can
@@ -657,7 +701,9 @@ networks use `#E0FF32`.
 
 Sensitive wallet and privacy commands are never written to REPL history, and startup immediately
 rewrites `~/.beam/history.txt` after scrubbing previously persisted `wallets import` /
-`wallets address` entries, including mistyped slash-prefixed variants such as `/wallets import`.
+`wallets export-private-key` / `wallets import-recovery-phrase` / `wallets address` entries,
+including mistyped slash-prefixed variants such as `/wallets import`. `wallets
+export-recovery-phrase` may be recorded, but the phrase itself is never part of the command line.
 Privacy claim artifacts, ephemeral sends, claim-link messages, memos, and private-payment fetch
 commands are also excluded from persisted history.
 

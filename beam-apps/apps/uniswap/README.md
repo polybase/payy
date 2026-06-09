@@ -28,6 +28,13 @@ beam apps install uniswap --dry-run
 beam x uniswap swap <sell-token> <buy-token> <amount> [options]
 ```
 
+Command help is exported through the app manifest and rendered by Beam without
+fetching a quote or invoking guest WASM:
+
+```bash
+beam x uniswap swap --help
+```
+
 Example:
 
 ```bash
@@ -48,6 +55,9 @@ approve the final plan before Beam signs or submits anything.
 - `--unlimited-approval` asks Beam to request an unlimited ERC-20 approval
   instead of the default exact approval.
 
+Token inputs can be Beam token labels, `native`, the active chain's native
+symbol, or EVM token addresses.
+
 ## How a Swap Works
 
 1. The app fetches a quote through Beam-mediated HTTPS access.
@@ -56,6 +66,12 @@ approve the final plan before Beam signs or submits anything.
 4. The app prepares the swap transaction.
 5. Beam renders the typed plan, asks for approval, signs, submits, and tracks the
    receipt.
+
+If an approval is required, Beam submits it first and submits the swap only after
+the approval is confirmed. If fresh allowance already satisfies the exact plan,
+Beam skips the approval step. Execution output reports confirmed, pending,
+dropped, or skipped transaction state; confirmed receipts include the RPC status
+value.
 
 ## Agents
 

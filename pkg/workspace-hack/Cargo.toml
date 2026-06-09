@@ -11,6 +11,7 @@ default = []
 ### BEGIN HAKARI SECTION
 [dependencies]
 actix-router = { version = "0.5", default-features = false, features = ["http", "unicode"] }
+aead = { version = "0.5", features = ["alloc", "getrandom"] }
 ahash = { version = "0.8", default-features = false, features = ["runtime-rng"] }
 aho-corasick = { version = "1" }
 allocator-api2 = { version = "0.2" }
@@ -38,6 +39,7 @@ ark-serialize = { version = "0.5", default-features = false, features = ["derive
 ark-std = { version = "0.5", default-features = false, features = ["std"] }
 arrayvec = { version = "0.7", features = ["serde"] }
 async-compression = { version = "0.4", default-features = false, features = ["brotli", "gzip", "tokio", "zlib", "zstd"] }
+axum = { version = "0.7", features = ["macros"] }
 base64 = { version = "0.13", features = ["alloc"] }
 bitflags = { version = "2", default-features = false, features = ["serde", "std"] }
 bitvec = { version = "1", features = ["serde"] }
@@ -61,6 +63,7 @@ crypto-common = { version = "0.1", default-features = false, features = ["getran
 curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "digest", "precomputed-tables", "zeroize"] }
 dashmap = { version = "6", default-features = false, features = ["inline"] }
 data-encoding = { version = "2" }
+der = { version = "0.7", default-features = false, features = ["oid", "pem", "std"] }
 derive_more = { version = "2", features = ["full"] }
 digest = { version = "0.10", features = ["mac", "oid", "std"] }
 ecdsa = { version = "0.16", default-features = false, features = ["pem", "serde", "signing", "std", "verifying"] }
@@ -122,6 +125,7 @@ num-traits = { version = "0.2", features = ["i128", "libm"] }
 num_enum = { version = "0.7" }
 nybbles = { version = "0.4", default-features = false, features = ["rlp", "serde", "std"] }
 once_cell = { version = "1", features = ["critical-section"] }
+p256 = { version = "0.13", features = ["ecdh"] }
 parity-scale-codec = { version = "3", features = ["bytes", "derive", "max-encoded-len"] }
 parking_lot = { version = "0.12", features = ["arc_lock", "send_guard", "serde"] }
 percent-encoding = { version = "2" }
@@ -134,7 +138,7 @@ proc-macro2 = { version = "1", features = ["span-locations"] }
 prost = { version = "0.13", features = ["prost-derive"] }
 rand-274715c4dabd11b0 = { package = "rand", version = "0.9", features = ["serde"] }
 rand-c38e5c1d305a1b54 = { package = "rand", version = "0.8", features = ["serde", "small_rng"] }
-rand_chacha-274715c4dabd11b0 = { package = "rand_chacha", version = "0.9", default-features = false, features = ["std"] }
+rand_chacha-274715c4dabd11b0 = { package = "rand_chacha", version = "0.9" }
 rand_chacha-468e82937335b1c9 = { package = "rand_chacha", version = "0.3" }
 rand_core-274715c4dabd11b0 = { package = "rand_core", version = "0.9", default-features = false, features = ["os_rng", "serde", "std"] }
 rand_core-3b31131e45eafb45 = { package = "rand_core", version = "0.6", default-features = false, features = ["std"] }
@@ -155,7 +159,7 @@ sec1 = { version = "0.7", features = ["pem", "serde", "std", "subtle"] }
 semver = { version = "1", features = ["serde"] }
 serde = { version = "1", features = ["alloc", "derive", "rc"] }
 serde_core = { version = "1", features = ["alloc", "rc"] }
-serde_json = { version = "1", features = ["alloc", "raw_value", "unbounded_depth"] }
+serde_json = { version = "1", features = ["alloc", "float_roundtrip", "raw_value", "unbounded_depth"] }
 serde_spanned = { version = "1", default-features = false, features = ["serde", "std"] }
 serde_with = { version = "3", features = ["base64"] }
 sha1 = { version = "0.10", features = ["oid"] }
@@ -167,6 +171,7 @@ smallvec = { version = "1", default-features = false, features = ["const_new", "
 socket2-3b31131e45eafb45 = { package = "socket2", version = "0.6", default-features = false, features = ["all"] }
 socket2-d8f496e17d97b5cb = { package = "socket2", version = "0.5", default-features = false, features = ["all"] }
 spin = { version = "0.9", default-features = false, features = ["once", "rwlock", "spin_mutex", "std"] }
+spki = { version = "0.7", default-features = false, features = ["pem", "std"] }
 strum = { version = "0.27", features = ["derive"] }
 subtle = { version = "2" }
 sync_wrapper = { version = "1", default-features = false, features = ["futures"] }
@@ -189,6 +194,7 @@ unicode-normalization = { version = "0.1" }
 url = { version = "2", features = ["serde"] }
 uuid = { version = "1", features = ["serde", "v4"] }
 winnow = { version = "0.7" }
+x25519-dalek = { version = "2", features = ["static_secrets"] }
 zeroize = { version = "1", features = ["zeroize_derive"] }
 zstd = { version = "0.13", features = ["experimental"] }
 zstd-safe = { version = "7", default-features = false, features = ["arrays", "experimental", "legacy", "std", "zdict_builder"] }
@@ -196,6 +202,7 @@ zstd-sys = { version = "2", features = ["experimental", "std"] }
 
 [build-dependencies]
 actix-router = { version = "0.5", default-features = false, features = ["http", "unicode"] }
+aead = { version = "0.5", features = ["alloc", "getrandom"] }
 ahash = { version = "0.8", default-features = false, features = ["runtime-rng"] }
 aho-corasick = { version = "1" }
 allocator-api2 = { version = "0.2" }
@@ -226,6 +233,7 @@ ark-serialize = { version = "0.5", default-features = false, features = ["derive
 ark-std = { version = "0.5", default-features = false, features = ["std"] }
 arrayvec = { version = "0.7", features = ["serde"] }
 async-compression = { version = "0.4", default-features = false, features = ["brotli", "gzip", "tokio", "zlib", "zstd"] }
+axum = { version = "0.7", features = ["macros"] }
 base64 = { version = "0.13", features = ["alloc"] }
 bindgen = { version = "0.71" }
 bitflags = { version = "2", default-features = false, features = ["serde", "std"] }
@@ -254,6 +262,7 @@ darling = { version = "0.21", features = ["serde"] }
 darling_core = { version = "0.21", default-features = false, features = ["serde", "suggestions"] }
 dashmap = { version = "6", default-features = false, features = ["inline"] }
 data-encoding = { version = "2" }
+der = { version = "0.7", default-features = false, features = ["oid", "pem", "std"] }
 derive_more = { version = "2", features = ["full"] }
 derive_more-impl = { version = "2", features = ["add", "add_assign", "as_ref", "constructor", "debug", "deref", "deref_mut", "display", "eq", "error", "from", "from_str", "index", "index_mut", "into", "into_iterator", "is_variant", "mul", "mul_assign", "not", "sum", "try_from", "try_into", "try_unwrap", "unwrap"] }
 digest = { version = "0.10", features = ["mac", "oid", "std"] }
@@ -317,6 +326,7 @@ num_enum = { version = "0.7" }
 num_enum_derive = { version = "0.7", default-features = false, features = ["std"] }
 nybbles = { version = "0.4", default-features = false, features = ["rlp", "serde", "std"] }
 once_cell = { version = "1", features = ["critical-section"] }
+p256 = { version = "0.13", features = ["ecdh"] }
 parity-scale-codec = { version = "3", features = ["bytes", "derive", "max-encoded-len"] }
 parking_lot = { version = "0.12", features = ["arc_lock", "send_guard", "serde"] }
 percent-encoding = { version = "2" }
@@ -331,7 +341,7 @@ prost = { version = "0.13", features = ["prost-derive"] }
 quote = { version = "1" }
 rand-274715c4dabd11b0 = { package = "rand", version = "0.9", features = ["serde"] }
 rand-c38e5c1d305a1b54 = { package = "rand", version = "0.8", features = ["serde", "small_rng"] }
-rand_chacha-274715c4dabd11b0 = { package = "rand_chacha", version = "0.9", default-features = false, features = ["std"] }
+rand_chacha-274715c4dabd11b0 = { package = "rand_chacha", version = "0.9" }
 rand_chacha-468e82937335b1c9 = { package = "rand_chacha", version = "0.3" }
 rand_core-274715c4dabd11b0 = { package = "rand_core", version = "0.9", default-features = false, features = ["os_rng", "serde", "std"] }
 rand_core-3b31131e45eafb45 = { package = "rand_core", version = "0.6", default-features = false, features = ["std"] }
@@ -352,7 +362,7 @@ sec1 = { version = "0.7", features = ["pem", "serde", "std", "subtle"] }
 semver = { version = "1", features = ["serde"] }
 serde = { version = "1", features = ["alloc", "derive", "rc"] }
 serde_core = { version = "1", features = ["alloc", "rc"] }
-serde_json = { version = "1", features = ["alloc", "raw_value", "unbounded_depth"] }
+serde_json = { version = "1", features = ["alloc", "float_roundtrip", "raw_value", "unbounded_depth"] }
 serde_spanned = { version = "1", default-features = false, features = ["serde", "std"] }
 serde_with = { version = "3", features = ["base64"] }
 sha1 = { version = "0.10", features = ["oid"] }
@@ -364,6 +374,7 @@ smallvec = { version = "1", default-features = false, features = ["const_new", "
 socket2-3b31131e45eafb45 = { package = "socket2", version = "0.6", default-features = false, features = ["all"] }
 socket2-d8f496e17d97b5cb = { package = "socket2", version = "0.5", default-features = false, features = ["all"] }
 spin = { version = "0.9", default-features = false, features = ["once", "rwlock", "spin_mutex", "std"] }
+spki = { version = "0.7", default-features = false, features = ["pem", "std"] }
 strum = { version = "0.27", features = ["derive"] }
 subtle = { version = "2" }
 syn-dff4ba8e3ae991db = { package = "syn", version = "1", features = ["extra-traits", "full", "visit"] }
@@ -388,6 +399,7 @@ unicode-normalization = { version = "0.1" }
 url = { version = "2", features = ["serde"] }
 uuid = { version = "1", features = ["serde", "v4"] }
 winnow = { version = "0.7" }
+x25519-dalek = { version = "2", features = ["static_secrets"] }
 zeroize = { version = "1", features = ["zeroize_derive"] }
 zstd = { version = "0.13", features = ["experimental"] }
 zstd-safe = { version = "7", default-features = false, features = ["arrays", "experimental", "legacy", "std", "zdict_builder"] }

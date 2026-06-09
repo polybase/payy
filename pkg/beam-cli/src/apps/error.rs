@@ -58,6 +58,15 @@ pub enum Error {
     #[error("[beam-cli/apps] app module is not a wasm module: {app}")]
     InvalidWasmModule { app: String },
 
+    #[error("[beam-cli/apps] app wasm missing export `{export}` for {app}")]
+    MissingWasmExport { app: String, export: String },
+
+    #[error("[beam-cli/apps] app command failed: {message}")]
+    GuestCommandFailed { message: String },
+
+    #[error("[beam-cli/apps] app guest output is invalid: {reason}")]
+    InvalidGuestOutput { reason: String },
+
     #[error("[beam-cli/apps] app requested blocked contract target: {target}")]
     ContractPermissionDenied { target: String },
 

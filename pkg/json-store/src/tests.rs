@@ -3,6 +3,7 @@ use super::*;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
+use serde::ser::{Error as SerializeError, SerializeStruct};
 use serde::{Deserialize, Serialize};
 use tempdir::TempDir;
 
@@ -11,6 +12,28 @@ struct TestState {
     counter: u64,
     name: String,
     active: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Default, PartialEq)]
+struct SometimesFailingState {
+    counter: u64,
+    fail_serialize: bool,
+}
+
+impl Serialize for SometimesFailingState {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        if self.fail_serialize {
+            return Err(S::Error::custom("forced serialization failure"));
+        }
+
+        let mut state = serializer.serialize_struct("SometimesFailingState", 2)?;
+        state.serialize_field("counter", &self.counter)?;
+        state.serialize_field("fail_serialize", &self.fail_serialize)?;
+        state.end()
+    }
 }
 
 #[tokio::test]
@@ -63,6 +86,52 @@ async fn test_set_and_persist() {
 
     let retrieved_state = store.get().await;
     assert_eq!(retrieved_state, new_state);
+}
+
+#[tokio::test]
+async fn set_persist_failure_does_not_change_in_memory_state() {
+    let temp_dir = TempDir::new("json_kv_store_test").unwrap();
+    let store = JsonStore::<SometimesFailingState>::new(temp_dir.path(), "set_failure.json")
+        .await
+        .unwrap();
+    let committed = SometimesFailingState {
+        counter: 1,
+        fail_serialize: false,
+    };
+    store.set(committed.clone()).await.unwrap();
+
+    let result = store
+        .set(SometimesFailingState {
+            counter: 2,
+            fail_serialize: true,
+        })
+        .await;
+
+    assert!(matches!(result, Err(JsonStoreError::Serialization(_))));
+    assert_eq!(store.get().await, committed);
+}
+
+#[tokio::test]
+async fn update_persist_failure_does_not_change_in_memory_state() {
+    let temp_dir = TempDir::new("json_kv_store_test").unwrap();
+    let store = JsonStore::<SometimesFailingState>::new(temp_dir.path(), "update_failure.json")
+        .await
+        .unwrap();
+    let committed = SometimesFailingState {
+        counter: 1,
+        fail_serialize: false,
+    };
+    store.set(committed.clone()).await.unwrap();
+
+    let result = store
+        .update(|state| {
+            state.counter = 2;
+            state.fail_serialize = true;
+        })
+        .await;
+
+    assert!(matches!(result, Err(JsonStoreError::Serialization(_))));
+    assert_eq!(store.get().await, committed);
 }
 
 #[tokio::test]
@@ -201,6 +270,11 @@ async fn test_owner_only_access_restricts_existing_and_persisted_files() {
         0o600
     );
 
+    let fixed_temp_path = store.file_path.with_extension("tmp");
+    fs::write(&fixed_temp_path, "preexisting fixed temp path")
+        .await
+        .unwrap();
+
     store
         .update(|state| {
             state.counter = 1;
@@ -211,5 +285,9 @@ async fn test_owner_only_access_restricts_existing_and_persisted_files() {
     assert_eq!(
         std::fs::metadata(&file_path).unwrap().permissions().mode() & 0o777,
         0o600
+    );
+    assert_eq!(
+        fs::read_to_string(fixed_temp_path).await.unwrap(),
+        "preexisting fixed temp path"
     );
 }
