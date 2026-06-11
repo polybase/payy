@@ -12,13 +12,13 @@
           "version": "1.0.0",
           "min_beam_version": "0.1.2",
           "manifest_url": "https://registry.beam.payy.network/apps/uniswap/1.0.0/manifest.json",
-          "manifest_sha256": "sha256:9b1e84f51ef0e5afd88a79aaaaa9ebf24b8d15a0a321c0ffa93c6da0ba5c8ede",
+          "manifest_sha256": "sha256:679a551bf48519a586975b25385e310519b077853383a4b3f7c2ff7b66ca3470",
           "module_url": "https://registry.beam.payy.network/apps/uniswap/1.0.0/module.wasm",
           "module_sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
           "signature": {
             "algorithm": "sha256-dev",
             "key_id": "payy-dev-2026-05",
-            "value": "sha256:5b8c5aa5f89bf386efbbcdb3a8c670e24bf7a583c9ed0f9c327dedcdeb5a87f0"
+            "value": "sha256:d66c14c15fb72b7d083a8a61984e2356a130b521fb70e664edefcfabd08ed8dd"
           }
         }
       ]
@@ -27,6 +27,6 @@
   "signature": {
     "algorithm": "sha256-dev",
     "key_id": "payy-dev-2026-05",
-    "value": "sha256:9f831d41929e401c0873a58a80aeaae76a6353ec07da62a2b1864f969536eecf"
+    "value": "sha256:c71291f48e084cb773bc003d3fa7536acd0c653632547da79d32373107f89d6d"
   }
 }

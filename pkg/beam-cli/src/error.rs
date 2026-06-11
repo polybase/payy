@@ -122,6 +122,21 @@ pub enum Error {
     #[error("[beam-cli] invalid private key")]
     InvalidPrivateKey,
 
+    #[error("[beam-cli] invalid recovery phrase")]
+    InvalidRecoveryPhrase,
+
+    #[error("[beam-cli] expected {expected} recovery phrase words, got {got}")]
+    InvalidRecoveryPhraseWordCount { expected: usize, got: usize },
+
+    #[error("[beam-cli] recovery phrase entropy must be 32 bytes, got {length}")]
+    InvalidRecoveryPhraseEntropyLength { length: usize },
+
+    #[error("[beam-cli] recovery phrase maps to an invalid private key")]
+    InvalidRecoveryPhrasePrivateKey,
+
+    #[error("[beam-cli] recovery phrase derives {derived}, not expected wallet address {expected}")]
+    RecoveryPhraseAddressMismatch { derived: String, expected: String },
+
     #[error("[beam-cli] invalid address: {value}")]
     InvalidAddress { value: String },
 

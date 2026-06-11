@@ -91,6 +91,15 @@ fn parses_wallet_and_erc20_subcommands() {
             && private_key_source.private_key_fd.is_none()
     ));
 
+    let export = Cli::try_parse_from(["beam", "wallets", "export-private-key", "alice"])
+        .expect("parse wallet private key export");
+    assert!(matches!(
+        export.command,
+        Some(Command::Wallet {
+            action: WalletAction::ExportPrivateKey { wallet }
+        }) if wallet.as_deref() == Some("alice")
+    ));
+
     let rename = Cli::try_parse_from(["beam", "wallets", "rename", "alice", "primary"])
         .expect("parse wallet rename");
     assert!(matches!(

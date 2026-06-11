@@ -16,7 +16,7 @@ async fn startup_history_scrub_rewrites_history_file_before_next_save() {
     let (_temp_dir, app) = test_app(InvocationOverrides::default()).await;
     fs::write(
         &app.paths.history,
-        "wallets import 0x1234\nbalance\n/wallets address 0x1234\n",
+        "wallets import 0x1234\nbalance\nwallets export-private-key\n/wallets address 0x1234\n/wallets export-private-key alice\nwallets import-recovery-phrase --phrase-stdin\n",
     )
     .expect("write beam history");
 
@@ -31,7 +31,9 @@ async fn startup_history_scrub_rewrites_history_file_before_next_save() {
     let persisted = fs::read_to_string(&app.paths.history).expect("read beam history");
     assert!(persisted.contains("balance"));
     assert!(!persisted.contains("wallets import"));
+    assert!(!persisted.contains("wallets import-recovery-phrase"));
     assert!(!persisted.contains("/wallets address"));
+    assert!(!persisted.contains("export-private-key"));
 
     let mut reloaded = ReplHistory::new();
     reloaded
@@ -45,6 +47,14 @@ async fn startup_history_scrub_rewrites_history_file_before_next_save() {
 
 #[test]
 fn privacy_claim_artifacts_are_not_persisted_to_history() {
+    assert!(!should_persist_history("wallets export-private-key"));
+    assert!(!should_persist_history(
+        "--chain base /wallets export-private-key alice"
+    ));
+    assert!(!should_persist_history(
+        "wallets import-recovery-phrase --phrase-stdin"
+    ));
+    assert!(should_persist_history("wallets export-recovery-phrase"));
     assert!(!should_persist_history(
         "privacy claim payy:secret-artifact"
     ));

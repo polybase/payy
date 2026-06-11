@@ -1,5 +1,5 @@
 {
   "algorithm": "sha256-dev",
   "key_id": "payy-dev-2026-05",
-  "value": "sha256:de6a24df0daabff15742faa1754c8c254a1d4157a55107766cee0a873e914411"
+  "value": "sha256:40a78ac42754c32d9e50aab13e98882852a73f14155a648919d1fdae928e78a8"
 }

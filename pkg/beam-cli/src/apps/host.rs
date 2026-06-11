@@ -1,9 +1,5 @@
-// lint-long-file-override allow-max-lines=550
-#![expect(
-    dead_code,
-    reason = "declares host ABI surface before wasm guest bindings call every API"
-)]
-use std::{net::IpAddr, time::Duration};
+// lint-long-file-override allow-max-lines=700
+use std::{fs, net::IpAddr, path::PathBuf, time::Duration};
 
 use contextful::ResultContextExt;
 use contracts::{Address, U256};
@@ -32,6 +28,19 @@ const MAX_REQUEST_BYTES: usize = 64 * 1024;
 const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HostMetadata {
+    pub app_id: String,
+    pub app_version: String,
+    pub chain: String,
+    pub chain_id: u64,
+    pub host_api_version: u32,
+    pub manifest_sha256: String,
+    pub now: u64,
+    pub wallet: String,
+    pub wasm_sha256: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum HostRequest {
     AppMetadata,
@@ -43,6 +52,37 @@ pub enum HostRequest {
     SimulateTransaction(HostTransaction),
     SubmitTransaction(HostTransaction),
     PollReceipt { tx_hash: String },
+    ResolveAddress { value: Option<String> },
+    AppStorageGet { key: String },
+    AppStorageSet { key: String, value: Value },
+    AppStorageRemove { key: String },
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HostCallResponse {
+    pub ok: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+impl HostCallResponse {
+    pub fn ok(value: Value) -> Self {
+        Self {
+            ok: true,
+            value: Some(value),
+            error: None,
+        }
+    }
+
+    pub fn error(error: String) -> Self {
+        Self {
+            ok: false,
+            value: None,
+            error: Some(error),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -108,6 +148,116 @@ pub struct HostTransaction {
     pub value: String,
     pub selector: Option<String>,
     pub spender: Option<String>,
+}
+
+pub async fn handle_host_request(
+    app: &BeamApp,
+    permissions: &AppPermissions,
+    metadata: &HostMetadata,
+    request: HostRequest,
+    structured_output: &mut Option<Value>,
+    diagnostics: &mut Vec<Value>,
+) -> Result<Value> {
+    match request {
+        HostRequest::AppMetadata => Ok(json!(metadata)),
+        HostRequest::Args { args } => Ok(json!({ "args": args })),
+        HostRequest::StructuredOutput { value } => {
+            *structured_output = Some(value.clone());
+            Ok(json!({ "accepted": true }))
+        }
+        HostRequest::Diagnostic { level, message } => {
+            diagnostics.push(json!({
+                "level": level,
+                "message": message,
+            }));
+            Ok(json!({ "accepted": true }))
+        }
+        HostRequest::HttpFetch(request) => Ok(json!(fetch_http(permissions, request).await?)),
+        HostRequest::ChainRead(request) => chain_read(app, permissions, request).await,
+        HostRequest::SimulateTransaction(transaction) => {
+            let (_, client) = app
+                .active_chain_client()
+                .await
+                .context("connect app simulation chain client")?;
+            let from = app
+                .active_address()
+                .await
+                .context("resolve app simulation wallet")?;
+            simulate_transaction(&client, from, permissions, &transaction).await?;
+            Ok(json!({ "ok": true }))
+        }
+        HostRequest::SubmitTransaction(_) => Err(Error::InvalidHostRequest {
+            reason: "transaction submission is only available during approved plan execution"
+                .to_string(),
+        }),
+        HostRequest::PollReceipt { .. } => Err(Error::InvalidHostRequest {
+            reason: "receipt polling is only available during approved plan execution".to_string(),
+        }),
+        HostRequest::ResolveAddress { value } => {
+            let address = match value.as_deref() {
+                Some(value) => app
+                    .resolve_wallet_or_address(value)
+                    .await
+                    .context("resolve beam app requested address")?,
+                None => app
+                    .active_address()
+                    .await
+                    .context("resolve beam app wallet")?,
+            };
+            Ok(json!({ "address": format!("{address:#x}") }))
+        }
+        HostRequest::AppStorageGet { key } => {
+            let path = app_storage_path(app, &metadata.app_id, &key)?;
+            if !path.exists() {
+                return Ok(json!({ "value": null, "exists": false }));
+            }
+            let value = serde_json::from_slice::<Value>(
+                &fs::read(path).context("read beam app storage value")?,
+            )
+            .context("decode beam app storage value")?;
+            Ok(json!({ "value": value, "exists": true }))
+        }
+        HostRequest::AppStorageSet { key, value } => {
+            let path = app_storage_path(app, &metadata.app_id, &key)?;
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).context("create beam app storage directory")?;
+            }
+            fs::write(
+                path,
+                serde_json::to_vec_pretty(&value).context("encode beam app storage value")?,
+            )
+            .context("write beam app storage value")?;
+            Ok(json!({ "written": true }))
+        }
+        HostRequest::AppStorageRemove { key } => {
+            let path = app_storage_path(app, &metadata.app_id, &key)?;
+            if path.exists() {
+                fs::remove_file(path).context("remove beam app storage value")?;
+            }
+            Ok(json!({ "removed": true }))
+        }
+    }
+}
+
+fn app_storage_path(app: &BeamApp, app_id: &str, key: &str) -> Result<PathBuf> {
+    if key.is_empty()
+        || key.starts_with('.')
+        || !key
+            .chars()
+            .all(|char| char.is_ascii_alphanumeric() || matches!(char, '-' | '_' | '.'))
+    {
+        return Err(Error::InvalidHostRequest {
+            reason: format!("invalid app storage key {key}"),
+        });
+    }
+
+    Ok(app
+        .paths
+        .root
+        .join("apps")
+        .join("data")
+        .join(app_id)
+        .join(key))
 }
 
 pub fn ensure_http_allowed(permissions: &AppPermissions, url: &str) -> Result<Url> {

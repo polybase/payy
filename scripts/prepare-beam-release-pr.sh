@@ -2,6 +2,7 @@
 set -euo pipefail
 
 readonly BEAM_MANIFEST="pkg/beam-cli/Cargo.toml"
+readonly BEAM_SITE_VERSION_FILE="app/packages/beam-site/src/lib/beamVersion.ts"
 readonly PAYY_REPO_URL="${PAYY_REPO_URL:-https://github.com/polybase/payy.git}"
 
 current_version() {
@@ -133,6 +134,12 @@ update_manifest_version() {
   perl -0pi -e 's/^version = "[^"]+"/version = "$ENV{BEAM_NEXT_VERSION}"/m' "$BEAM_MANIFEST"
 }
 
+update_site_version() {
+  local version="$1"
+
+  BEAM_NEXT_VERSION="$version" perl -0pi -e "s/^const FALLBACK_BEAM_VERSION = '[^']+'/const FALLBACK_BEAM_VERSION = '\$ENV{BEAM_NEXT_VERSION}'/m" "$BEAM_SITE_VERSION_FILE"
+}
+
 create_or_update_pr() {
   local version="$1"
   local branch="beam/release-v${version}"
@@ -154,14 +161,15 @@ EOF
   git checkout -B "$branch"
 
   BEAM_NEXT_VERSION="$version" update_manifest_version "$version"
+  update_site_version "$version"
   cargo update -p beam-cli
 
-  if git diff --quiet -- "$BEAM_MANIFEST" Cargo.lock; then
+  if git diff --quiet -- "$BEAM_MANIFEST" Cargo.lock "$BEAM_SITE_VERSION_FILE"; then
     echo "Beam release ${version} produced no manifest or lockfile changes."
     exit 0
   fi
 
-  git add "$BEAM_MANIFEST" Cargo.lock
+  git add "$BEAM_MANIFEST" Cargo.lock "$BEAM_SITE_VERSION_FILE"
   git commit -m "$title" -m "$body"
   git fetch origin "refs/heads/${branch}:refs/remotes/origin/${branch}" || true
   git push --force-with-lease origin "$branch"

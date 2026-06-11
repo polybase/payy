@@ -58,16 +58,26 @@ struct CargoProfile {
     test: bool,
 }
 
-pub fn compile_workspace_tests(repo_root: &Path, metadata: &Metadata) -> Result<CompiledWorkspace> {
-    let output = Command::new("cargo")
+pub fn compile_package_tests(
+    repo_root: &Path,
+    metadata: &Metadata,
+    package_names: &[String],
+) -> Result<CompiledWorkspace> {
+    let mut command = Command::new("cargo");
+    command
         .arg("test")
-        .arg("--workspace")
         .arg("--message-format=json-render-diagnostics")
         .arg("--no-run")
         .arg("--quiet")
-        .current_dir(repo_root)
+        .current_dir(repo_root);
+
+    for package_name in package_names {
+        command.arg("--package").arg(package_name);
+    }
+
+    let output = command
         .output()
-        .context("spawn cargo test --workspace --no-run")?;
+        .with_context(|| format!("spawn {}", package_test_command_label(package_names)))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -153,4 +163,14 @@ pub fn compile_workspace_tests(repo_root: &Path, metadata: &Metadata) -> Result<
 
 fn sanitize_bin_name(name: &str) -> String {
     name.replace('-', "_")
+}
+
+fn package_test_command_label(package_names: &[String]) -> String {
+    let mut args = vec!["cargo test --no-run".to_owned()];
+
+    for package_name in package_names {
+        args.push(format!("--package {package_name}"));
+    }
+
+    args.join(" ")
 }

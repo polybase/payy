@@ -1,7 +1,11 @@
+// lint-long-file-override allow-max-lines=300
 use serde_json::{Value, json};
 
 use crate::{
-    apps::model::{ActionPlan, AppManifest, AppPermissions, ApprovalRecord},
+    apps::model::{
+        ActionPlan, AppCommand, AppCommandExample, AppCommandParameter, AppManifest,
+        AppPermissions, ApprovalRecord,
+    },
     output::CommandOutput,
 };
 
@@ -87,6 +91,83 @@ pub(super) fn render_app_help(manifest: &AppManifest) -> String {
     lines.join("\n")
 }
 
+pub(super) fn render_app_command_help(manifest: &AppManifest, command: &AppCommand) -> String {
+    let mut lines = Vec::new();
+    lines.push(format!("{} {}", manifest.display_name, command.name));
+    lines.push(command.about.clone());
+    lines.push(String::new());
+    lines.push(format!(
+        "Usage: {}",
+        command_usage(command).unwrap_or_else(|| command.name.clone())
+    ));
+
+    if let Some(docs) = &command.docs {
+        push_parameters(&mut lines, "Arguments", &docs.arguments);
+        push_parameters(&mut lines, "Options", &docs.options);
+        push_examples(&mut lines, &docs.examples);
+        if !docs.output_notes.is_empty() {
+            lines.push(String::new());
+            lines.push("Output:".to_string());
+            for note in &docs.output_notes {
+                lines.push(format!("  - {note}"));
+            }
+        }
+    }
+
+    lines.join("\n")
+}
+
+pub(super) fn app_command_json(manifest: &AppManifest, command: &AppCommand) -> Value {
+    json!({
+        "app": manifest.id,
+        "command": command,
+    })
+}
+
+fn command_usage(command: &AppCommand) -> Option<String> {
+    command
+        .docs
+        .as_ref()
+        .map(|docs| docs.invocation.clone())
+        .or_else(|| (!command.usage.is_empty()).then(|| command.usage.clone()))
+}
+
+fn push_parameters(lines: &mut Vec<String>, title: &str, parameters: &[AppCommandParameter]) {
+    if parameters.is_empty() {
+        return;
+    }
+    lines.push(String::new());
+    lines.push(format!("{title}:"));
+    for parameter in parameters {
+        let value_name = parameter
+            .value_name
+            .as_ref()
+            .map(|value| format!(" <{value}>"))
+            .unwrap_or_default();
+        let required = if parameter.required {
+            "required"
+        } else {
+            "optional"
+        };
+        lines.push(format!(
+            "  - {}{} ({required}): {}",
+            parameter.name, value_name, parameter.description
+        ));
+    }
+}
+
+fn push_examples(lines: &mut Vec<String>, examples: &[AppCommandExample]) {
+    if examples.is_empty() {
+        return;
+    }
+    lines.push(String::new());
+    lines.push("Examples:".to_string());
+    for example in examples {
+        lines.push(format!("  - {}: {}", example.title, example.command));
+        lines.push(format!("    {}", example.description));
+    }
+}
+
 pub(super) fn render_plan(plan: &ActionPlan) -> String {
     let mut lines = vec![
         format!("App: {} {}", plan.app_id, plan.app_version),
@@ -121,19 +202,6 @@ pub(super) fn render_approval_created(record: &ApprovalRecord) -> CommandOutput 
     )
 }
 
-pub(super) fn render_execution(plan: &ActionPlan) -> CommandOutput {
-    CommandOutput::new(
-        format!("Executed app action: {}", plan.command),
-        json!({
-            "app": plan.app_id,
-            "chain": plan.chain,
-            "command": plan.command,
-            "state": "executed",
-            "steps": plan.steps,
-        }),
-    )
-}
-
 pub(super) fn render_permission_diff(current: &AppManifest, next: &AppManifest) -> String {
     format!(
         "Update {} {} -> {} changes permissions.\n\nCurrent:\n{}\n\nNext:\n{}",
@@ -163,3 +231,6 @@ pub(super) fn permissions_json(permissions: &AppPermissions) -> Value {
 pub(super) fn approval_json(approval: &ApprovalRecord) -> Value {
     serde_json::to_value(approval).unwrap_or_else(|_| json!({}))
 }
+
+#[cfg(test)]
+mod tests;

@@ -26,6 +26,11 @@ scripts/beam-app-registry/build.py
 scripts/beam-app-registry/verify.py
 ```
 
+The build step compiles command-capable app WASM and validates the Beam command
+ABI before writing a bundle. A release artifact is rejected if it does not export
+`memory`, `beam_alloc`, `beam_free`, and the manifest entrypoint, or if it does
+not import `env.beam_host_call`.
+
 Local registry server:
 
 ```bash

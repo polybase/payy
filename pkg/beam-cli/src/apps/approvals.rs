@@ -1,3 +1,4 @@
+// lint-long-file-override allow-max-lines=300
 use std::path::Path;
 
 use contextful::ResultContextExt;
@@ -158,7 +159,8 @@ pub fn ensure_approval_executable(record: &ApprovalRecord) -> Result<()> {
 
 pub fn ensure_approval_integrity(record: &ApprovalRecord) -> Result<()> {
     ensure_approval_active(record)?;
-    ensure_approval_plan_hash(record)
+    ensure_approval_plan_hash(record)?;
+    ensure_uniswap_swap_bindings(record)
 }
 
 pub fn ensure_approval_active(record: &ApprovalRecord) -> Result<()> {
@@ -184,4 +186,50 @@ pub fn ensure_approval_plan_hash(record: &ApprovalRecord) -> Result<()> {
 pub fn plan_hash(plan: &ActionPlan) -> Result<String> {
     let bytes = serde_json::to_vec(plan).context("encode beam app action plan")?;
     Ok(format!("sha256:{}", hex::encode(Sha256::digest(bytes))))
+}
+
+fn ensure_uniswap_swap_bindings(record: &ApprovalRecord) -> Result<()> {
+    if record.plan.app_id != "uniswap" || !record.plan.command.starts_with("swap ") {
+        return Ok(());
+    }
+
+    for key in [
+        "quote_id",
+        "quote_expires_at",
+        "route_hash",
+        "swap_calldata_hash",
+        "router",
+        "sell_token",
+        "buy_token",
+        "amount_in",
+        "amount_out",
+    ] {
+        if binding(record, key).is_none() {
+            return Err(Error::InvalidGuestOutput {
+                reason: format!("uniswap approval missing binding {key}"),
+            });
+        }
+    }
+
+    let quote_expires_at = binding(record, "quote_expires_at")
+        .and_then(|value| value.parse::<u64>().ok())
+        .ok_or_else(|| Error::InvalidGuestOutput {
+            reason: "uniswap approval has invalid quote_expires_at binding".to_string(),
+        })?;
+    if quote_expires_at < now() {
+        return Err(Error::ApprovalExpired {
+            approval_id: record.id.clone(),
+        });
+    }
+
+    Ok(())
+}
+
+fn binding<'a>(record: &'a ApprovalRecord, key: &str) -> Option<&'a str> {
+    record
+        .plan
+        .bindings
+        .iter()
+        .find(|binding| binding.key == key)
+        .map(|binding| binding.value.as_str())
 }

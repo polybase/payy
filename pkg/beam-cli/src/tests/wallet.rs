@@ -10,7 +10,7 @@ use super::{
     fixtures::test_app_with_output,
 };
 #[cfg(unix)]
-use crate::commands::wallet::read_private_key_from_fd;
+use crate::commands::wallet_secret::read_private_key_from_fd;
 use crate::{
     cli::{PrivateKeySourceArgs, WalletAction},
     commands::wallet::{normalize_wallet_name, rename_wallet, run as run_wallet_command},

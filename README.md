@@ -141,7 +141,7 @@ Run the fast test wrapper during development to avoid rebuilding unaffected crat
 cargo xtask test
 ```
 
-The command detects workspace crates with local changes (and any dependents), builds tests once via `cargo test --workspace --no-run`, then runs only the compiled test binaries for the affected crates (changed first, then their dependents), exiting early if nothing relevant changed.
+The command detects workspace crates with local changes (and any dependents), builds tests once via `cargo test --no-run -p <crate> -p <dependent> ...`, then runs only the compiled test binaries for the affected crates (changed first, then their dependents), exiting early if nothing relevant changed.
 
 ### Revi
 

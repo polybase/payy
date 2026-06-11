@@ -10,7 +10,7 @@ pub(super) fn looks_like_sensitive_command(args: &[String]) -> bool {
     {
         Some("wallet" | "wallets") => matches!(
             args.get(command_index + 1).map(String::as_str),
-            Some("import" | "address")
+            Some("import" | "export-private-key" | "import-recovery-phrase" | "address")
         ),
         Some("privacy") => {
             matches!(

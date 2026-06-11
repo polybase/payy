@@ -146,6 +146,9 @@ fn is_cli_subcommand_invocation(command: &str, args: &[String]) -> bool {
             Some(
                 "create"
                     | "import"
+                    | "export-private-key"
+                    | "export-recovery-phrase"
+                    | "import-recovery-phrase"
                     | "list"
                     | "rename"
                     | "address"

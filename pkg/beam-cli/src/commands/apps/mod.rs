@@ -18,7 +18,7 @@ use crate::{
             ensure_manifest_matches, fetch_index, fetch_manifest, fetch_module,
             registry_url_from_env, select_app, select_version,
         },
-        runtime::validate_wasm_module,
+        runtime::{AppRuntime, GuestCommandResult, validate_wasm_module},
         store::AppCache,
     },
     cli::{AppApprovalAction, AppInstallArgs, AppRemoveArgs, AppRunArgs, AppsAction},
@@ -29,12 +29,12 @@ use crate::{
 };
 
 use execution::execute_plan;
-use plans::{plan_for_command, validate_plan_permissions};
+use plans::{validate_guest_plan, validate_plan_permissions};
 use prompt::approve_interactively;
 use render::{
-    approval_json, manifest_json, permissions_json, render_app_help, render_approval,
-    render_approval_created, render_execution, render_install_summary, render_manifest_info,
-    render_permission_diff, render_permissions,
+    app_command_json, approval_json, manifest_json, permissions_json, render_app_command_help,
+    render_app_help, render_approval, render_approval_created, render_install_summary,
+    render_manifest_info, render_permission_diff, render_permissions,
 };
 
 pub async fn run(app: &BeamApp, action: AppsAction) -> Result<()> {
@@ -68,12 +68,40 @@ pub async fn run_app(app: &BeamApp, args: AppRunArgs) -> Result<()> {
         .first()
         .cloned()
         .unwrap_or_else(|| "help".to_string());
-    if command == "help" || args.args.iter().any(|arg| arg == "--help" || arg == "-h") {
+    if command == "help" || command == "--help" || command == "-h" || command_args.is_empty() {
         return CommandOutput::new(render_app_help(&manifest), manifest_json(&manifest))
             .print(app.output_mode);
     }
+    if is_help_requested(&command_args) {
+        let app_command = manifest
+            .commands
+            .iter()
+            .find(|candidate| candidate.name == command)
+            .ok_or_else(|| AppError::UnsupportedAppCommand {
+                command: command.clone(),
+            })?;
+        return CommandOutput::new(
+            render_app_command_help(&manifest, app_command),
+            app_command_json(&manifest, app_command),
+        )
+        .print(app.output_mode);
+    }
 
-    let plan = plan_for_command(app, &manifest, &installed, &command_args).await?;
+    let runtime = AppRuntime::default();
+    let result = runtime
+        .run_command(
+            app,
+            &manifest,
+            &installed,
+            &cache.module_path(&args.app, &installed.active_version),
+            &command_args,
+        )
+        .await?;
+    let plan = match result {
+        GuestCommandResult::ActionPlan(plan) => plan,
+        GuestCommandResult::Output(output) => return output.print(app.output_mode),
+    };
+    validate_guest_plan(app, &manifest, &installed, &command_args, &plan).await?;
     validate_plan_permissions(&manifest.permissions, &plan)?;
     let approval_required = plan_requires_approval(&plan);
 
@@ -89,7 +117,7 @@ pub async fn run_app(app: &BeamApp, args: AppRunArgs) -> Result<()> {
         }
         approve_interactively(&render::render_plan(&plan))?;
     }
-    render_execution(&plan).print(app.output_mode)
+    execute_plan(app, &plan).await?.print(app.output_mode)
 }
 
 fn plan_requires_approval(plan: &ActionPlan) -> bool {
@@ -103,6 +131,10 @@ fn filtered_app_args(args: &[String]) -> Vec<String> {
         .filter(|arg| arg.as_str() != "--prepare" && arg.as_str() != "--no-prompt")
         .cloned()
         .collect()
+}
+
+fn is_help_requested(args: &[String]) -> bool {
+    args.iter().any(|arg| arg == "--help" || arg == "-h")
 }
 
 async fn install(app: &BeamApp, args: AppInstallArgs) -> Result<()> {

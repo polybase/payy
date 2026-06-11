@@ -67,7 +67,11 @@ pub async fn execute_plan(app: &BeamApp, plan: &ActionPlan) -> Result<CommandOut
             },
         )
         .await?;
+        let approval_ready = approval_step_ready(step, &execution);
         outputs.push(step_output(step, execution));
+        if step.kind == "erc20-approval" && !approval_ready {
+            break;
+        }
     }
 
     Ok(CommandOutput::new(
@@ -80,6 +84,16 @@ pub async fn execute_plan(app: &BeamApp, plan: &ActionPlan) -> Result<CommandOut
             "steps": outputs,
         }),
     ))
+}
+
+fn approval_step_ready(step: &ActionStep, execution: &TransactionExecution) -> bool {
+    if step.kind != "erc20-approval" {
+        return true;
+    }
+    matches!(
+        execution,
+        TransactionExecution::Confirmed(outcome) if outcome.status.unwrap_or(1) != 0
+    )
 }
 
 fn render_simulated_execution(plan: &ActionPlan) -> CommandOutput {

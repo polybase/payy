@@ -140,6 +140,10 @@ pub fn prompt_private_key() -> Result<String> {
     prompt_secret("beam private key: ", "read beam private key")
 }
 
+pub fn prompt_recovery_phrase() -> Result<String> {
+    prompt_secret("beam recovery phrase: ", "read beam recovery phrase")
+}
+
 pub fn prompt_wallet_name(default_name: &str) -> Result<String> {
     let (stdin, stderr) = (std::io::stdin(), std::io::stderr());
     prompt_wallet_name_with(default_name, &mut stdin.lock(), &mut stderr.lock())

@@ -15,7 +15,7 @@ use crate::git::collect_changed_files;
 use crate::test::changes::{ChangedCrates, determine_changed_crates, sorted_list};
 use crate::test::graph::DependencyGraph;
 use crate::test::metadata::{Metadata, load_metadata};
-use crate::test::workspace::{CompiledWorkspace, compile_workspace_tests};
+use crate::test::workspace::{CompiledWorkspace, compile_package_tests};
 
 fn prepare_execution_order(
     graph: &DependencyGraph,
@@ -147,8 +147,8 @@ pub fn run_test(_args: TestArgs) -> Result<()> {
         return Ok(());
     };
 
-    println!("Building workspace tests with `cargo test --workspace --no-run`...");
-    let compiled = compile_workspace_tests(&repo_root, &metadata)?;
+    println!("Building targeted tests with `cargo test --no-run -p ...`...");
+    let compiled = compile_package_tests(&repo_root, &metadata, &execution_order)?;
 
     let failed_crates = run_execution_order(&execution_order, &metadata, &compiled)?;
 
