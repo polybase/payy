@@ -32,6 +32,14 @@ pub fn shrink(value: &str) -> String {
     format!("{}...{}", &value[..prefix_end], &value[suffix_start..])
 }
 
+pub fn shrink_rpc_url(value: &str) -> String {
+    let value = value
+        .strip_prefix("https://")
+        .or_else(|| value.strip_prefix("http://"))
+        .unwrap_or(value);
+    shrink(value)
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
 pub enum ColorMode {
     #[default]
@@ -84,7 +92,7 @@ pub(crate) fn notice_message(message: &str, color_enabled: bool) -> String {
 pub(crate) fn render_shell_prefix(wallet_display: &str, chain: &str, rpc_url: &str) -> String {
     let wallet_display = sanitize_control_chars(wallet_display);
     let chain = sanitize_control_chars(chain);
-    let rpc_url = sanitize_control_chars(rpc_url);
+    let rpc_url = sanitize_control_chars(&shrink_rpc_url(rpc_url));
     format!("[{wallet_display} | {chain} | {rpc_url}] ")
 }
 
@@ -95,7 +103,7 @@ pub(crate) fn render_colored_shell_prefix(
 ) -> String {
     let wallet_display = sanitize_control_chars(wallet_display);
     let chain = sanitize_control_chars(chain);
-    let rpc_url = sanitize_control_chars(rpc_url);
+    let rpc_url = sanitize_control_chars(&shrink_rpc_url(rpc_url));
     format!(
         "{}{}{}{}{}{}{} ",
         colorize_prompt("[", Style::PromptFrame),

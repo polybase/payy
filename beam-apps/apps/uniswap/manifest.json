@@ -2,10 +2,10 @@
   "format_version": 1,
   "id": "uniswap",
   "display_name": "Uniswap",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "publisher": "Payy",
   "description": "Prepare public Uniswap swaps through Beam-mediated HTTP, chain, approval, and transaction planning.",
-  "min_beam_version": "0.1.2",
+  "min_beam_version": "0.2.1",
   "wasm": {
     "sha256": "",
     "entrypoint": "beam_app_main"

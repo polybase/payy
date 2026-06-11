@@ -1,6 +1,6 @@
 use crate::display::{
     ColorMode, error_message, render_colored_shell_prefix, render_shell_prefix, should_color,
-    shrink, warning_message,
+    shrink, shrink_rpc_url, warning_message,
 };
 
 #[test]
@@ -23,7 +23,7 @@ fn shell_prefix_stays_plain_when_color_is_disabled() {
 
     assert_eq!(
         prefix,
-        "[wallet-1 0x740747e7...e3a1e112 | ethereum | https://et...node.com] "
+        "[wallet-1 0x740747e7...e3a1e112 | ethereum | et...node.com] "
     );
 }
 
@@ -43,7 +43,7 @@ fn shell_prefix_uses_brand_colors_for_known_chains() {
 
         assert!(prefix.contains("\x1b[1;36mwallet-1 0x740747e7...e3a1e112\x1b[0m"));
         assert!(prefix.contains(expected_fragment));
-        assert!(prefix.contains("\x1b[1;34mhttps://et...node.com\x1b[0m"));
+        assert!(prefix.contains("\x1b[1;34met...node.com\x1b[0m"));
         assert!(!prefix.contains('\x01'));
         assert!(!prefix.contains('\x02'));
         assert!(prefix.ends_with(' '));
@@ -64,13 +64,13 @@ fn shell_prefix_falls_back_to_the_default_prompt_chain_color_for_unknown_network
 #[test]
 fn shell_prefix_sanitizes_control_characters_in_dynamic_segments() {
     let plain = render_shell_prefix("ali\nce \x1b[31m", "beam-\x1b[32m", "https://rpc/\x1b[0m");
-    assert_eq!(plain, "[ali ce ?[31m | beam-?[32m | https://rpc/?[0m] ");
+    assert_eq!(plain, "[ali ce ?[31m | beam-?[32m | rpc/?[0m] ");
 
     let colored =
         render_colored_shell_prefix("ali\nce \x1b[31m", "beam-\x1b[32m", "https://rpc/\x1b[0m");
     assert!(colored.contains("ali ce ?[31m"));
     assert!(colored.contains("beam-?[32m"));
-    assert!(colored.contains("https://rpc/?[0m"));
+    assert!(colored.contains("rpc/?[0m"));
 }
 
 #[test]
@@ -78,6 +78,15 @@ fn shrink_truncates_utf8_values_on_character_boundaries() {
     let url = "https://例え.example/路径/交易/éééééééé";
 
     assert_eq!(shrink(url), "https://例え...éééééééé");
+}
+
+#[test]
+fn shrink_rpc_url_strips_scheme_before_truncating() {
+    assert_eq!(
+        shrink_rpc_url("https://eth-mainnet.g.alchemy.com/v2/PqX1meQy"),
+        "eth-mainne...PqX1meQy"
+    );
+    assert_eq!(shrink_rpc_url("http://localhost:8545"), "localhost:8545");
 }
 
 #[test]

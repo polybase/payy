@@ -1,6 +1,7 @@
 mod abi;
 mod apps;
 mod apps_host;
+mod apps_runtime;
 mod balance;
 mod call;
 mod chains;

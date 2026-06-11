@@ -105,7 +105,7 @@ fn builds_approval_and_swap_action_plan() {
         buy: token("ETH", "0x0000000000000000000000000000000000000000", true),
         context: PlanContext {
             app_id: "uniswap".to_string(),
-            app_version: "1.0.0".to_string(),
+            app_version: "1.0.2".to_string(),
             chain: "base".to_string(),
             manifest_sha256: "sha256:manifest".to_string(),
             wallet: "0x3333333333333333333333333333333333333333".to_string(),

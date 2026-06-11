@@ -1,5 +1,7 @@
 use clap::{Args, Subcommand};
 
+pub(crate) const APP_HELP_ARG: &str = "__beam_app_help";
+
 #[derive(Debug, Subcommand)]
 pub enum AppsAction {
     /// Install an app from the Beam registry

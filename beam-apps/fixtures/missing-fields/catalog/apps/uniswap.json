@@ -7,11 +7,11 @@
     "display_name": "Uniswap",
     "publisher": "Payy",
     "description": "Prepare public Uniswap swaps through Beam-mediated HTTP, chain, approval, and transaction planning.",
-    "latest_version": "1.0.0",
-    "min_beam_version": "0.1.2",
+    "latest_version": "1.0.2",
+    "min_beam_version": "0.2.1",
     "install_commands": {
       "latest": "beam apps install uniswap",
-      "pinned": "beam apps install uniswap --version 1.0.0",
+      "pinned": "beam apps install uniswap --version 1.0.2",
       "dry_run": "beam apps install uniswap --dry-run"
     },
     "supported_chains": [
@@ -274,17 +274,17 @@
     "readme_markdown": "# Uniswap App\n\nThe Uniswap app turns a swap request into a Beam-approved action plan. It asks\nthe Uniswap Trading API for a quote, checks your current ERC-20 allowance,\nprepares an exact approval only when one is needed, builds the swap transaction,\nand hands the whole plan to Beam for approval and execution.\n\nBeam owns your wallet boundary. The app never receives private keys, cannot sign\ntransactions, and cannot send a transaction on its own.\n\n## Install\n\n```bash\nbeam apps install uniswap\n```\n\nBeam shows the publisher, version, supported chains, network access, wallet\ncapabilities, and storage permissions before activating the app. To inspect the\nsame permission summary without installing:\n\n```bash\nbeam apps install uniswap --dry-run\n```\n\n## Swap\n\n```bash\nbeam x uniswap swap <sell-token> <buy-token> <amount> [options]\n```\n\nCommand help is exported through the app manifest and rendered by Beam without\nfetching a quote or invoking guest WASM:\n\n```bash\nbeam x uniswap swap --help\n```\n\nExample:\n\n```bash\nbeam x uniswap swap USDC ETH 100 --chain base --from alice\n```\n\nBeam shows the quote, any required approval, and the swap as a single plan. You\napprove the final plan before Beam signs or submits anything.\n\n## Options\n\n- `--min-receive <amount>` sets the minimum acceptable output amount.\n- `--max-gas <wei>` rejects the plan if estimated gas exceeds the limit.\n- `--slippage-bps <bps>` sets max slippage in basis points.\n- `--recipient <wallet-or-address>` sends output to another wallet, ENS name, or\n  EVM address.\n- `--deadline-seconds <seconds>` sets the quote and transaction deadline window.\n- `--unlimited-approval` asks Beam to request an unlimited ERC-20 approval\n  instead of the default exact approval.\n\nToken inputs can be Beam token labels, `native`, the active chain's native\nsymbol, or EVM token addresses.\n\n## How a Swap Works\n\n1. The app fetches a quote through Beam-mediated HTTPS access.\n2. Beam reads your token balance and allowance through its chain APIs.\n3. If allowance is short, Beam adds an exact ERC-20 approval step.\n4. The app prepares the swap transaction.\n5. Beam renders the typed plan, asks for approval, signs, submits, and tracks the\n   receipt.\n\nIf an approval is required, Beam submits it first and submits the swap only after\nthe approval is confirmed. If fresh allowance already satisfies the exact plan,\nBeam skips the approval step. Execution output reports confirmed, pending,\ndropped, or skipped transaction state; confirmed receipts include the RPC status\nvalue.\n\n## Agents\n\nAgents and other non-interactive callers should prepare a continuation, inspect\nit, then explicitly approve and execute it:\n\n```bash\nbeam x uniswap swap USDC ETH 100 --chain base --from alice --prepare --format json\nbeam apps approvals show <approval-id>\nbeam apps approvals approve <approval-id> --execute\n```\n\n`--no-prompt` fails closed for wallet-affecting swaps unless the command is\npreparing a continuation or executing an already-approved continuation.\n\n## Permissions\n\nThe app requests HTTPS access to the Uniswap Trading API, read/simulate/send\naccess on supported public EVM chains, ERC-20 approval planning, wallet balance\nreads, transaction proposals, and app-local storage. It does not request Beam\nprivacy capabilities in v1.\n\nSupported chains are Ethereum, Base, Arbitrum, Polygon, BNB, and Sepolia.\n\nApprovals default to the exact amount required. Unlimited approvals require the\nexplicit `--unlimited-approval` flag and are shown in the Beam approval prompt.\n",
     "manifest_summary": {
       "format_version": 1,
-      "min_beam_version": "0.1.2",
+      "min_beam_version": "0.2.1",
       "wasm_entrypoint": "beam_app_main"
     },
     "versions": [
       {
-        "version": "1.0.0",
-        "min_beam_version": "0.1.2"
+        "version": "1.0.2",
+        "min_beam_version": "0.2.1"
       }
     ],
     "icon": {
-      "url": "https://registry.beam.payy.network/apps/uniswap/1.0.0/icon.svg",
+      "url": "https://registry.beam.payy.network/apps/uniswap/1.0.2/icon.svg",
       "sha256": "sha256:a7588127f926d7f5aa352cdeca3ab596c4ed673df98fc964af3e9c9f27e65b0d",
       "media_type": "image/svg+xml",
       "alt": "Uniswap logo"
@@ -293,6 +293,6 @@
   "signature": {
     "algorithm": "sha256-dev",
     "key_id": "payy-dev-2026-05",
-    "value": "sha256:cf1ff80f294be2c782b248b643bf45ad2aa8d1c45d4fd48ef3e160e601037b42"
+    "value": "sha256:54e79a5357fd6defd210f7f6ec88d70a6b0212cd805b273fcc6731ae81d59279"
   }
 }

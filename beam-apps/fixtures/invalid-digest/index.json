@@ -9,16 +9,16 @@
       "description": "Prepare public Uniswap swaps through Beam-mediated HTTP, chain, approval, and transaction planning.",
       "versions": [
         {
-          "version": "1.0.0",
-          "min_beam_version": "0.1.2",
-          "manifest_url": "https://registry.beam.payy.network/apps/uniswap/1.0.0/manifest.json",
-          "manifest_sha256": "sha256:679a551bf48519a586975b25385e310519b077853383a4b3f7c2ff7b66ca3470",
-          "module_url": "https://registry.beam.payy.network/apps/uniswap/1.0.0/module.wasm",
+          "version": "1.0.2",
+          "min_beam_version": "0.2.1",
+          "manifest_url": "https://registry.beam.payy.network/apps/uniswap/1.0.2/manifest.json",
+          "manifest_sha256": "sha256:07b1223ee0855508eb0c46743a3345e96422f97a7cf12175c504bfee8850341b",
+          "module_url": "https://registry.beam.payy.network/apps/uniswap/1.0.2/module.wasm",
           "module_sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
           "signature": {
             "algorithm": "sha256-dev",
             "key_id": "payy-dev-2026-05",
-            "value": "sha256:d66c14c15fb72b7d083a8a61984e2356a130b521fb70e664edefcfabd08ed8dd"
+            "value": "sha256:c066a56b6703a1d421195be37474192a11a960ce259991ff3cb91fd2f062c8de"
           }
         }
       ]
@@ -27,6 +27,6 @@
   "signature": {
     "algorithm": "sha256-dev",
     "key_id": "payy-dev-2026-05",
-    "value": "sha256:c71291f48e084cb773bc003d3fa7536acd0c653632547da79d32373107f89d6d"
+    "value": "sha256:293d1e56cb7ac2c07c4136e2fd94afd9a8d175702bb8e8bd9c5afce93184fa7a"
   }
 }

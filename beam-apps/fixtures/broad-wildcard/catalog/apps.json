@@ -7,11 +7,11 @@
       "display_name": "Uniswap",
       "publisher": "Payy",
       "description": "Prepare public Uniswap swaps through Beam-mediated HTTP, chain, approval, and transaction planning.",
-      "latest_version": "1.0.0",
-      "min_beam_version": "0.1.2",
+      "latest_version": "1.0.2",
+      "min_beam_version": "0.2.1",
       "detail_url": "https://registry.beam.payy.network/catalog/apps/uniswap.json",
       "install_command": "beam apps install uniswap",
-      "pinned_install_command": "beam apps install uniswap --version 1.0.0",
+      "pinned_install_command": "beam apps install uniswap --version 1.0.2",
       "supported_chains": [
         {
           "id": "ethereum",
@@ -90,11 +90,11 @@
         "App storage"
       ],
       "version": {
-        "version": "1.0.0",
-        "min_beam_version": "0.1.2"
+        "version": "1.0.2",
+        "min_beam_version": "0.2.1"
       },
       "icon": {
-        "url": "https://registry.beam.payy.network/apps/uniswap/1.0.0/icon.svg",
+        "url": "https://registry.beam.payy.network/apps/uniswap/1.0.2/icon.svg",
         "sha256": "sha256:a7588127f926d7f5aa352cdeca3ab596c4ed673df98fc964af3e9c9f27e65b0d",
         "media_type": "image/svg+xml",
         "alt": "Uniswap logo"
@@ -104,6 +104,6 @@
   "signature": {
     "algorithm": "sha256-dev",
     "key_id": "payy-dev-2026-05",
-    "value": "sha256:83a8fa8333089b3481f93f9caacd25bae6dab5bdd4d39cdfafaec2ccbc87efab"
+    "value": "sha256:066b1321d86de07e799ba77ac8a531d7a14c258b5ff79cb6e7f352a6cf8ab5d7"
   }
 }

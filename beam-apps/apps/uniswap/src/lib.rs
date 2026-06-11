@@ -71,13 +71,14 @@ fn run_guest(input_ptr: *const u8, input_len: usize) -> Result<Value> {
             reason: err.to_string(),
         })?;
     host::ensure_host_abi(&invocation)?;
-    let command = invocation
-        .args
-        .first()
-        .map(String::as_str)
-        .ok_or_else(|| Error::UnsupportedCommand {
-            command: "<missing>".to_string(),
-        })?;
+    let command =
+        invocation
+            .args
+            .first()
+            .map(String::as_str)
+            .ok_or_else(|| Error::UnsupportedCommand {
+                command: "<missing>".to_string(),
+            })?;
     match command {
         "swap" => {
             let plan = run_swap(invocation)?;
@@ -146,8 +147,10 @@ fn run_swap(invocation: GuestInvocation) -> Result<ActionPlan> {
         &swap_payload(&quote, &wallet),
     )?;
     let mut swap = SwapResponse {
-        transaction: find_transaction(&swap_value).ok_or_else(|| Error::InvalidUniswapResponse {
-            reason: "swap response missing transaction".to_string(),
+        transaction: find_transaction(&swap_value).ok_or_else(|| {
+            Error::InvalidUniswapResponse {
+                reason: "swap response missing transaction".to_string(),
+            }
         })?,
         raw: swap_value,
     };
