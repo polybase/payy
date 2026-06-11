@@ -28,12 +28,20 @@ const WASM_FUEL: u64 = 30_000_000;
 
 pub fn validate_wasm_module(app_id: &str, entrypoint: &str, path: &Path) -> Result<()> {
     let bytes = std::fs::read(path).context("read beam app wasm module")?;
+    validate_wasm_module_bytes(app_id, entrypoint, &bytes)
+}
+
+pub(super) fn validate_wasm_module_bytes(
+    app_id: &str,
+    entrypoint: &str,
+    bytes: &[u8],
+) -> Result<()> {
     if bytes.len() < 8 || &bytes[..4] != WASM_MAGIC {
         return Err(Error::InvalidWasmModule {
             app: app_id.to_string(),
         });
     }
-    AppRuntime::default().instantiate_for_validation(app_id, entrypoint, &bytes)?;
+    AppRuntime::default().instantiate_for_validation(app_id, entrypoint, bytes)?;
 
     Ok(())
 }
@@ -70,12 +78,15 @@ impl AppRuntime {
         let instance = linker
             .instantiate_and_start(&mut store, &module)
             .context("instantiate beam app wasm module")?;
-        if instance.get_func(&store, entrypoint).is_none() {
+        if instance.get_memory(&store, "memory").is_none() {
             return Err(Error::MissingWasmExport {
                 app: app_id.to_string(),
-                export: entrypoint.to_string(),
+                export: "memory".to_string(),
             });
         }
+        typed_func::<i32, i32>(&store, &instance, "beam_alloc", app_id)?;
+        typed_func::<(i32, i32), ()>(&store, &instance, "beam_free", app_id)?;
+        typed_func::<(i32, i32), i64>(&store, &instance, entrypoint, app_id)?;
 
         Ok(())
     }

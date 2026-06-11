@@ -263,14 +263,12 @@ pub(crate) async fn prompt(app: &BeamApp) -> Result<ReplPrompt> {
         (None, Some(address)) => shrink(&format!("{address:#x}")),
         (None, None) => "no-wallet".to_string(),
     };
-    let rpc_url = shrink(&chain.rpc_url);
 
     Ok(ReplPrompt {
-        plain: render_shell_prefix(&wallet_display, &chain.entry.key, &rpc_url),
-        colored: app
-            .color_mode
-            .colors_stdout()
-            .then(|| render_colored_shell_prefix(&wallet_display, &chain.entry.key, &rpc_url)),
+        plain: render_shell_prefix(&wallet_display, &chain.entry.key, &chain.rpc_url),
+        colored: app.color_mode.colors_stdout().then(|| {
+            render_colored_shell_prefix(&wallet_display, &chain.entry.key, &chain.rpc_url)
+        }),
     })
 }
 

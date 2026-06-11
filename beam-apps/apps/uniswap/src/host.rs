@@ -273,9 +273,11 @@ pub fn token_metadata(chain: &str, token: &str) -> Result<SwapToken> {
         value: None,
     })?;
     let response = parse_host_value::<TokenMetadataResponse>(response)?;
-    let decimals = response.decimals.ok_or_else(|| Error::InvalidHostResponse {
-        reason: format!("token {token} missing decimals"),
-    })?;
+    let decimals = response
+        .decimals
+        .ok_or_else(|| Error::InvalidHostResponse {
+            reason: format!("token {token} missing decimals"),
+        })?;
     Ok(SwapToken {
         is_native: is_native_token(&response.address, &response.label),
         address: response.address,
@@ -408,12 +410,11 @@ fn host_call(request: HostRequest) -> Result<Value> {
     })?;
     let mut response = vec![0_u8; HOST_RESPONSE_CAPACITY];
     let len = beam_host_call_wrapper(&request, &mut response)?;
-    let response =
-        serde_json::from_slice::<HostCallResponse>(&response[..len]).map_err(|err| {
-            Error::InvalidHostResponse {
-                reason: err.to_string(),
-            }
-        })?;
+    let response = serde_json::from_slice::<HostCallResponse>(&response[..len]).map_err(|err| {
+        Error::InvalidHostResponse {
+            reason: err.to_string(),
+        }
+    })?;
     if !response.ok {
         return Err(Error::HostCallFailed {
             message: response

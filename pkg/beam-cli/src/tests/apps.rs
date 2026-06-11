@@ -12,7 +12,7 @@ use crate::{
         registry::{DEFAULT_REGISTRY_URL, ensure_digest, signing_digest},
         validate::{ensure_beam_version, validate_index, validate_manifest},
     },
-    cli::{AppsAction, Cli, Command},
+    cli::{APP_HELP_ARG, AppsAction, Cli, Command, normalize_cli_args},
 };
 use clap::Parser;
 
@@ -104,6 +104,42 @@ fn parses_x_alias_with_trailing_args() {
     .expect("parse x alias");
     match cli.command {
         Some(Command::X(args)) if args.app == "uniswap" && args.args.contains(&"swap".into()) => {}
+        other => panic!("unexpected command: {other:?}"),
+    }
+}
+
+#[test]
+fn preserves_clap_help_for_x_without_app_id() {
+    let error =
+        Cli::try_parse_from(normalize_cli_args(["beam", "x", "--help"])).expect_err("show help");
+
+    assert_eq!(error.kind(), clap::error::ErrorKind::DisplayHelp);
+}
+
+#[test]
+fn forwards_x_help_after_app_id_to_installed_app() {
+    let cli = Cli::try_parse_from(normalize_cli_args(["beam", "x", "uniswap", "--help"]))
+        .expect("parse app help");
+
+    match cli.command {
+        Some(Command::X(args))
+            if args.app == "uniswap" && args.args == [APP_HELP_ARG.to_string()] => {}
+        other => panic!("unexpected command: {other:?}"),
+    }
+}
+
+#[test]
+fn forwards_apps_run_command_help_to_installed_app() {
+    let cli = Cli::try_parse_from(normalize_cli_args([
+        "beam", "apps", "run", "uniswap", "swap", "--help",
+    ]))
+    .expect("parse app command help");
+
+    match cli.command {
+        Some(Command::Apps {
+            action: AppsAction::Run(args),
+        }) if args.app == "uniswap"
+            && args.args == ["swap".to_string(), APP_HELP_ARG.to_string()] => {}
         other => panic!("unexpected command: {other:?}"),
     }
 }

@@ -20,8 +20,9 @@ use crate::{
         },
         runtime::{AppRuntime, GuestCommandResult, validate_wasm_module},
         store::AppCache,
+        validate::ensure_beam_version,
     },
-    cli::{AppApprovalAction, AppInstallArgs, AppRemoveArgs, AppRunArgs, AppsAction},
+    cli::{APP_HELP_ARG, AppApprovalAction, AppInstallArgs, AppRemoveArgs, AppRunArgs, AppsAction},
     error::Result,
     output::CommandOutput,
     runtime::BeamApp,
@@ -56,14 +57,9 @@ pub async fn run_app(app: &BeamApp, args: AppRunArgs) -> Result<()> {
     let command_args = filtered_app_args(&args.args);
     let cache = AppCache::load(&app.paths.root).await?;
     let (installed, manifest) = cache.active_manifest(&args.app).await?;
+    ensure_beam_version(&manifest.id, &manifest.min_beam_version)?;
 
     fs::create_dir_all(cache.data_dir(&args.app)).context("create beam app data directory")?;
-    validate_wasm_module(
-        &args.app,
-        &manifest.wasm.entrypoint,
-        &cache.module_path(&args.app, &installed.active_version),
-    )?;
-
     let command = command_args
         .first()
         .cloned()
@@ -86,6 +82,12 @@ pub async fn run_app(app: &BeamApp, args: AppRunArgs) -> Result<()> {
         )
         .print(app.output_mode);
     }
+
+    validate_wasm_module(
+        &args.app,
+        &manifest.wasm.entrypoint,
+        &cache.module_path(&args.app, &installed.active_version),
+    )?;
 
     let runtime = AppRuntime::default();
     let result = runtime
@@ -129,7 +131,13 @@ fn plan_requires_approval(plan: &ActionPlan) -> bool {
 fn filtered_app_args(args: &[String]) -> Vec<String> {
     args.iter()
         .filter(|arg| arg.as_str() != "--prepare" && arg.as_str() != "--no-prompt")
-        .cloned()
+        .map(|arg| {
+            if arg == APP_HELP_ARG {
+                "--help".to_string()
+            } else {
+                arg.clone()
+            }
+        })
         .collect()
 }
 

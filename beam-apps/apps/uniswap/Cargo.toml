@@ -2,7 +2,7 @@
 
 [package]
 name = "beam-app-uniswap"
-version = "1.0.0"
+version = "1.0.2"
 edition = "2024"
 publish = false
 

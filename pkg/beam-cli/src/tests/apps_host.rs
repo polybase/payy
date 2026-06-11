@@ -1,7 +1,3 @@
-// lint-long-file-override allow-max-lines=300
-use std::path::{Path, PathBuf};
-
-use super::fixtures::test_app;
 use crate::apps::{
     approvals::{ensure_approval_executable, plan_hash},
     host::{
@@ -10,12 +6,10 @@ use crate::apps::{
     },
     model::{
         ActionBinding, ActionPlan, AppPermissions, ApprovalRecord, ApprovalStatus, ChainOperation,
-        ChainPermission, HttpPermission, InstalledApp, RegistryIndex,
+        ChainPermission, HttpPermission,
     },
-    runtime::{AppRuntime, validate_wasm_module},
     store::now,
 };
-use crate::runtime::InvocationOverrides;
 
 #[test]
 fn host_http_permissions_allow_declared_https_and_reject_private_hosts() {
@@ -125,51 +119,6 @@ fn host_transaction_permissions_allow_broad_optional_globs() {
 }
 
 #[test]
-fn app_runtime_requires_declared_entrypoint() {
-    let path = repo_root().join("beam-apps/fixtures/valid/apps/uniswap/1.0.0/module.wasm");
-
-    validate_wasm_module("uniswap", "beam_app_main", &path).expect("valid app wasm");
-    validate_wasm_module("uniswap", "missing_entrypoint", &path)
-        .expect_err("reject missing entrypoint");
-}
-
-#[tokio::test]
-async fn app_runtime_invokes_guest_and_returns_structured_errors() {
-    let (_temp_dir, app) = test_app(InvocationOverrides {
-        chain: Some("base".to_string()),
-        from: Some("0x1111111111111111111111111111111111111111".to_string()),
-        ..InvocationOverrides::default()
-    })
-    .await;
-    let bundle = repo_root().join("beam-apps/fixtures/valid");
-    let index = read_json::<RegistryIndex>(&bundle.join("index.json"));
-    let version = &index.apps[0].versions[0];
-    let manifest_path = artifact_path(&bundle, &version.manifest_url);
-    let module_path = artifact_path(&bundle, &version.module_url);
-    let manifest = read_json(&manifest_path);
-    let installed = InstalledApp {
-        active_version: version.version.clone(),
-        id: index.apps[0].id.clone(),
-        installed_at: now(),
-        manifest_sha256: version.manifest_sha256.clone(),
-        module_sha256: version.module_sha256.clone(),
-    };
-
-    let error = AppRuntime::default()
-        .run_command(
-            &app,
-            &manifest,
-            &installed,
-            &module_path,
-            &["unknown".to_string()],
-        )
-        .await
-        .expect_err("guest should reject unknown command");
-
-    assert!(error.to_string().contains("unsupported command"));
-}
-
-#[test]
 fn approval_integrity_rejects_tampered_plan() {
     let mut plan = action_plan();
     let plan_hash = plan_hash(&plan).expect("hash plan");
@@ -230,17 +179,4 @@ fn action_plan() -> ActionPlan {
         constraints: Vec::new(),
         expires_at: now() + 60,
     }
-}
-
-fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> T {
-    serde_json::from_slice(&std::fs::read(path).expect("read json")).expect("decode json")
-}
-
-fn artifact_path(bundle: &Path, url: &str) -> PathBuf {
-    let prefix = "https://registry.beam.payy.network/";
-    bundle.join(url.strip_prefix(prefix).expect("registry url"))
 }

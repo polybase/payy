@@ -8,6 +8,7 @@ use sha2::{Digest, Sha256};
 use crate::apps::{
     Error, Result,
     model::{AppManifest, RegistryApp, RegistryIndex, RegistrySignature, RegistryVersion},
+    runtime::validate_wasm_module_bytes,
     validate::{ensure_beam_version, validate_index, validate_manifest, validate_registry_url},
 };
 
@@ -48,6 +49,7 @@ pub async fn fetch_module(version: &RegistryVersion, manifest: &AppManifest) -> 
     let bytes = fetch_bytes(&version.module_url).await?;
     ensure_digest("module", &bytes, &version.module_sha256)?;
     ensure_digest("wasm", &bytes, &manifest.wasm.sha256)?;
+    validate_wasm_module_bytes(&manifest.id, &manifest.wasm.entrypoint, &bytes)?;
     Ok(bytes)
 }
 
