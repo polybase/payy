@@ -9,7 +9,7 @@ use wasmi::{
 
 use crate::{
     apps::{
-        Error, Result,
+        Error, Result, format_error_chain,
         host::{HostCallResponse, HostMetadata, HostRequest, handle_host_request},
         model::AppPermissions,
     },
@@ -186,7 +186,7 @@ fn host_call(
     caller.data_mut().diagnostics = diagnostics;
     let response = match result {
         Ok(value) => HostCallResponse::ok(value),
-        Err(error) => HostCallResponse::error(error.to_string()),
+        Err(error) => HostCallResponse::error(format_error_chain(&error)),
     };
     let response = serde_json::to_vec(&response).context("serialize beam app host response")?;
     if response.len() > response_capacity {
