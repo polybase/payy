@@ -9,4 +9,5 @@ pub mod runtime;
 pub mod store;
 pub mod validate;
 
+pub(crate) use error::format_error_chain;
 pub use error::{Error, Result};

@@ -1,15 +1,26 @@
-use crate::apps::{
-    approvals::{ensure_approval_executable, plan_hash},
-    host::{
-        ChainReadOperation, ChainReadRequest, HostTransaction, ensure_chain_read_allowed,
-        ensure_http_allowed, ensure_transaction_allowed,
+// lint-long-file-override allow-max-lines=300
+use contextful::ErrorContextExt;
+
+use crate::{
+    apps::{
+        self,
+        approvals::{ensure_approval_executable, plan_hash},
+        format_error_chain,
+        host::{
+            ChainReadOperation, ChainReadRequest, HostTransaction, chain_read,
+            ensure_chain_read_allowed, ensure_http_allowed, ensure_transaction_allowed,
+        },
+        model::{
+            ActionBinding, ActionPlan, AppPermissions, ApprovalRecord, ApprovalStatus,
+            ChainOperation, ChainPermission, HttpPermission,
+        },
+        store::now,
     },
-    model::{
-        ActionBinding, ActionPlan, AppPermissions, ApprovalRecord, ApprovalStatus, ChainOperation,
-        ChainPermission, HttpPermission,
-    },
-    store::now,
+    error,
+    runtime::InvocationOverrides,
 };
+
+use super::fixtures::test_app;
 
 #[test]
 fn host_http_permissions_allow_declared_https_and_reject_private_hosts() {
@@ -91,6 +102,76 @@ fn host_chain_read_permissions_enforce_contract_scope() {
     let mut blocked = request;
     blocked.target = Some("0xother".to_string());
     ensure_chain_read_allowed(&permissions, &blocked).expect_err("reject blocked read target");
+}
+
+#[tokio::test]
+async fn host_token_metadata_resolves_native_symbol_without_rpc() {
+    let (_temp_dir, app) = test_app(InvocationOverrides {
+        chain: Some("ethereum".to_string()),
+        rpc: Some("not a url".to_string()),
+        ..InvocationOverrides::default()
+    })
+    .await;
+    let permissions = AppPermissions {
+        chains: vec![ChainPermission {
+            chain: "ethereum".to_string(),
+            contracts: None,
+            operations: vec![ChainOperation::Read],
+            selectors: None,
+            spenders: None,
+        }],
+        ..Default::default()
+    };
+
+    let response = chain_read(
+        &app,
+        &permissions,
+        ChainReadRequest {
+            address: None,
+            chain: "ethereum".to_string(),
+            data: None,
+            operation: ChainReadOperation::TokenMetadata,
+            owner: None,
+            selector: None,
+            spender: None,
+            target: Some("eth".to_string()),
+            token: Some("eth".to_string()),
+            value: None,
+        },
+    )
+    .await
+    .expect("resolve native token metadata");
+
+    assert_eq!(
+        response["address"].as_str(),
+        Some("0x0000000000000000000000000000000000000000")
+    );
+    assert_eq!(response["decimals"].as_u64(), Some(18));
+    assert_eq!(response["label"].as_str(), Some("ETH"));
+}
+
+#[test]
+fn app_host_error_chain_includes_internal_causes() {
+    let error = apps::Error::Internal(
+        error::Error::UnknownToken {
+            chain: "ethereum".to_string(),
+            token: "eth".to_string(),
+        }
+        .context("resolve beam app token metadata")
+        .into(),
+    );
+
+    let message = format_error_chain(&error);
+
+    assert!(message.contains("[beam-cli/apps] internal error"));
+    assert!(message.contains("resolve beam app token metadata"));
+    assert!(message.contains("[beam-cli] token not configured on ethereum: eth"));
+    assert_eq!(
+        message
+            .matches("[beam-cli] token not configured on ethereum: eth")
+            .count(),
+        1
+    );
 }
 
 #[test]

@@ -19,7 +19,7 @@ use crate::{
         permissions::{ensure_chain_scope, glob_matches},
     },
     evm::{erc20_allowance, erc20_balance, native_balance, simulate_calldata},
-    runtime::BeamApp,
+    runtime::{BeamApp, ResolvedToken},
 };
 
 const HTTP_TIMEOUT: Duration = Duration::from_secs(15);
@@ -363,10 +363,7 @@ pub async fn chain_read(
     request: ChainReadRequest,
 ) -> Result<Value> {
     ensure_chain_read_allowed(permissions, &request)?;
-    let (chain, client) = app
-        .active_chain_client()
-        .await
-        .context("connect beam app chain client")?;
+    let chain = app.active_chain().await.context("resolve beam app chain")?;
     if chain.entry.key != request.chain {
         return Err(Error::ChainPermissionDenied {
             chain: request.chain,
@@ -383,10 +380,13 @@ pub async fn chain_read(
         })),
         ChainReadOperation::TokenMetadata => {
             let token = token_input(&request)?;
-            let resolved = app
-                .token_for_chain(token, &chain.entry.key)
-                .await
-                .context("resolve beam app token metadata")?;
+            let resolved = if is_native_token(token, &chain.entry.native_symbol) {
+                native_token_metadata(&chain.entry.native_symbol)
+            } else {
+                app.token_for_chain(token, &chain.entry.key)
+                    .await
+                    .context("resolve beam app token metadata")?
+            };
             Ok(json!({
                 "address": format!("{:#x}", resolved.address),
                 "decimals": resolved.decimals,
@@ -394,6 +394,10 @@ pub async fn chain_read(
             }))
         }
         ChainReadOperation::Balance => {
+            let (_, client) = app
+                .active_chain_client()
+                .await
+                .context("connect beam app chain client")?;
             let owner = owner_address(app, request.owner.as_deref()).await?;
             let balance = match token_input_optional(&request) {
                 Some(token) if is_native_token(token, &chain.entry.native_symbol) => {
@@ -417,6 +421,10 @@ pub async fn chain_read(
             Ok(json!({ "balance": balance.to_string(), "owner": format!("{owner:#x}") }))
         }
         ChainReadOperation::Allowance => {
+            let (_, client) = app
+                .active_chain_client()
+                .await
+                .context("connect beam app chain client")?;
             let owner = owner_address(app, request.owner.as_deref()).await?;
             let spender = required_address("spender", request.spender.as_deref())?;
             let token = token_address(app, &chain.entry.key, &request).await?;
@@ -431,6 +439,10 @@ pub async fn chain_read(
             }))
         }
         ChainReadOperation::Call => {
+            let (_, client) = app
+                .active_chain_client()
+                .await
+                .context("connect beam app chain client")?;
             let target = required_address("target", request.target.as_deref())?;
             let data = parse_hex_data(required("data", request.data.as_deref())?)?;
             let from = optional_owner_address(app, request.owner.as_deref()).await?;
@@ -450,11 +462,19 @@ pub async fn chain_read(
             Ok(json!({ "raw": format!("0x{}", hex::encode(raw.0)) }))
         }
         ChainReadOperation::Nonce => {
+            let (_, client) = app
+                .active_chain_client()
+                .await
+                .context("connect beam app chain client")?;
             let owner = owner_address(app, request.owner.as_deref()).await?;
             let nonce = client.nonce(owner).await.context("fetch beam app nonce")?;
             Ok(json!({ "nonce": nonce.to_string(), "owner": format!("{owner:#x}") }))
         }
         ChainReadOperation::Gas => {
+            let (_, client) = app
+                .active_chain_client()
+                .await
+                .context("connect beam app chain client")?;
             let gas_price = client
                 .fast_gas_price()
                 .await
@@ -486,6 +506,14 @@ pub async fn chain_read(
                 "gas_estimate": estimate.map(|value| value.to_string()),
             }))
         }
+    }
+}
+
+fn native_token_metadata(native_symbol: &str) -> ResolvedToken {
+    ResolvedToken {
+        address: Address::zero(),
+        decimals: Some(18),
+        label: native_symbol.to_string(),
     }
 }
 

@@ -1,3 +1,5 @@
+use std::error::Error as StdError;
+
 use contextful::{FromContextful, InternalError};
 
 use crate::apps::model::PrivacyCapability;
@@ -136,4 +138,20 @@ pub enum Error {
 
     #[error("[beam-cli/apps] internal error")]
     Internal(#[from] InternalError),
+}
+
+pub(crate) fn format_error_chain(err: &Error) -> String {
+    let mut message = err.to_string();
+    let mut source = StdError::source(err);
+    let mut previous_message = message.clone();
+    while let Some(cause) = source {
+        let cause_message = cause.to_string();
+        if !cause_message.is_empty() && !previous_message.contains(&cause_message) {
+            message.push_str("; caused by: ");
+            message.push_str(&cause_message);
+        }
+        previous_message = cause_message;
+        source = cause.source();
+    }
+    message
 }
