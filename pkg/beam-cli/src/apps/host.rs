@@ -33,6 +33,8 @@ pub struct HostMetadata {
     pub app_version: String,
     pub chain: String,
     pub chain_id: u64,
+    #[serde(default)]
+    pub debug: bool,
     pub host_api_version: u32,
     pub manifest_sha256: String,
     pub now: u64,

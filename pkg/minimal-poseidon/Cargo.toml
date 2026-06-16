@@ -7,4 +7,3 @@ edition = "2024"
 halo2curves = { workspace = true, features = ["derive_serde"] }
 ff = { workspace = true }
 lazy_static = { workspace = true }
-workspace-hack.workspace = true

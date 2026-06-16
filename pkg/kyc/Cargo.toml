@@ -21,7 +21,6 @@ base64 = { workspace = true }
 
 diesel = { workspace = true, optional = true }
 ts-rs = { workspace = true, optional = true }
-workspace-hack.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true }

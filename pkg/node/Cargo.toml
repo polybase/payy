@@ -64,7 +64,6 @@ tokio-postgres = { workspace = true }
 postgres-native-tls = { workspace = true }
 native-tls = { workspace = true }
 scopeguard = { workspace = true }
-workspace-hack.workspace = true
 
 [dev-dependencies]
 dotenvy = { workspace = true }

@@ -22,7 +22,6 @@ borsh = { workspace = true }
 
 # TODO: why are we using this instead of hex lib?
 rustc-hex = { workspace = true }
-workspace-hack.workspace = true
 
 [dev-dependencies]
 expect-test = { workspace = true }

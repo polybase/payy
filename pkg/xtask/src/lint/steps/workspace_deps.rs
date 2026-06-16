@@ -7,8 +7,8 @@ use std::time::Instant;
 use contextful::ResultContextExt;
 use toml::Value;
 
+use crate::cargo_metadata::load_workspace_metadata;
 use crate::error::Result;
-
 use crate::lint::steps::StepResult;
 
 const DEPENDENCY_TABLE_KEYS: &[&str] = &["dependencies", "dev-dependencies", "build-dependencies"];
@@ -31,7 +31,7 @@ pub fn run_workspace_deps(repo_root: &Path) -> Result<StepResult> {
     if violations.is_empty() {
         return Ok(StepResult::success(
             "Workspace dependencies",
-            "All crate dependencies inherit from the workspace".to_string(),
+            "All workspace crate dependencies inherit from the workspace".to_string(),
             start.elapsed(),
         ));
     }
@@ -69,28 +69,11 @@ pub fn run_workspace_deps(repo_root: &Path) -> Result<StepResult> {
 }
 
 fn collect_package_manifests(repo_root: &Path) -> Result<Vec<PathBuf>> {
-    let mut manifests = Vec::new();
-    let pkg_dir = repo_root.join("pkg");
-    let entries = fs::read_dir(&pkg_dir).with_context(|| format!("list {}", pkg_dir.display()))?;
-
-    for entry in entries {
-        let entry = entry.with_context(|| format!("iterate {}", pkg_dir.display()))?;
-        let metadata = entry
-            .metadata()
-            .with_context(|| format!("load metadata for {}", entry.path().display()))?;
-        if !metadata.is_dir() {
-            continue;
-        }
-
-        if entry.file_name() == "workspace-hack" {
-            continue;
-        }
-
-        let manifest_path = entry.path().join("Cargo.toml");
-        if manifest_path.exists() {
-            manifests.push(manifest_path);
-        }
-    }
+    let metadata = load_workspace_metadata(repo_root)?;
+    let mut manifests = metadata
+        .workspace_packages()
+        .map(|package| package.manifest_path_abs().to_path_buf())
+        .collect::<Vec<_>>();
 
     manifests.sort();
     Ok(manifests)
@@ -99,16 +82,47 @@ fn collect_package_manifests(repo_root: &Path) -> Result<Vec<PathBuf>> {
 fn check_manifest(repo_root: &Path, manifest_path: &Path, manifest: &Value) -> Vec<Violation> {
     let mut violations = Vec::new();
 
+    let Some(table) = manifest.as_table() else {
+        return violations;
+    };
+
+    check_dependency_tables(repo_root, manifest_path, table, None, &mut violations);
+
+    if let Some(targets) = table.get("target").and_then(Value::as_table) {
+        for (target, target_value) in targets {
+            let Some(target_table) = target_value.as_table() else {
+                continue;
+            };
+
+            check_dependency_tables(
+                repo_root,
+                manifest_path,
+                target_table,
+                Some(&format!("target.{target}")),
+                &mut violations,
+            );
+        }
+    }
+
+    violations
+}
+
+fn check_dependency_tables(
+    repo_root: &Path,
+    manifest_path: &Path,
+    table: &toml::value::Table,
+    section_prefix: Option<&str>,
+    violations: &mut Vec<Violation>,
+) {
     for section in DEPENDENCY_TABLE_KEYS {
-        let Some(table) = manifest.get(*section).and_then(Value::as_table) else {
+        let Some(dependencies) = table.get(*section).and_then(Value::as_table) else {
             continue;
         };
+        let section_display = section_prefix
+            .map(|prefix| format!("{prefix}.{section}"))
+            .unwrap_or_else(|| (*section).to_owned());
 
-        for (dependency, value) in table {
-            if dependency == "workspace-hack" {
-                continue;
-            }
-
+        for (dependency, value) in dependencies {
             if dependency_uses_workspace(value) {
                 continue;
             }
@@ -117,13 +131,11 @@ fn check_manifest(repo_root: &Path, manifest_path: &Path, manifest: &Value) -> V
                 repo_root,
                 manifest_path,
                 dependency,
-                section,
+                &section_display,
                 value,
             ));
         }
     }
-
-    violations
 }
 
 fn dependency_uses_workspace(value: &Value) -> bool {

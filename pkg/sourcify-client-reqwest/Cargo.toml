@@ -12,7 +12,6 @@ serde_json = { workspace = true }
 sourcify-interface = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
-workspace-hack.workspace = true
 
 [dev-dependencies]
 httpmock = { workspace = true }

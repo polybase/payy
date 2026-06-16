@@ -14,7 +14,6 @@ num-traits = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 zk-primitives = { workspace = true }
-workspace-hack.workspace = true
 
 [dev-dependencies]
 serde_json = { workspace = true }

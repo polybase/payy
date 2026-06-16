@@ -14,4 +14,3 @@ zk-primitives = { workspace = true }
 async-trait = { workspace = true }
 thiserror = { workspace = true }
 unimock = { workspace = true }
-workspace-hack.workspace = true

@@ -20,4 +20,3 @@ borsh = { workspace = true }
 wire-message = { workspace = true }
 strum = { workspace = true }
 whitelist-ips = { workspace = true }
-workspace-hack.workspace = true

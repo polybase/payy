@@ -8,4 +8,3 @@ edition = "2024"
 [dependencies]
 libp2p.workspace = true
 tracing.workspace = true
-workspace-hack.workspace = true

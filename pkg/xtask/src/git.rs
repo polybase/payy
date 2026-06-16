@@ -15,7 +15,7 @@ pub fn collect_changed_files(repo_root: &Path) -> Result<BTreeSet<String>> {
         if line.len() < 4 {
             continue;
         }
-        if !include_unstaged_status(line) {
+        if !include_changed_status(line) {
             continue;
         }
         let path = line[3..].trim();
@@ -106,7 +106,7 @@ fn git_output(repo_root: &Path, args: &[&str]) -> Result<String> {
     Ok(String::from_utf8(output.stdout).context("parse git stdout as utf-8")?)
 }
 
-fn include_unstaged_status(line: &str) -> bool {
+fn include_changed_status(line: &str) -> bool {
     if line.len() < 2 {
         return false;
     }
@@ -121,6 +121,6 @@ fn include_unstaged_status(line: &str) -> bool {
     match (first, second) {
         ('?', '?') => true,
         ('!', '!') => false,
-        (_, status) => status != ' ',
+        (index_status, worktree_status) => index_status != ' ' || worktree_status != ' ',
     }
 }

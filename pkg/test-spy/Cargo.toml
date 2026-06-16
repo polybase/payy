@@ -9,7 +9,6 @@ edition = "2024"
 test-spy-macros = { workspace = true }
 parking_lot = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-workspace-hack.workspace = true
 
 [dev-dependencies]
 async-trait = { workspace = true }

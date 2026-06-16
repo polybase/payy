@@ -25,7 +25,6 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
 kyc = { workspace = true }
-workspace-hack.workspace = true
 
 [features]
 ts-rs = [

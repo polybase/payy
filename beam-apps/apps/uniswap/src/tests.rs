@@ -2,7 +2,8 @@ use serde_json::json;
 
 use crate::{
     ApprovalResponse, PlanContext, QuoteRequest, SwapArgs, SwapPlanInput, SwapResponse, SwapToken,
-    UniswapTransaction, approval_spender, build_swap_plan, parse_quote, public_api_key, selector,
+    UniswapTransaction, approval_spender, build_swap_plan, parse_quote, public_api_key,
+    quote_payload, selector, swap_payload,
 };
 
 #[test]
@@ -74,6 +75,80 @@ fn public_api_key_is_embed_ready() {
 }
 
 #[test]
+fn quote_payload_uses_current_uniswap_schema() {
+    let payload = quote_payload(&quote_request());
+
+    assert_eq!(
+        payload["swapper"].as_str(),
+        Some("0x3333333333333333333333333333333333333333")
+    );
+    assert_eq!(payload.get("walletAddress"), None);
+    assert_eq!(payload["slippageTolerance"].as_f64(), Some(0.5));
+    assert_eq!(payload["permitAmount"].as_str(), Some("EXACT"));
+}
+
+#[test]
+fn quote_parser_accepts_nested_current_response() {
+    let request = quote_request();
+    let quote = parse_quote(
+        json!({
+            "requestId": "request-1",
+            "routing": "CLASSIC",
+            "quote": {
+                "chainId": 8453,
+                "input": {
+                    "amount": "10000000",
+                    "token": "0x1111111111111111111111111111111111111111",
+                },
+                "output": {
+                    "amount": "100",
+                    "minAmount": "99",
+                    "token": "0x0000000000000000000000000000000000000000",
+                },
+                "quoteId": "quote-1",
+                "routeString": "[V3] USDC -- 0.05% ETH",
+                "swapper": "0x3333333333333333333333333333333333333333",
+            }
+        }),
+        &request,
+    )
+    .expect("parse current quote response");
+
+    assert_eq!(quote.amount_out, "100");
+    assert_eq!(quote.minimum_amount_out.as_deref(), Some("99"));
+    assert_eq!(quote.quote_id, "quote-1");
+    assert_eq!(quote.route, "CLASSIC");
+    assert_eq!(
+        quote.quote["swapper"].as_str(),
+        Some(request.wallet.as_str())
+    );
+}
+
+#[test]
+fn swap_payload_omits_legacy_wallet_address() {
+    let quote = parse_quote(
+        json!({
+            "amountOut": "100",
+            "quoteId": "quote-1",
+            "route": "classic",
+            "tokenInChainId": 8453,
+            "tokenOutChainId": 8453,
+            "tokenIn": "0x1111111111111111111111111111111111111111",
+            "tokenOut": "0x0000000000000000000000000000000000000000",
+        }),
+        &quote_request(),
+    )
+    .expect("parse quote");
+
+    let payload = swap_payload(&quote, "0x3333333333333333333333333333333333333333");
+
+    assert_eq!(payload.get("walletAddress"), None);
+    assert_eq!(payload["simulateTransaction"].as_bool(), Some(true));
+    assert_eq!(payload["refreshGasPrice"].as_bool(), Some(true));
+    assert_eq!(payload["quote"]["quoteId"].as_str(), Some("quote-1"));
+}
+
+#[test]
 fn builds_approval_and_swap_action_plan() {
     let args = SwapArgs::parse(&[
         "swap".to_string(),
@@ -120,7 +195,16 @@ fn builds_approval_and_swap_action_plan() {
             transaction: Some(transaction("0x095ea7b3000000000000000000000000000000000022d473030f116ddee9f6b43ac78ba30000000000000000000000000000000000000000000000000000000000989680")),
         }),
         swap: SwapResponse {
-            raw: json!({ "transaction": { "to": "0x2222222222222222222222222222222222222222" } }),
+            raw: json!({
+                "gasFee": "123",
+                "quote": {
+                    "route": [
+                        { "protocol": "V3", "tokenIn": "USDC", "tokenOut": "ETH" },
+                    ],
+                },
+                "requestId": "swap-request-1",
+                "transaction": { "to": "0x2222222222222222222222222222222222222222" },
+            }),
             transaction: transaction("0x3593564c"),
         },
     })
@@ -129,6 +213,13 @@ fn builds_approval_and_swap_action_plan() {
     assert_eq!(plan.steps.len(), 2);
     assert_eq!(plan.steps[0].kind, "erc20-approval");
     assert_eq!(plan.steps[1].kind, "transaction");
+    assert_eq!(plan.steps[1].metadata.get("swap"), None);
+    assert_eq!(plan.steps[1].metadata.get("quote"), None);
+    assert_eq!(
+        plan.steps[1].metadata["request_id"].as_str(),
+        Some("swap-request-1")
+    );
+    assert_eq!(plan.steps[1].metadata["gas_fee"].as_str(), Some("123"));
     assert!(
         plan.bindings
             .iter()

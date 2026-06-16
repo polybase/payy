@@ -11,7 +11,6 @@ wire-message-macro = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 static_assertions = { workspace = true }
-workspace-hack.workspace = true
 
 [features]
 test-api = []

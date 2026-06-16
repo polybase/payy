@@ -1,0 +1,57 @@
+# Phala Cloud / dstack deployment manifest for payy-auth-api-bin.
+#
+# The compose text is part of the attested measurement, so pin the image by
+# digest: a mutable tag lets image contents drift under an unchanged compose
+# hash. The payy-auth.release.phala.yaml workflow substitutes the digest of
+# the freshly pushed image before deploying; for a manual deploy, replace the
+# placeholder with a real digest yourself.
+services:
+  payy-auth:
+    image: ghcr.io/polybase/payy-auth-api-bin@sha256:REPLACE_WITH_DIGEST
+    ports:
+      - "8787:8787"
+    volumes:
+      # dstack guest agent socket; kms-phala fetches all key material from it
+      # at startup and the binary fails closed when it is unavailable.
+      - /var/run/dstack.sock:/var/run/dstack.sock
+      # Wallet lifecycle facts and KMS custody allocations persist here so
+      # wallets survive restarts and upgrades. Records hold no private key
+      # material, and the CVM's data disk is LUKS-encrypted by dstack.
+      - payy-auth-data:/data
+    environment:
+      PAYY_AUTH_KMS: phala
+      PAYY_AUTH_STORAGE_DIR: /data
+      # The default bind address is 127.0.0.1, which the dstack gateway cannot
+      # reach from outside the container.
+      PAYY_AUTH_API_ADDR: 0.0.0.0:8787
+      # Public deployment profile: this origin becomes the JWT issuer, PAT
+      # audience, and trusted wallet-RPC origin, and requests must carry an
+      # allowlisted Origin header (curl smokes included). The hostname is the
+      # dstack gateway name for this CVM: <app-id>-<port>.<gateway-domain>.
+      PAYY_AUTH_PUBLIC_ORIGIN: https://3964805fd025d1d17e4bf900849d6eadf892ab0f-8787.dstack-pha-prod9.phala.network
+      # EVM eth_sendTransaction broadcast endpoints, one entry per chain the
+      # deployment can send on. The Alchemy URLs embed the same kind of
+      # publicly-shipped API key the app bundle already ships to browsers, so
+      # they are not secrets and are safe in this attested compose text. A
+      # non-public backend RPC would instead have to be passed as an encrypted
+      # dstack env var (like the DSTACK_DOCKER_* pull credentials), never baked
+      # in here. Each app_id must match the seeded app id (PAYY_AUTH_APP_ID,
+      # default app-local).
+      PAYY_AUTH_EVM_RPC_ENDPOINTS: >-
+        [
+        {"app_id": "app-local", "caip2": "eip155:1", "endpoint_id": "ethereum-mainnet", "base_url": "https://eth-mainnet.g.alchemy.com/v2/tM35lzH9DscymagwCy2GQ"},
+        {"app_id": "app-local", "caip2": "eip155:137", "endpoint_id": "polygon-mainnet", "base_url": "https://polygon-mainnet.g.alchemy.com/v2/tM35lzH9DscymagwCy2GQ"},
+        {"app_id": "app-local", "caip2": "eip155:8453", "endpoint_id": "base-mainnet", "base_url": "https://base-mainnet.g.alchemy.com/v2/tM35lzH9DscymagwCy2GQ"},
+        {"app_id": "app-local", "caip2": "eip155:42161", "endpoint_id": "arbitrum-one", "base_url": "https://arb-mainnet.g.alchemy.com/v2/tM35lzH9DscymagwCy2GQ"},
+        {"app_id": "app-local", "caip2": "eip155:10", "endpoint_id": "optimism-mainnet", "base_url": "https://opt-mainnet.g.alchemy.com/v2/tM35lzH9DscymagwCy2GQ"},
+        {"app_id": "app-local", "caip2": "eip155:43114", "endpoint_id": "avalanche-c-chain", "base_url": "https://avax-mainnet.g.alchemy.com/v2/tM35lzH9DscymagwCy2GQ"}
+        ]
+      # Smoke-box only: re-exposes plaintext login codes at
+      # GET /_local/passwordless/emails, which the public profile hides by
+      # default. Remove as soon as real email delivery lands or this CVM
+      # serves anyone but us.
+      PAYY_AUTH_DEV_INBOX: "1"
+    restart: unless-stopped
+
+volumes:
+  payy-auth-data:

@@ -10,4 +10,3 @@ path = "lib.rs"
 
 [dependencies]
 serde_yaml_ng = { workspace = true }
-workspace-hack.workspace = true

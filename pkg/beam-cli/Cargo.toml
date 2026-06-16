@@ -46,7 +46,6 @@ tokio = { workspace = true }
 url = { workspace = true }
 wasmi = { workspace = true }
 web3 = { workspace = true }
-workspace-hack.workspace = true
 
 [dev-dependencies]
 insta = { workspace = true }

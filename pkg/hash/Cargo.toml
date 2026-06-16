@@ -10,7 +10,6 @@ rand = { workspace = true, optional = true }
 serde = { workspace = true }
 hex = { workspace = true }
 bn254_blackbox_solver = { workspace = true }
-workspace-hack.workspace = true
 
 [dev-dependencies]
 insta = { workspace = true }

@@ -8,7 +8,6 @@ element = { workspace = true }
 minimal-poseidon = { workspace = true }
 serde = { workspace = true }
 hex = { workspace = true }
-workspace-hack.workspace = true
 
 [dev-dependencies]
 insta = { workspace = true }

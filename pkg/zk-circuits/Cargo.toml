@@ -28,7 +28,6 @@ flate2 = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }
 paste = { workspace = true }
-workspace-hack.workspace = true
 
 [dev-dependencies]
 smirk = { workspace = true }

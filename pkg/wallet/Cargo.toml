@@ -17,4 +17,3 @@ serde_json = { workspace = true }
 tokio = { workspace = true }
 web3 = { workspace = true }
 clap = { workspace = true }
-workspace-hack.workspace = true

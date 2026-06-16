@@ -3,19 +3,12 @@
 resolver = "2"
 members = ["pkg/*", "app/packages/react-native-rust-bridge/cpp/rustbridge"]
 
-[workspace.metadata.cargo-machete]
-ignored = ["workspace-hack"]
-
 [workspace.metadata.cargo-machete.renamed]
 async-stripe = "stripe"
 
 # `opt-level = 1` has a decent impact on perf, and doesn't impact compile times much
 [profile.dev]
 opt-level = 1
-
-[profile.dev.package.workspace-hack]
-# Fixes some spurious rebuilds of workspace-hack
-incremental = false
 
 # `opt-level = 3` has a large impact on perf, but does impact compile times. However, we only apply it to dependencies,
 # so incremental compilation makes this choice essentially "free" after the first compile
@@ -58,6 +51,9 @@ currency = { path = "./pkg/currency" }
 database = { path = "./pkg/database", default-features = false }
 data = { path = "./pkg/data" }
 diesel-util = { path = "./pkg/diesel-util" }
+dstack-client-http = { path = "./pkg/dstack-client-http" }
+dstack-interface = { path = "./pkg/dstack-interface" }
+dstack-test-support = { path = "./pkg/dstack-test-support" }
 doomslug = { path = "./pkg/doomslug" }
 document-ai-google = { path = "./pkg/document-ai-google" }
 document-ai-interface = { path = "./pkg/document-ai-interface" }
@@ -111,13 +107,20 @@ price-cache-pg = { path = "./pkg/price-cache-pg" }
 posthog-interface = { path = "./pkg/posthog-interface" }
 posthog = { path = "./pkg/posthog" }
 kyc = { path = "./pkg/kyc" }
+kms-core = { path = "./pkg/kms-core" }
+kms-dev = { path = "./pkg/kms-dev" }
+kms-interface = { path = "./pkg/kms-interface" }
+kms-phala = { path = "./pkg/kms-phala" }
+kms-test-support = { path = "./pkg/kms-test-support" }
 primitives = { path = "./pkg/primitives" }
 payy-auth-embedded-wallet-document = { path = "./pkg/payy-auth-embedded-wallet-document" }
 payy-auth-app-admission-interface = { path = "./pkg/payy-auth-app-admission-interface" }
 payy-auth-app-admission-catalog = { path = "./pkg/payy-auth-app-admission-catalog" }
+payy-auth-app-catalog = { path = "./pkg/payy-auth-app-catalog" }
 payy-auth-app-catalog-interface = { path = "./pkg/payy-auth-app-catalog-interface" }
-payy-auth-app-catalog-memory = { path = "./pkg/payy-auth-app-catalog-memory" }
 payy-auth-app-catalog-server = { path = "./pkg/payy-auth-app-catalog-server" }
+payy-auth-app-catalog-storage-interface = { path = "./pkg/payy-auth-app-catalog-storage-interface" }
+payy-auth-app-catalog-storage-memory = { path = "./pkg/payy-auth-app-catalog-storage-memory" }
 payy-auth-app-catalog-test-support = { path = "./pkg/payy-auth-app-catalog-test-support" }
 payy-auth-app-client-scope-interface = { path = "./pkg/payy-auth-app-client-scope-interface" }
 payy-auth-app-client-scope = { path = "./pkg/payy-auth-app-client-scope" }
@@ -127,6 +130,7 @@ payy-auth-client-access-test-support = { path = "./pkg/payy-auth-client-access-t
 payy-auth-user-interface = { path = "./pkg/payy-auth-user-interface" }
 payy-auth-session-interface = { path = "./pkg/payy-auth-session-interface" }
 payy-auth-login-commit-interface = { path = "./pkg/payy-auth-login-commit-interface" }
+payy-auth-login-commit = { path = "./pkg/payy-auth-login-commit" }
 payy-auth-login-commit-policy-catalog = { path = "./pkg/payy-auth-login-commit-policy-catalog" }
 payy-auth-login-commit-test-support = { path = "./pkg/payy-auth-login-commit-test-support" }
 payy-auth-refresh-session-core = { path = "./pkg/payy-auth-refresh-session-core" }
@@ -139,16 +143,14 @@ payy-auth-passwordless-rate-limit-allow-all = { path = "./pkg/payy-auth-password
 payy-auth-passwordless-policy-catalog = { path = "./pkg/payy-auth-passwordless-policy-catalog" }
 payy-auth-passwordless-fail-closed = { path = "./pkg/payy-auth-passwordless-fail-closed" }
 payy-auth-passwordless-email = { path = "./pkg/payy-auth-passwordless-email" }
-payy-auth-session-memory = { path = "./pkg/payy-auth-session-memory" }
 payy-auth-api-request-interface = { path = "./pkg/payy-auth-api-request-interface" }
 payy-auth-api-gate = { path = "./pkg/payy-auth-api-gate" }
 payy-auth-wallet-interface = { path = "./pkg/payy-auth-wallet-interface" }
 payy-auth-wallet = { path = "./pkg/payy-auth-wallet" }
 payy-auth-wallet-p256 = { path = "./pkg/payy-auth-wallet-p256" }
-payy-auth-wallet-custody-local = { path = "./pkg/payy-auth-wallet-custody-local" }
+payy-auth-wallet-custody-kms = { path = "./pkg/payy-auth-wallet-custody-kms" }
 payy-auth-wallet-storage-core = { path = "./pkg/payy-auth-wallet-storage-core" }
-payy-auth-wallet-storage-json = { path = "./pkg/payy-auth-wallet-storage-json" }
-payy-auth-wallet-storage-memory = { path = "./pkg/payy-auth-wallet-storage-memory" }
+payy-auth-wallet-storage-sqlite = { path = "./pkg/payy-auth-wallet-storage-sqlite" }
 payy-auth-wallet-test-support = { path = "./pkg/payy-auth-wallet-test-support" }
 payy-auth-wallet-transaction-evm-json-rpc = { path = "./pkg/payy-auth-wallet-transaction-evm-json-rpc" }
 payy-auth-api-bin = { path = "./pkg/payy-auth-api-bin" }
@@ -159,8 +161,9 @@ payy-auth-local = { path = "./pkg/payy-auth-local" }
 payy-auth-runtime-system = { path = "./pkg/payy-auth-runtime-system" }
 payy-auth-session = { path = "./pkg/payy-auth-session" }
 payy-auth-session-test-support = { path = "./pkg/payy-auth-session-test-support" }
-payy-auth-session-storage-memory = { path = "./pkg/payy-auth-session-storage-memory" }
+payy-auth-session-storage-sqlite = { path = "./pkg/payy-auth-session-storage-sqlite" }
 payy-auth-backend-interface = { path = "./pkg/payy-auth-backend-interface" }
+payy-auth-user-projection = { path = "./pkg/payy-auth-user-projection" }
 payy-auth-api-server = { path = "./pkg/payy-auth-api-server" }
 prover = { path = "./pkg/prover" }
 providers-interface = { path = "./pkg/providers-interface" }
@@ -235,7 +238,6 @@ reth-primitives-traits = { git = "https://github.com/paradigmxyz/reth", tag = "v
 reth-transaction-pool = { git = "https://github.com/paradigmxyz/reth", tag = "v1.10.2" }
 reth-node-builder = { git = "https://github.com/paradigmxyz/reth", tag = "v1.10.2" }
 
-workspace-hack = "0.1"
 ts-rs = { version = "^11.1.0", features = ["format", "chrono-impl", "uuid-impl"] }
 actix-cors = "0.6.4"
 actix-server = "2.3.0"
@@ -245,9 +247,12 @@ tower = "0.5"
 tower-http = "0.6"
 http-body-util = "0.1"
 hyper = "1"
+hyper-util = { version = "0.1.20", features = ["client-legacy", "http1", "tokio"] }
+hyperlocal = "0.9.1"
 veil = "0.2.0"
 alloy = { version = "1.0.24", features = ["std", "essentials", "reqwest-rustls-tls", "signers"] }
 alloy-consensus = "1.4.3"
+alloy-dyn-abi = { version = "1.4.3", features = ["eip712"] }
 alloy-eips = "1.4.3"
 alloy-evm = "0.26.3"
 alloy-genesis = "1.4.3"
@@ -306,11 +311,12 @@ diesel-async = "0.7.4"
 diesel_migrations = "2.3"
 tokio-postgres = { version = "0.7.16" }
 postgres-native-tls = "0.5.0"
-native-tls = "0.2.15"
+native-tls = { version = "0.2.15", default-features = false, features = ["alpn"] }
 derive_more = "0.99.17"
 dirs = "5.0.1"
 dotenvy = "0.15.7"
 duct = "1.1"
+ed25519-dalek = "2.2.0"
 ethereum-types = "0.14.1"
 ethers-solc = "2.0.14"
 ethnum = "1.5.0"
@@ -326,6 +332,7 @@ halo2curves = "0.1.0"
 hex = { version = "0.4", features = ["serde"] }
 hpke = "0.13.0"
 hmac = "0.12"
+hkdf = "0.12.4"
 home = "0.5.11"
 indoc = "2"
 indexmap = { version = "2.14", features = ["serde"] }
@@ -363,12 +370,17 @@ quickcheck = "1.0.3"
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 rand_chacha_09 = { package = "rand_chacha", version = "0.9.0" }
+rand_core_09 = { package = "rand_core", version = "0.9.3", default-features = false, features = [
+  "os_rng",
+  "std",
+] }
 rand_xorshift = "0.4"
 reqwest = { version = "0.12", features = ["json", "multipart", "stream"] }
 rlp = "0.6.1"
 rmp-serde = "1.3.1"
 rocksdb = "0.21"
 rpassword = "7.4.0"
+rusqlite = { version = "0.39.0", features = ["bundled"] }
 rustc-hex = "2.1.0"
 rust-i18n = "3"
 rsa = { version = "0.9", features = ["sha1"] }
@@ -437,7 +449,7 @@ tracing-opentelemetry = "0.32.0"
 x25519-dalek = { version = "2.0.1", features = ["static_secrets"] }
 
 # utilities for deriving stuff on macros
-strum = "0.27"
+strum = { version = "0.27", features = ["derive"] }
 strum_macros = "0.27.2"
 rayon = "1"
 derivative = "2"
@@ -462,7 +474,6 @@ http = "1.4"
 [patch.crates-io]
 # rust-i18n uses a deprecated serde_yaml dependency, so we use our shim instead
 serde_yaml = { path = "pkg/serde_yaml" }
-workspace-hack = { path = "pkg/workspace-hack" }
 
 [workspace.metadata.i18n]
 load-path = "./pkg/wallet-core/locales"

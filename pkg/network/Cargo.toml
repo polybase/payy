@@ -16,7 +16,6 @@ strum = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true, features = ["serde"] }
 veil = { workspace = true }
-workspace-hack.workspace = true
 
 [dependencies.ts-rs]
 workspace = true

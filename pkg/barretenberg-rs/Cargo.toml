@@ -10,7 +10,6 @@ lazy_static = { workspace = true }
 async-trait = { workspace = true }
 contextful = { workspace = true }
 tokio = { workspace = true }
-workspace-hack.workspace = true
 
 [features]
 default = []

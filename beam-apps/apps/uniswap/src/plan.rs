@@ -131,15 +131,7 @@ fn swap_step(input: &SwapPlanInput) -> ActionStep {
     let transaction = &input.swap.transaction;
     ActionStep {
         kind: "transaction".to_string(),
-        metadata: json!({
-            "buy": input.buy.label,
-            "quote_id": input.quote.quote_id,
-            "route": input.quote.route,
-            "sell": input.sell.label,
-            "slippage_bps": input.args.slippage_bps,
-            "swap": input.swap.raw,
-            "transaction": transaction_json(transaction),
-        }),
+        metadata: swap_metadata(input, transaction),
         selector: selector(&transaction.data),
         spender: None,
         summary: format!(
@@ -148,6 +140,33 @@ fn swap_step(input: &SwapPlanInput) -> ActionStep {
         ),
         target: Some(transaction.to.clone()),
         value: Some(transaction.value.clone()),
+    }
+}
+
+fn swap_metadata(input: &SwapPlanInput, transaction: &UniswapTransaction) -> Value {
+    let mut metadata = json!({
+        "buy": input.buy.label,
+        "quote_id": input.quote.quote_id,
+        "route": input.quote.route,
+        "sell": input.sell.label,
+        "slippage_bps": input.args.slippage_bps,
+        "transaction": transaction_json(transaction),
+    });
+    if let Some(request_id) = raw_string(&input.swap.raw, "requestId") {
+        metadata["request_id"] = json!(request_id);
+    }
+    if let Some(gas_fee) = raw_string(&input.swap.raw, "gasFee") {
+        metadata["gas_fee"] = json!(gas_fee);
+    }
+
+    metadata
+}
+
+fn raw_string(value: &Value, key: &str) -> Option<String> {
+    match value.get(key)? {
+        Value::Number(value) => Some(value.to_string()),
+        Value::String(value) => Some(value.clone()),
+        _ => None,
     }
 }
 

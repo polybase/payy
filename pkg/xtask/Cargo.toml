@@ -21,4 +21,3 @@ serde_json = { workspace = true }
 indoc = { workspace = true }
 solc-tooling = { workspace = true }
 toml = { workspace = true }
-workspace-hack.workspace = true

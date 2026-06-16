@@ -19,7 +19,6 @@ tokio = { workspace = true }
 tokio-stream = { workspace = true }
 uint = { workspace = true }
 borsh = { workspace = true }
-workspace-hack.workspace = true
 
 [dev-dependencies]
 proptest = { workspace = true }

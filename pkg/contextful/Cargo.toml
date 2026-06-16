@@ -9,7 +9,6 @@ repository = "https://github.com/polybase/zk-rollup"
 [dependencies]
 serde = { workspace = true }
 contextful-macros = { workspace = true }
-workspace-hack.workspace = true
 
 [dev-dependencies]
 serde_json = { workspace = true }

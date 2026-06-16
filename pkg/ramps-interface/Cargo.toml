@@ -51,4 +51,3 @@ zk-primitives = { workspace = true }
 diesel = { workspace = true, optional = true }
 diesel-util = { workspace = true, optional = true }
 ts-rs = { workspace = true, optional = true }
-workspace-hack.workspace = true

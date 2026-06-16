@@ -10,4 +10,3 @@ hex = { workspace = true }
 home = { workspace = true }
 sha2 = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"] }
-workspace-hack.workspace = true
