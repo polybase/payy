@@ -1,4 +1,4 @@
-use serde_json::{Value, json};
+use serde_json::{Number, Value, json};
 
 use crate::{Error, Result};
 
@@ -55,58 +55,82 @@ pub fn check_approval_payload(request: &QuoteRequest) -> Value {
 pub fn quote_payload(request: &QuoteRequest) -> Value {
     json!({
         "amount": request.amount,
+        "permitAmount": "EXACT",
         "protocols": ["V2", "V3", "V4"],
         "recipient": request.recipient,
-        "slippageTolerance": request.slippage_bps,
+        "routingPreference": "BEST_PRICE",
+        "slippageTolerance": slippage_tolerance(request.slippage_bps),
+        "swapper": request.wallet,
         "tokenIn": request.token_in,
         "tokenInChainId": request.chain_id,
         "tokenOut": request.token_out,
         "tokenOutChainId": request.chain_id,
         "type": "EXACT_INPUT",
-        "walletAddress": request.wallet,
+        "urgency": "normal",
     })
 }
 
-pub fn swap_payload(quote: &QuoteResponse, wallet: &str) -> Value {
+pub fn swap_payload(quote: &QuoteResponse, _wallet: &str) -> Value {
     json!({
         "quote": quote.quote,
+        "refreshGasPrice": true,
         "simulateTransaction": true,
-        "walletAddress": wallet,
+        "urgency": "normal",
     })
 }
 
 pub fn parse_quote(value: Value, request: &QuoteRequest) -> Result<QuoteResponse> {
+    let quote = value.get("quote").cloned().unwrap_or_else(|| value.clone());
     validate_optional_field(
-        &value,
+        &quote,
         &["tokenInChainId", "chainId"],
+        &[],
         &request.chain_id.to_string(),
     )?;
-    validate_optional_field(&value, &["tokenOutChainId"], &request.chain_id.to_string())?;
-    validate_optional_field(&value, &["tokenIn", "inputToken"], &request.token_in)?;
-    validate_optional_field(&value, &["tokenOut", "outputToken"], &request.token_out)?;
-    let amount_out =
-        first_string(&value, &["amountOut", "output", "quoteAmount"]).ok_or_else(|| {
-            Error::InvalidUniswapResponse {
-                reason: "quote missing output amount".to_string(),
-            }
-        })?;
-    let quote_id = first_string(&value, &["quoteId", "requestId", "routingId"])
+    validate_optional_field(
+        &quote,
+        &["tokenOutChainId"],
+        &[],
+        &request.chain_id.to_string(),
+    )?;
+    validate_optional_field(
+        &quote,
+        &["tokenIn", "inputToken"],
+        &[&["input", "token"]],
+        &request.token_in,
+    )?;
+    validate_optional_field(
+        &quote,
+        &["tokenOut", "outputToken"],
+        &[&["output", "token"]],
+        &request.token_out,
+    )?;
+    let amount_out = first_string_or_path(
+        &quote,
+        &["amountOut", "quoteAmount"],
+        &[&["output", "amount"]],
+    )
+    .ok_or_else(|| Error::InvalidUniswapResponse {
+        reason: "quote missing output amount".to_string(),
+    })?;
+    let quote_id = first_string(&quote, &["quoteId", "requestId", "routingId"])
+        .or_else(|| first_string(&value, &["quoteId", "requestId", "routingId"]))
         .unwrap_or_else(|| "uniswap-quote".to_string());
-    let route = first_string(&value, &["routing", "routeString", "route"])
+    let route = first_string(&value, &["routing"])
+        .or_else(|| first_string(&quote, &["routing", "routeString", "route"]))
         .unwrap_or_else(|| "classic".to_string());
-    if route.to_ascii_lowercase().contains("dutch")
-        || route.to_ascii_lowercase().contains("uniswapx")
-    {
+    if is_order_route(&route) {
         return Err(Error::UnsupportedUniswapRoute { route });
     }
 
     Ok(QuoteResponse {
         amount_out,
-        minimum_amount_out: first_string(
-            &value,
+        minimum_amount_out: first_string_or_path(
+            &quote,
             &["amountOutMinimum", "minimumAmountOut", "minAmountOut"],
+            &[&["output", "minAmount"]],
         ),
-        quote: value,
+        quote,
         quote_id,
         route,
         valid_for_seconds: 180,
@@ -140,8 +164,13 @@ pub fn approval_spender(data: &str) -> Option<String> {
     Some(format!("0x{}", &data[8 + 24..8 + 64]))
 }
 
-fn validate_optional_field(value: &Value, keys: &[&str], expected: &str) -> Result<()> {
-    let Some(actual) = first_string(value, keys) else {
+fn validate_optional_field(
+    value: &Value,
+    keys: &[&str],
+    paths: &[&[&str]],
+    expected: &str,
+) -> Result<()> {
+    let Some(actual) = first_string_or_path(value, keys, paths) else {
         return Ok(());
     };
     if !actual.eq_ignore_ascii_case(expected) {
@@ -151,6 +180,16 @@ fn validate_optional_field(value: &Value, keys: &[&str], expected: &str) -> Resu
     }
 
     Ok(())
+}
+
+fn slippage_tolerance(slippage_bps: u32) -> Value {
+    let value = f64::from(slippage_bps) / 100.0;
+    Value::Number(Number::from_f64(value).unwrap_or_else(|| Number::from(0)))
+}
+
+fn is_order_route(route: &str) -> bool {
+    let route = route.to_ascii_lowercase();
+    route.contains("dutch") || route.contains("uniswapx") || route == "priority"
 }
 
 fn parse_transaction(value: &Value) -> Option<UniswapTransaction> {
@@ -171,4 +210,17 @@ fn first_string(value: &Value, keys: &[&str]) -> Option<String> {
             _ => None,
         })
     })
+}
+
+fn first_string_or_path(value: &Value, keys: &[&str], paths: &[&[&str]]) -> Option<String> {
+    first_string(value, keys).or_else(|| paths.iter().find_map(|path| path_string(value, path)))
+}
+
+fn path_string(value: &Value, path: &[&str]) -> Option<String> {
+    let value = path.iter().try_fold(value, |value, key| value.get(key))?;
+    match value {
+        Value::String(value) => Some(value.clone()),
+        Value::Number(value) => Some(value.to_string()),
+        _ => None,
+    }
 }

@@ -1,0 +1,86 @@
+FROM rust:1-bookworm AS builder
+ARG SCCACHE_GCS_BUCKET
+ARG SCCACHE_GCS_KEY_PREFIX
+ARG SCCACHE_BUCKET
+ARG SCCACHE_S3_KEY_PREFIX
+ARG SCCACHE_REGION
+ARG SCCACHE_ENDPOINT
+ARG SCCACHE_S3_USE_SSL
+
+# libclang is required by bindgen (zstd-sys, aws-lc-sys build scripts);
+# cmake is required by aws-lc-sys.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libclang-dev cmake \
+    && rm -rf /var/lib/apt/lists/*
+
+# Conditional sccache setup: only if remote cache settings are provided
+RUN if [ -n "$SCCACHE_GCS_BUCKET" ] || [ -n "$SCCACHE_BUCKET" ]; then \
+    wget https://github.com/mozilla/sccache/releases/download/v0.10.0/sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz && \
+    tar -xzf sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz && \
+    mv sccache-v0.10.0-x86_64-unknown-linux-musl/sccache /usr/local/cargo/bin/sccache && \
+    rm -rf sccache-v0.10.0-x86_64-unknown-linux-musl sccache-v0.10.0-x86_64-unknown-linux-musl.tar.gz && \
+    chmod +x /usr/local/cargo/bin/sccache; \
+    fi
+ENV SCCACHE_GCS_BUCKET=$SCCACHE_GCS_BUCKET
+ENV SCCACHE_GCS_KEY_PREFIX=$SCCACHE_GCS_KEY_PREFIX
+ENV SCCACHE_GCS_RW_MODE=READ_WRITE
+ENV SCCACHE_BUCKET=$SCCACHE_BUCKET
+ENV SCCACHE_S3_KEY_PREFIX=$SCCACHE_S3_KEY_PREFIX
+ENV SCCACHE_REGION=$SCCACHE_REGION
+ENV SCCACHE_ENDPOINT=$SCCACHE_ENDPOINT
+ENV SCCACHE_S3_USE_SSL=$SCCACHE_S3_USE_SSL
+
+WORKDIR /build
+
+COPY rust-toolchain.toml ./
+COPY .cargo/config.toml .cargo/config.toml
+COPY Cargo.toml Cargo.lock ./
+COPY pkg ./pkg
+
+# The workspace lists the react-native rust bridge as a member; it is not part
+# of this binary's dependency closure and its sources are outside the copied
+# context, so drop it from the member list.
+RUN sed 's|, "app/packages/react-native-rust-bridge/cpp/rustbridge"||g' Cargo.toml > Cargo.toml.tmp \
+    && mv Cargo.toml.tmp Cargo.toml
+
+# Ensure the toolchain specified in rust-toolchain.toml is installed
+RUN rustup show
+
+RUN --mount=type=secret,id=gcs_sa_key_base64,required=false \
+    --mount=type=secret,id=aws_access_key_id,required=false \
+    --mount=type=secret,id=aws_secret_access_key,required=false \
+    if [ -n "$SCCACHE_BUCKET" ] && [ -n "$SCCACHE_ENDPOINT" ] && [ -f /run/secrets/aws_access_key_id ] && [ -f /run/secrets/aws_secret_access_key ]; then \
+    echo "Using sccache with S3"; \
+    AWS_ACCESS_KEY_ID="$(cat /run/secrets/aws_access_key_id)" \
+    AWS_SECRET_ACCESS_KEY="$(cat /run/secrets/aws_secret_access_key)" \
+    RUSTC_WRAPPER=/usr/local/cargo/bin/sccache cargo build --release -p payy-auth-api-bin; \
+    elif [ -n "$SCCACHE_GCS_BUCKET" ] && [ -f /run/secrets/gcs_sa_key_base64 ]; then \
+    echo "Using sccache with GCS"; \
+    base64 -d /run/secrets/gcs_sa_key_base64 > /tmp/sccache-gcs-key.json && \
+    SCCACHE_GCS_KEY_PATH=/tmp/sccache-gcs-key.json \
+    RUSTC_WRAPPER=/usr/local/cargo/bin/sccache cargo build --release -p payy-auth-api-bin && \
+    rm -f /tmp/sccache-gcs-key.json; \
+    else \
+    echo "Skipping sccache (missing required vars)"; \
+    cargo build --release -p payy-auth-api-bin; \
+    fi
+
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN adduser --disabled-password --gecos "" --uid 1001 payy
+
+# Wallet storage mount point; first use of a named volume copies this
+# ownership so the non-root user can write.
+RUN install -d -o payy -g payy /data
+
+COPY --from=builder /build/target/release/payy-auth-api-bin /usr/local/bin/payy-auth-api-bin
+
+USER payy
+
+EXPOSE 8787
+
+CMD ["payy-auth-api-bin"]

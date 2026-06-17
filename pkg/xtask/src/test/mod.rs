@@ -1,9 +1,5 @@
-mod changes;
-mod graph;
-mod metadata;
 mod workspace;
 
-use std::collections::BTreeSet;
 use std::process::Command;
 
 use clap::Args;
@@ -12,10 +8,12 @@ use contextful::ResultContextExt;
 use crate::error::{Result, XTaskError, workspace_root};
 use crate::git::collect_changed_files;
 
-use crate::test::changes::{ChangedCrates, determine_changed_crates, sorted_list};
-use crate::test::graph::DependencyGraph;
-use crate::test::metadata::{Metadata, load_metadata};
+use crate::cargo_metadata::{Metadata, load_workspace_metadata};
 use crate::test::workspace::{CompiledWorkspace, compile_package_tests};
+use crate::workspace_changes::{
+    ChangedCrates, DependencyGraph, RootManifestBehavior, calculate_affected_crates,
+    determine_changed_crates, sorted_list,
+};
 
 fn prepare_execution_order(
     graph: &DependencyGraph,
@@ -29,29 +27,19 @@ fn prepare_execution_order(
         return None;
     }
 
-    let direct_list = sorted_list(&changed.direct);
+    let affected = calculate_affected_crates(graph, &changed.direct);
+    let direct_list = sorted_list(&affected.direct);
     println!("Changed crates: {}", direct_list.join(", "));
 
-    let affected = graph::calculate_affected_crates(graph, &changed.direct)
-        .into_iter()
-        .collect::<BTreeSet<String>>();
-    let additional = affected
-        .iter()
-        .filter(|crate_name| !changed.direct.contains(*crate_name))
-        .cloned()
-        .collect::<BTreeSet<String>>();
-
-    if !additional.is_empty() {
-        let additional_list = sorted_list(&additional);
+    if !affected.additional.is_empty() {
+        let additional_list = sorted_list(&affected.additional);
         println!(
             "Transitively affected crates: {}",
             additional_list.join(", ")
         );
     }
 
-    let mut execution_order = direct_list.clone();
-    execution_order.extend(sorted_list(&additional));
-    Some(execution_order)
+    Some(affected.ordered_package_names())
 }
 
 fn run_execution_order(
@@ -135,8 +123,13 @@ pub fn run_test(_args: TestArgs) -> Result<()> {
         return Ok(());
     }
 
-    let metadata = load_metadata(&repo_root)?;
-    let changed = determine_changed_crates(&metadata, &repo_root, &changed_files);
+    let metadata = load_workspace_metadata(&repo_root)?;
+    let changed = determine_changed_crates(
+        &metadata,
+        &repo_root,
+        &changed_files,
+        RootManifestBehavior::TouchesAll,
+    );
 
     if changed.touches_all {
         println!("Detected root manifest change; all workspace crate tests will run");

@@ -15,7 +15,6 @@ borsh = { workspace = true }
 rocksdb = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-workspace-hack.workspace = true
 
 [dev-dependencies]
 tempdir = { workspace = true }

@@ -7,4 +7,3 @@ edition = "2024"
 thiserror = { workspace = true }
 unimock = { workspace = true }
 async-trait = { workspace = true }
-workspace-hack.workspace = true

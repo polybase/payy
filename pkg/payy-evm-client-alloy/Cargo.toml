@@ -9,4 +9,3 @@ async-trait = { workspace = true }
 contextful = { workspace = true }
 payy-evm-client-interface = { workspace = true }
 tokio = { workspace = true }
-workspace-hack.workspace = true

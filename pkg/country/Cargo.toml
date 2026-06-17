@@ -10,7 +10,6 @@ diesel = ["dep:diesel"]
 serde = { workspace = true }
 strum_macros = { workspace = true }
 strum = { workspace = true }
-workspace-hack.workspace = true
 
 diesel = { workspace = true, optional = true }
 

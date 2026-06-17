@@ -9,4 +9,3 @@ contextful = { workspace = true }
 payy-evm-client-interface = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
-workspace-hack.workspace = true

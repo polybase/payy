@@ -18,4 +18,3 @@ tokio = { workspace = true }
 tower = { workspace = true, features = ["util"] }
 unimock = { workspace = true }
 url = { workspace = true }
-workspace-hack.workspace = true

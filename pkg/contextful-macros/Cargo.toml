@@ -12,4 +12,3 @@ proc-macro = true
 [dependencies]
 quote = { workspace = true }
 syn = { workspace = true, features = ["full"] }
-workspace-hack.workspace = true

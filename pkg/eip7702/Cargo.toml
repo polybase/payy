@@ -20,7 +20,6 @@ hex = { workspace = true }
 test-spy = { workspace = true }
 tracing = { workspace = true }
 client-http = { workspace = true }
-workspace-hack.workspace = true
 
 [dev-dependencies]
 testutil = { workspace = true }

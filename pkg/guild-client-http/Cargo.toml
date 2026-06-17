@@ -24,7 +24,6 @@ reqwest = { workspace = true }
 parking_lot = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
-workspace-hack.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros"] }

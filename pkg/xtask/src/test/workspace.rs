@@ -7,7 +7,7 @@ use serde::Deserialize;
 
 use crate::error::{Result, XTaskError};
 
-use crate::test::metadata::Metadata;
+use crate::cargo_metadata::Metadata;
 
 pub struct CompiledWorkspace {
     test_binaries: HashMap<String, Vec<TestBinary>>,

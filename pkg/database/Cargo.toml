@@ -9,7 +9,6 @@ diesel = ["dep:diesel"]
 
 [dependencies]
 diesel = { workspace = true, optional = true, features = ["postgres"] }
-workspace-hack.workspace = true
 
 [dev-dependencies]
 contextful = { workspace = true }

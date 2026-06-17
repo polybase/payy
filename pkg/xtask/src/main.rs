@@ -1,3 +1,4 @@
+mod cargo_metadata;
 mod error;
 mod git;
 mod lint;
@@ -5,6 +6,7 @@ mod noir_fixtures;
 mod revi;
 mod setup;
 mod test;
+mod workspace_changes;
 
 use clap::{Parser, Subcommand};
 

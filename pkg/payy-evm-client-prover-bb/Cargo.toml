@@ -10,7 +10,6 @@ contextful = { workspace = true }
 element = { workspace = true }
 payy-evm-client-prover-interface = { workspace = true }
 zk-circuits = { workspace = true }
-workspace-hack.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true }

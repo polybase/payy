@@ -32,7 +32,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 zk-circuits = { workspace = true }
 zk-primitives = { workspace = true }
-workspace-hack.workspace = true
 
 [features]
 default = ["bb-cli"]

@@ -361,17 +361,13 @@ cargo test integration_test
 docker build -f ./docker/Dockerfile.node --target tester .
 ```
 
-### Workspace hack crate
+### Workspace dependencies
 
-We use [`cargo-hakari`](https://docs.rs/cargo-hakari) to keep a unified `workspace-hack` crate in sync across all `Cargo.toml` files. Run the following after adding or modifying workspace dependencies and before opening a pull request:
-
-```
-cargo hakari generate
-cargo hakari manage-deps --yes
-```
-
-The `Rust / Hakari Check` GitHub workflow enforces that the crate stays synchronized; if it fails, re-run the commands above and commit the resulting changes.
-The main `Test` workflow also verifies `Cargo.lock` during its clippy run by adding `--locked` to `cargo hack clippy`; if that check reports that the lockfile needs updates, regenerate and commit `Cargo.lock` before retrying CI.
+Workspace crates should inherit shared dependencies from the root
+`[workspace.dependencies]` table. Run `cargo xtask lint` after changing
+manifests; it validates workspace dependency inheritance across Cargo workspace
+members. CI runs `cargo run --locked --bin xtask -q -- lint --check`, which
+rejects stale `Cargo.lock` state during clippy.
 
 ## Contributing
 

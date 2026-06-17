@@ -11,4 +11,3 @@ serde_json = { workspace = true }
 syn = { workspace = true, features = ["full"] }
 quote = { workspace = true }
 proc-macro2 = { workspace = true }
-workspace-hack.workspace = true

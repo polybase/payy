@@ -8,4 +8,3 @@ element = { workspace = true }
 sha3 = { workspace = true }
 secp256k1 = { workspace = true }
 ethereum-types = { workspace = true }
-workspace-hack.workspace = true

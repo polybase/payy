@@ -9,4 +9,3 @@ barretenberg-interface = { workspace = true }
 thiserror = { workspace = true }
 primitives = { workspace = true }
 serde = { workspace = true }
-workspace-hack.workspace = true

@@ -14,7 +14,6 @@ rand = { workspace = true, optional = true }
 serde = { workspace = true, optional = true, features = ["derive"] }
 borsh = { workspace = true, optional = true }
 ts-rs = { workspace = true, optional = true }
-workspace-hack.workspace = true
 
 [dev-dependencies]
 test-strategy = { workspace = true }

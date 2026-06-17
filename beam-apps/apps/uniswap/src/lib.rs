@@ -94,12 +94,21 @@ fn run_guest(input_ptr: *const u8, input_len: usize) -> Result<Value> {
 }
 
 fn run_swap(invocation: GuestInvocation) -> Result<ActionPlan> {
+    let debug_enabled = invocation.metadata.debug;
+    debug(debug_enabled, "swap:start");
     let args = SwapArgs::parse(&invocation.args)?;
+    debug(debug_enabled, "swap:args:parsed");
     let chain = invocation.metadata.chain.clone();
     let wallet = invocation.metadata.wallet.clone();
+    debug(debug_enabled, "swap:recipient:resolve");
     let recipient = host::resolve_address(args.recipient.as_deref())?;
+    debug(debug_enabled, "swap:recipient:resolved");
+    debug(debug_enabled, "swap:sell-token:metadata");
     let sell = host::token_metadata(&chain, &args.sell_token)?;
+    debug(debug_enabled, "swap:sell-token:metadata-loaded");
+    debug(debug_enabled, "swap:buy-token:metadata");
     let buy = host::token_metadata(&chain, &args.buy_token)?;
+    debug(debug_enabled, "swap:buy-token:metadata-loaded");
     let amount_raw = amount_to_raw(&args.amount, sell.decimals)?;
     let min_receive_raw = args
         .min_receive
@@ -115,37 +124,53 @@ fn run_swap(invocation: GuestInvocation) -> Result<ActionPlan> {
         token_out: buy.address.clone(),
         wallet: wallet.clone(),
     };
-    let quote = parse_quote(
-        host::http_json(
-            "POST",
-            "https://trade-api.gateway.uniswap.org/v1/quote",
-            &quote_payload(&quote_request),
-        )?,
-        &quote_request,
+    debug(debug_enabled, "swap:quote:request");
+    let quote_value = host::http_json(
+        "POST",
+        "https://trade-api.gateway.uniswap.org/v1/quote",
+        &quote_payload(&quote_request),
     )?;
+    debug(debug_enabled, "swap:quote:response");
+    let quote = parse_quote(quote_value, &quote_request)?;
+    debug(debug_enabled, "swap:quote:parsed");
     let approval = if sell.is_native {
+        debug(debug_enabled, "swap:approval:skipped-native-token");
         None
     } else {
+        debug(debug_enabled, "swap:approval:request");
         let value = host::http_json(
             "POST",
             "https://trade-api.gateway.uniswap.org/v1/check_approval",
             &check_approval_payload(&quote_request),
         )?;
+        debug(debug_enabled, "swap:approval:response");
         Some(ApprovalResponse {
             transaction: find_transaction(&value),
         })
     };
-    let allowance = approval
+    let allowance = match approval
         .as_ref()
         .and_then(|approval| approval.transaction.as_ref())
         .and_then(|transaction| approval_spender(&transaction.data))
-        .map(|spender| host::allowance(&chain, &sell.address, &spender))
-        .transpose()?;
+    {
+        Some(spender) => {
+            debug(debug_enabled, "swap:allowance:request");
+            let allowance = host::allowance(&chain, &sell.address, &spender)?;
+            debug(debug_enabled, "swap:allowance:response");
+            Some(allowance)
+        }
+        None => {
+            debug(debug_enabled, "swap:allowance:skipped");
+            None
+        }
+    };
+    debug(debug_enabled, "swap:swap:request");
     let swap_value = host::http_json(
         "POST",
         "https://trade-api.gateway.uniswap.org/v1/swap",
         &swap_payload(&quote, &wallet),
     )?;
+    debug(debug_enabled, "swap:swap:response");
     let mut swap = SwapResponse {
         transaction: find_transaction(&swap_value).ok_or_else(|| {
             Error::InvalidUniswapResponse {
@@ -154,7 +179,9 @@ fn run_swap(invocation: GuestInvocation) -> Result<ActionPlan> {
         })?,
         raw: swap_value,
     };
+    debug(debug_enabled, "swap:transaction:parsed");
     if swap.transaction.gas_limit.is_none() || swap.transaction.gas_price.is_none() {
+        debug(debug_enabled, "swap:gas:request");
         let (gas_limit, gas_price) = host::gas(
             &chain,
             &swap.transaction.to,
@@ -163,10 +190,17 @@ fn run_swap(invocation: GuestInvocation) -> Result<ActionPlan> {
         )?;
         swap.transaction.gas_limit = swap.transaction.gas_limit.or(gas_limit);
         swap.transaction.gas_price = swap.transaction.gas_price.or(Some(gas_price));
+        debug(debug_enabled, "swap:gas:response");
     }
-    simulate_best_effort(&chain, approval.as_ref(), &swap);
+    debug(debug_enabled, "swap:simulation:start");
+    simulate_best_effort(debug_enabled, &chain, approval.as_ref(), &swap);
+    debug(debug_enabled, "swap:simulation:complete");
+    debug(debug_enabled, "swap:balance:request");
+    let sell_balance = host::balance(&chain, &sell.address)?;
+    debug(debug_enabled, "swap:balance:response");
 
-    build_swap_plan(SwapPlanInput {
+    debug(debug_enabled, "swap:plan:build");
+    let plan = build_swap_plan(SwapPlanInput {
         allowance,
         amount_raw,
         args,
@@ -175,18 +209,27 @@ fn run_swap(invocation: GuestInvocation) -> Result<ActionPlan> {
         expires_at: invocation.metadata.now,
         min_receive_raw,
         quote,
-        sell_balance: host::balance(&chain, &sell.address)?,
+        sell_balance,
         sell,
         approval,
         swap,
-    })
+    })?;
+    debug(debug_enabled, "swap:plan:built");
+
+    Ok(plan)
 }
 
-fn simulate_best_effort(chain: &str, approval: Option<&ApprovalResponse>, swap: &SwapResponse) {
+fn simulate_best_effort(
+    debug_enabled: bool,
+    chain: &str,
+    approval: Option<&ApprovalResponse>,
+    swap: &SwapResponse,
+) {
     if let Some(transaction) = approval
         .and_then(|approval| approval.transaction.as_ref())
         .filter(|transaction| approval_spender(&transaction.data).is_some())
     {
+        debug(debug_enabled, "swap:simulation:approval:request");
         let spender = approval_spender(&transaction.data);
         if let Err(err) = host::simulate(
             chain,
@@ -196,8 +239,11 @@ fn simulate_best_effort(chain: &str, approval: Option<&ApprovalResponse>, swap: 
             spender.as_deref(),
         ) {
             let _ = host::diagnostic("warn", &format!("approval simulation skipped: {err}"));
+        } else {
+            debug(debug_enabled, "swap:simulation:approval:response");
         }
     }
+    debug(debug_enabled, "swap:simulation:swap:request");
     if let Err(err) = host::simulate(
         chain,
         &swap.transaction.to,
@@ -206,6 +252,14 @@ fn simulate_best_effort(chain: &str, approval: Option<&ApprovalResponse>, swap: 
         None,
     ) {
         let _ = host::diagnostic("warn", &format!("swap simulation skipped: {err}"));
+    } else {
+        debug(debug_enabled, "swap:simulation:swap:response");
+    }
+}
+
+fn debug(enabled: bool, message: &str) {
+    if enabled {
+        let _ = host::diagnostic("debug", message);
     }
 }
 

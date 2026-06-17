@@ -5,6 +5,7 @@ use crate::{Error, Result, selector};
 
 const HOST_API_VERSION: u32 = 1;
 const HOST_RESPONSE_CAPACITY: usize = 2 * 1024 * 1024;
+const MAX_ERROR_BODY_CHARS: usize = 500;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanContext {
@@ -38,6 +39,8 @@ pub struct HostMetadata {
     pub app_version: String,
     pub chain: String,
     pub chain_id: u64,
+    #[serde(default)]
+    pub debug: bool,
     pub host_api_version: u32,
     pub manifest_sha256: String,
     pub now: u64,
@@ -231,8 +234,16 @@ pub fn http_json(method: &str, url: &str, value: &Value) -> Result<Value> {
                 value: "application/json".to_string(),
             },
             HttpHeader {
+                name: "accept".to_string(),
+                value: "application/json".to_string(),
+            },
+            HttpHeader {
                 name: "x-api-key".to_string(),
                 value: crate::public_api_key().to_string(),
+            },
+            HttpHeader {
+                name: "x-permit2-disabled".to_string(),
+                value: "true".to_string(),
             },
         ],
         body,
@@ -243,13 +254,27 @@ pub fn http_json(method: &str, url: &str, value: &Value) -> Result<Value> {
         }
     })?;
     if !(200..300).contains(&response.status) {
+        let detail = error_body(&response.body)
+            .map(|body| format!(": {body}"))
+            .unwrap_or_default();
         return Err(Error::HostCallFailed {
-            message: format!("{} returned status {}", response.url, response.status),
+            message: format!(
+                "{} returned status {}{}",
+                response.url, response.status, detail
+            ),
         });
     }
     serde_json::from_slice(&response.body).map_err(|err| Error::InvalidHostResponse {
         reason: err.to_string(),
     })
+}
+
+fn error_body(body: &[u8]) -> Option<String> {
+    let body = core::str::from_utf8(body).ok()?.trim();
+    if body.is_empty() {
+        return None;
+    }
+    Some(body.chars().take(MAX_ERROR_BODY_CHARS).collect())
 }
 
 pub fn resolve_address(value: Option<&str>) -> Result<String> {

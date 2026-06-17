@@ -8,4 +8,3 @@ edition = "2024"
 thiserror = { workspace = true }
 crypto_secretbox = { workspace = true }
 x25519-dalek = { workspace = true }
-workspace-hack.workspace = true

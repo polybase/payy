@@ -9,4 +9,3 @@ element = { workspace = true }
 payy-evm-client-interface = { workspace = true }
 sha3 = { workspace = true }
 zk-primitives = { workspace = true }
-workspace-hack.workspace = true

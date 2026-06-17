@@ -16,6 +16,8 @@ use crate::{
     runtime::BeamApp,
 };
 
+use super::debug::{app_debug, app_debug_enabled, host_request_summary, host_value_summary};
+
 const MAX_WASM_MEMORY_BYTES: usize = 64 * 1024 * 1024;
 
 pub(super) struct HostState {
@@ -24,11 +26,17 @@ pub(super) struct HostState {
     pub(super) limits: StoreLimits,
     metadata: Option<HostMetadata>,
     permissions: Option<AppPermissions>,
+    runtime_handle: Option<Handle>,
     structured_output: Option<Value>,
 }
 
 impl HostState {
-    pub(super) fn new(app: BeamApp, permissions: AppPermissions, metadata: HostMetadata) -> Self {
+    pub(super) fn new(
+        app: BeamApp,
+        permissions: AppPermissions,
+        metadata: HostMetadata,
+        runtime_handle: Handle,
+    ) -> Self {
         Self {
             app: Some(app),
             diagnostics: Vec::new(),
@@ -37,6 +45,7 @@ impl HostState {
                 .build(),
             metadata: Some(metadata),
             permissions: Some(permissions),
+            runtime_handle: Some(runtime_handle),
             structured_output: None,
         }
     }
@@ -50,6 +59,7 @@ impl HostState {
                 .build(),
             metadata: None,
             permissions: None,
+            runtime_handle: None,
             structured_output: None,
         }
     }
@@ -148,6 +158,10 @@ fn host_call(
         .context("read beam app host request")?;
     let request = serde_json::from_slice::<HostRequest>(&request_bytes)
         .context("decode beam app host request")?;
+    let request_summary = app_debug_enabled().then(|| host_request_summary(&request));
+    if let Some(summary) = &request_summary {
+        app_debug(&format!("host call start {summary}"));
+    }
     let app = caller
         .data()
         .app
@@ -172,18 +186,33 @@ fn host_call(
         })?;
     let mut structured_output = caller.data().structured_output.clone();
     let mut diagnostics = caller.data().diagnostics.clone();
-    let result = tokio::task::block_in_place(|| {
-        Handle::current().block_on(handle_host_request(
-            &app,
-            &permissions,
-            &metadata,
-            request,
-            &mut structured_output,
-            &mut diagnostics,
-        ))
-    });
+    let runtime_handle =
+        caller
+            .data()
+            .runtime_handle
+            .clone()
+            .ok_or_else(|| Error::InvalidHostRequest {
+                reason: "host runtime handle missing".to_string(),
+            })?;
+    let result = runtime_handle.block_on(handle_host_request(
+        &app,
+        &permissions,
+        &metadata,
+        request,
+        &mut structured_output,
+        &mut diagnostics,
+    ));
     caller.data_mut().structured_output = structured_output;
     caller.data_mut().diagnostics = diagnostics;
+    if let Some(summary) = &request_summary {
+        match &result {
+            Ok(value) => app_debug(&format!(
+                "host call ok {summary}; {}",
+                host_value_summary(value)
+            )),
+            Err(error) => app_debug(&format!("host call error {summary}; {error}")),
+        }
+    }
     let response = match result {
         Ok(value) => HostCallResponse::ok(value),
         Err(error) => HostCallResponse::error(format_error_chain(&error)),

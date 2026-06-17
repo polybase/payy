@@ -11,19 +11,27 @@ use crate::error::{Result, XTaskError};
 pub struct Metadata {
     packages: HashMap<String, Package>,
     workspace_members: Vec<String>,
-    workspace_member_set: HashSet<String>,
-    resolve: HashMap<String, Vec<String>>,
 }
 
 #[derive(Debug)]
 pub struct Package {
     pub name: String,
     manifest_dir_abs: PathBuf,
+    manifest_path_abs: PathBuf,
+    workspace_dependency_ids: Vec<String>,
 }
 
 impl Package {
     pub fn manifest_dir_abs(&self) -> &Path {
         &self.manifest_dir_abs
+    }
+
+    pub fn manifest_path_abs(&self) -> &Path {
+        &self.manifest_path_abs
+    }
+
+    pub fn workspace_dependency_ids(&self) -> &[String] {
+        &self.workspace_dependency_ids
     }
 }
 
@@ -41,29 +49,12 @@ impl Metadata {
     pub fn package_by_name(&self, name: &str) -> Option<&Package> {
         self.packages.values().find(|package| package.name == name)
     }
-
-    pub fn workspace_member_ids(&self) -> &[String] {
-        &self.workspace_members
-    }
-
-    pub fn is_workspace_member(&self, id: &str) -> bool {
-        self.workspace_member_set.contains(id)
-    }
-
-    pub fn dependencies_for(&self, id: &str) -> impl Iterator<Item = &String> {
-        self.resolve
-            .get(id)
-            .map(|deps| deps.iter())
-            .into_iter()
-            .flatten()
-    }
 }
 
 #[derive(Deserialize)]
 struct RawMetadata {
     packages: Vec<RawPackage>,
     workspace_members: Vec<String>,
-    resolve: Option<RawResolve>,
 }
 
 #[derive(Deserialize)]
@@ -71,22 +62,28 @@ struct RawPackage {
     id: String,
     name: String,
     manifest_path: PathBuf,
+    #[serde(default)]
+    dependencies: Vec<RawDependency>,
 }
 
 #[derive(Deserialize)]
-struct RawResolve {
-    nodes: Vec<RawNode>,
+struct RawDependency {
+    path: Option<PathBuf>,
 }
 
-#[derive(Deserialize)]
-struct RawNode {
+struct WorkspaceRawPackage {
     id: String,
-    dependencies: Vec<String>,
+    name: String,
+    manifest_dir_abs: PathBuf,
+    manifest_path_abs: PathBuf,
+    dependencies: Vec<RawDependency>,
 }
 
-pub fn load_metadata(repo_root: &Path) -> Result<Metadata> {
-    let output = Command::new("cargo")
-        .args(["metadata", "--format-version", "1"])
+pub fn load_workspace_metadata(repo_root: &Path) -> Result<Metadata> {
+    let mut command = Command::new("cargo");
+    command.args(["metadata", "--format-version", "1", "--no-deps"]);
+
+    let output = command
         .current_dir(repo_root)
         .output()
         .context("spawn cargo metadata command")?;
@@ -105,7 +102,7 @@ pub fn load_metadata(repo_root: &Path) -> Result<Metadata> {
         .cloned()
         .collect::<HashSet<String>>();
 
-    let mut packages = HashMap::new();
+    let mut raw_workspace_packages = Vec::new();
     for raw_package in raw.packages {
         if !workspace_member_set.contains(&raw_package.id) {
             continue;
@@ -127,32 +124,45 @@ pub fn load_metadata(repo_root: &Path) -> Result<Metadata> {
                 path: manifest_dir_abs.clone(),
             })?;
 
+        raw_workspace_packages.push(WorkspaceRawPackage {
+            id: raw_package.id,
+            name: raw_package.name,
+            manifest_dir_abs,
+            manifest_path_abs: raw_package.manifest_path,
+            dependencies: raw_package.dependencies,
+        });
+    }
+
+    let package_id_by_manifest_dir = raw_workspace_packages
+        .iter()
+        .map(|package| (package.manifest_dir_abs.clone(), package.id.clone()))
+        .collect::<HashMap<_, _>>();
+
+    let mut packages = HashMap::new();
+    for raw_package in raw_workspace_packages {
+        let workspace_dependency_ids = raw_package
+            .dependencies
+            .iter()
+            .filter_map(|dependency| dependency.path.as_ref())
+            .filter_map(|path| package_id_by_manifest_dir.get(path))
+            .cloned()
+            .collect::<Vec<_>>();
+
         packages.insert(
             raw_package.id.clone(),
             Package {
                 name: raw_package.name,
-                manifest_dir_abs,
+                manifest_dir_abs: raw_package.manifest_dir_abs,
+                manifest_path_abs: raw_package.manifest_path_abs,
+                workspace_dependency_ids,
             },
         );
     }
-
-    let resolve_nodes = raw
-        .resolve
-        .map(|resolve| {
-            resolve
-                .nodes
-                .into_iter()
-                .map(|node| (node.id, node.dependencies))
-                .collect()
-        })
-        .unwrap_or_default();
 
     let workspace_members = raw.workspace_members;
 
     Ok(Metadata {
         packages,
         workspace_members,
-        workspace_member_set,
-        resolve: resolve_nodes,
     })
 }

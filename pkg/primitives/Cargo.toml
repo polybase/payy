@@ -25,11 +25,13 @@ web3 = { workspace = true }
 futures = { workspace = true }
 thiserror = { workspace = true }
 diesel = { workspace = true, optional = true }
-workspace-hack.workspace = true
 
 [dependencies.ts-rs]
 workspace = true
 optional = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "test-util", "time"] }
 
 [features]
 ts-rs = ["dep:ts-rs"]

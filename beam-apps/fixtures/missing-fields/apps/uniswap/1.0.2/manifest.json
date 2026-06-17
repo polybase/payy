@@ -7,7 +7,7 @@
   "description": "Prepare public Uniswap swaps through Beam-mediated HTTP, chain, approval, and transaction planning.",
   "min_beam_version": "0.2.1",
   "wasm": {
-    "sha256": "sha256:18aa6e8845772beccef895e83bbf2d1f3783d24fbf0fb8feee75d1eacfa1a7f9",
+    "sha256": "sha256:58c5dbc8343f5281392269b72e0193b2c39f6a4b36942df1bea464699a36cdc2",
     "entrypoint": "beam_app_main"
   },
   "catalog": {
@@ -129,6 +129,6 @@
   "signature": {
     "algorithm": "sha256-dev",
     "key_id": "payy-dev-2026-05",
-    "value": "sha256:2baa744c8f1d81ebe4e28aff957d05f1371ed81e22c604ed4fc4a9dabce0c1d8"
+    "value": "sha256:ce538d2a143e48a1d5dd7bd36896f3727f4148e589ddca7d601e6d5b4b5d5f9b"
   }
 }

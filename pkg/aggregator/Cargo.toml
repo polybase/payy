@@ -24,7 +24,6 @@ futures = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
-workspace-hack.workspace = true
 web3 = { workspace = true }
 unimock = { workspace = true }
 

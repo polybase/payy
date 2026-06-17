@@ -1,4 +1,5 @@
 // lint-long-file-override allow-max-lines=250
+mod file_length;
 mod i18n;
 mod steps;
 
@@ -8,7 +9,7 @@ use clap::{ArgGroup, Args, ValueEnum};
 
 use crate::error::{Result, XTaskError, workspace_root};
 use crate::lint::steps::{
-    StepResult, print_step, run_ast_grep, run_claude_doc, run_clippy, run_file_length, run_hakari,
+    StepResult, print_step, run_ast_grep, run_claude_doc, run_clippy, run_file_length,
     run_i18n_consistency, run_rustfmt, run_spec_lint, run_taplo_check, run_taplo_fmt,
     run_workspace_deps,
 };
@@ -31,8 +32,6 @@ pub enum LinterType {
     FileLength,
     /// Internationalization locale consistency
     I18nConsistency,
-    /// Cargo Hakari workspace-hack consistency
-    Hakari,
     /// Workspace dependency inheritance validator
     WorkspaceDeps,
 }
@@ -65,6 +64,12 @@ impl LintArgs {
 pub enum LintMode {
     AutoFix,
     CheckOnly,
+}
+
+impl LintMode {
+    pub fn is_check_only(self) -> bool {
+        matches!(self, LintMode::CheckOnly)
+    }
 }
 
 pub fn run_lint(args: LintArgs) -> Result<()> {
@@ -136,14 +141,8 @@ fn run_sync_linters(
     run_conditional_linter(
         filters,
         results,
-        LinterType::Hakari,
-        Box::new(|| run_hakari(repo_root, mode)),
-    )?;
-    run_conditional_linter(
-        filters,
-        results,
         LinterType::Clippy,
-        Box::new(|| run_clippy(repo_root)),
+        Box::new(|| run_clippy(repo_root, mode)),
     )?;
 
     Ok(())

@@ -11,9 +11,6 @@ include = [
   "*.toml",
 ]
 
-# Exclude generated workspace hack manifest from formatting
-exclude = ["pkg/workspace-hack/Cargo.toml"]
-
 # Global formatting rules
 [formatting]
 # Don't align entries (key = value) to the same column

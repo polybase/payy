@@ -10,4 +10,3 @@ tempfile = { workspace = true }
 tracing = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }
-workspace-hack.workspace = true

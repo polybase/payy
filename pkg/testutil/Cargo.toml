@@ -7,4 +7,3 @@ edition = "2024"
 once_cell = { workspace = true }
 reqwest = { workspace = true }
 tokio = { workspace = true }
-workspace-hack.workspace = true

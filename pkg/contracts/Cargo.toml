@@ -22,7 +22,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 web3 = { workspace = true }
 tracing = { workspace = true }
-workspace-hack.workspace = true
 
 [dev-dependencies]
 zk-circuits = { workspace = true }

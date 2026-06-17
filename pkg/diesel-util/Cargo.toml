@@ -8,4 +8,3 @@ diesel = ["dep:diesel"]
 
 [dependencies]
 diesel = { workspace = true, optional = true }
-workspace-hack.workspace = true
