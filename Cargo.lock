@@ -361,6 +361,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "aggregator-cli"
+version = "0.1.0"
+dependencies = [
+ "aggregator",
+ "aggregator-interface",
+ "async-fn-stream",
+ "async-trait",
+ "barretenberg-api-client",
+ "barretenberg-cli",
+ "barretenberg-interface",
+ "clap",
+ "contextful",
+ "contracts",
+ "element",
+ "futures",
+ "node-client-http",
+ "node-interface",
+ "primitives",
+ "rpc",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "unimock",
+ "url",
+ "zk-circuits",
+ "zk-primitives",
+]
+
+[[package]]
 name = "aggregator-interface"
 version = "0.1.0"
 dependencies = [
@@ -1476,6 +1505,17 @@ dependencies = [
  "concurrent-queue",
  "event-listener 2.5.3",
  "futures-core",
+]
+
+[[package]]
+name = "async-fn-stream"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d4ba0c4baf81a0d8ab31618ffa3ae29ceeb970a6d0d82f76130753462e39d0ea"
+dependencies = [
+ "futures-util",
+ "pin-project-lite",
+ "smallvec",
 ]
 
 [[package]]
