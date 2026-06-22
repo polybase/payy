@@ -1,0 +1,32 @@
+[package]
+name = "aggregator-cli"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+aggregator = { workspace = true }
+aggregator-interface = { workspace = true }
+barretenberg-api-client = { workspace = true }
+barretenberg-cli = { workspace = true }
+barretenberg-interface = { workspace = true }
+node-client-http = { workspace = true }
+node-interface = { workspace = true }
+contracts = { workspace = true }
+primitives = { workspace = true }
+element = { workspace = true }
+zk-circuits = { workspace = true }
+clap = { workspace = true }
+contextful = { workspace = true }
+async-fn-stream = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal"] }
+tracing = { workspace = true }
+rpc = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+unimock = { workspace = true }
+zk-primitives = { workspace = true }
