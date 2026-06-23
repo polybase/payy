@@ -1,14 +1,14 @@
 // lint-long-file-override allow-max-lines=400
+mod fees;
 mod gas;
 
 use contextful::ResultContextExt;
 use contracts::{Address, Client, ERC20Contract, U256};
 use web3::{
     ethabi::{Function, StateMutability},
-    types::{Bytes, CallRequest, TransactionParameters, TransactionReceipt},
+    types::{Bytes, CallRequest, TransactionParameters, TransactionReceipt, U64},
 };
 
-use self::gas::resolve_transaction_gas;
 pub use crate::units::{format_units, parse_units, validate_unit_decimals};
 use crate::{
     abi::{decode_output, encode_input, parse_function, tokens_to_json},
@@ -16,7 +16,9 @@ use crate::{
     signer::Signer,
     transaction::{TransactionExecution, TransactionStatusUpdate, submit_and_wait},
 };
-pub use gas::{TransactionGas, estimate_function_gas, estimate_native_gas};
+pub use fees::{EvmFeeEstimate, EvmFeeMode};
+pub(crate) use gas::resolve_transaction_gas;
+pub use gas::{TransactionGas, TransactionGasPolicy, estimate_function_gas, estimate_native_gas};
 
 #[derive(Clone, Debug)]
 pub struct CallOutcome {
@@ -44,7 +46,13 @@ pub struct CalldataTransaction {
     pub data: Vec<u8>,
     pub to: Address,
     pub value: U256,
-    pub gas: Option<TransactionGas>,
+    pub gas: Option<TransactionGasPolicy>,
+}
+
+#[derive(Clone, Debug)]
+pub struct CalldataExecution {
+    pub execution: TransactionExecution,
+    pub gas: TransactionGas,
 }
 
 pub async fn native_balance(client: &Client, address: Address) -> Result<U256> {
@@ -164,11 +172,12 @@ pub async fn send_native_with_gas<S: Signer>(
     signer: &S,
     to: Address,
     amount: U256,
-    gas: Option<TransactionGas>,
+    gas: Option<TransactionGasPolicy>,
     on_status: impl FnMut(TransactionStatusUpdate),
     cancel: impl std::future::Future,
 ) -> Result<TransactionExecution> {
-    let tx = prepare_transaction(client, signer.address(), to, Vec::new(), amount, gas).await?;
+    let (tx, _) =
+        prepare_transaction(client, signer.address(), to, Vec::new(), amount, gas).await?;
     submit_transaction(client, signer, tx, on_status, cancel).await
 }
 
@@ -186,12 +195,12 @@ pub async fn send_function_with_gas<S: Signer>(
     client: &Client,
     signer: &S,
     call: FunctionCall<'_>,
-    gas: Option<TransactionGas>,
+    gas: Option<TransactionGasPolicy>,
     on_status: impl FnMut(TransactionStatusUpdate),
     cancel: impl std::future::Future,
 ) -> Result<TransactionExecution> {
     let data = encode_input(call.function, call.args)?;
-    let tx = prepare_transaction(
+    let (tx, _) = prepare_transaction(
         client,
         signer.address(),
         call.contract,
@@ -203,14 +212,14 @@ pub async fn send_function_with_gas<S: Signer>(
     submit_transaction(client, signer, tx, on_status, cancel).await
 }
 
-pub async fn send_calldata_with_gas<S: Signer>(
+pub async fn send_calldata_with_fee_report<S: Signer>(
     client: &Client,
     signer: &S,
     transaction: CalldataTransaction,
     on_status: impl FnMut(TransactionStatusUpdate),
     cancel: impl std::future::Future,
-) -> Result<TransactionExecution> {
-    let tx = prepare_transaction(
+) -> Result<CalldataExecution> {
+    let (tx, gas) = prepare_transaction(
         client,
         signer.address(),
         transaction.to,
@@ -219,7 +228,8 @@ pub async fn send_calldata_with_gas<S: Signer>(
         transaction.gas,
     )
     .await?;
-    submit_transaction(client, signer, tx, on_status, cancel).await
+    let execution = submit_transaction(client, signer, tx, on_status, cancel).await?;
+    Ok(CalldataExecution { execution, gas })
 }
 
 pub async fn simulate_calldata(
@@ -252,10 +262,11 @@ async fn prepare_transaction(
     to: Address,
     data: Vec<u8>,
     value: U256,
-    gas: Option<TransactionGas>,
-) -> Result<TransactionParameters> {
+    gas: Option<TransactionGasPolicy>,
+) -> Result<(TransactionParameters, TransactionGas)> {
     let gas = resolve_transaction_gas(client, from, to, &data, value, gas).await?;
-    fill_transaction(client, from, to, data, value, gas).await
+    let transaction = fill_transaction(client, from, to, data, value, gas).await?;
+    Ok((transaction, gas))
 }
 
 async fn fill_transaction(
@@ -277,12 +288,48 @@ async fn fill_transaction(
         chain_id: Some(chain_id),
         data: Bytes(data),
         gas: gas.gas_limit,
-        gas_price: Some(gas.gas_price),
         nonce: Some(nonce),
         to: Some(to),
         value,
-        ..Default::default()
+        ..transaction_fee_parameters(&gas)
     })
+}
+
+fn transaction_fee_parameters(gas: &TransactionGas) -> TransactionParameters {
+    match &gas.fee {
+        EvmFeeEstimate::Legacy { gas_price } => TransactionParameters {
+            gas_price: Some(*gas_price),
+            ..Default::default()
+        },
+        EvmFeeEstimate::Eip1559 {
+            max_fee_per_gas,
+            max_priority_fee_per_gas,
+        } => TransactionParameters {
+            transaction_type: Some(U64::from(2)),
+            max_fee_per_gas: Some(*max_fee_per_gas),
+            max_priority_fee_per_gas: Some(*max_priority_fee_per_gas),
+            ..Default::default()
+        },
+    }
+}
+
+pub fn transaction_fee_json(gas: &TransactionGas) -> serde_json::Value {
+    match &gas.fee {
+        EvmFeeEstimate::Legacy { gas_price } => serde_json::json!({
+            "fee_mode": "legacy",
+            "gas_price": gas_price.to_string(),
+            "max_network_fee_wei": gas.max_network_fee().to_string(),
+        }),
+        EvmFeeEstimate::Eip1559 {
+            max_fee_per_gas,
+            max_priority_fee_per_gas,
+        } => serde_json::json!({
+            "fee_mode": "eip1559",
+            "max_fee_per_gas": max_fee_per_gas.to_string(),
+            "max_priority_fee_per_gas": max_priority_fee_per_gas.to_string(),
+            "max_network_fee_wei": gas.max_network_fee().to_string(),
+        }),
+    }
 }
 
 async fn submit_transaction<S: Signer>(

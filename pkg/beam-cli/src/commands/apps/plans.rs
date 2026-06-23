@@ -4,7 +4,10 @@ use crate::{
         model::{
             ActionPlan, ActionStep, AppManifest, AppPermissions, ChainOperation, InstalledApp,
         },
-        permissions::ensure_chain_scope,
+        permissions::{
+            ensure_chain_scope_with_dynamic, normalize_dynamic_contracts,
+            validate_dynamic_contracts,
+        },
         store::now,
     },
     error::Result,
@@ -78,10 +81,13 @@ pub(super) fn validate_plan_permissions(
     permissions: &AppPermissions,
     plan: &ActionPlan,
 ) -> Result<()> {
+    validate_dynamic_contracts(&plan.dynamic_contracts, &plan.chain)?;
+    let dynamic_contracts = normalize_dynamic_contracts(&plan.dynamic_contracts);
     for step in &plan.steps {
         if let Some(target) = step.target.as_deref() {
-            ensure_chain_scope(
+            ensure_chain_scope_with_dynamic(
                 permissions,
+                &dynamic_contracts,
                 &plan.chain,
                 operation_for_step(step),
                 Some(target),
@@ -90,8 +96,9 @@ pub(super) fn validate_plan_permissions(
             )?;
         }
         if let Some(selector) = step.selector.as_deref() {
-            ensure_chain_scope(
+            ensure_chain_scope_with_dynamic(
                 permissions,
+                &dynamic_contracts,
                 &plan.chain,
                 operation_for_step(step),
                 None,
@@ -100,8 +107,9 @@ pub(super) fn validate_plan_permissions(
             )?;
         }
         if let Some(spender) = step.spender.as_deref() {
-            ensure_chain_scope(
+            ensure_chain_scope_with_dynamic(
                 permissions,
+                &dynamic_contracts,
                 &plan.chain,
                 operation_for_step(step),
                 None,

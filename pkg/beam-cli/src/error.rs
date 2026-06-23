@@ -1,5 +1,6 @@
-// lint-long-file-override allow-max-lines=400
+// lint-long-file-override allow-max-lines=500
 use contextful::{FromContextful, InternalError};
+use contracts::U256;
 
 use crate::apps::Error as AppError;
 
@@ -322,6 +323,11 @@ pub enum Error {
 
     #[error("[beam-cli] transaction not found: {tx_hash}")]
     TransactionNotFound { tx_hash: String },
+
+    #[error(
+        "[beam-cli] transaction network fee exceeds approved cap: estimated {estimated} wei, cap {cap} wei"
+    )]
+    TransactionFeeCapExceeded { cap: U256, estimated: U256 },
 
     #[error("[beam-cli] block not found: {block}")]
     BlockNotFound { block: String },

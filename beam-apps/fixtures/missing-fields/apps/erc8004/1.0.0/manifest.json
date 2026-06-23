@@ -1,0 +1,79 @@
+{
+  "format_version": 1,
+  "id": "erc8004",
+  "display_name": "ERC-8004",
+  "version": "1.0.0",
+  "publisher": "Payy",
+  "description": "Manage ERC-8004 identity registry agents through Beam app permissions, bounded logs, typed-data signing, and action plans.",
+  "min_beam_version": "0.2.4",
+  "wasm": {
+    "sha256": "sha256:5a67ac5972280c99dd5738eec7bdc57a6beecf90902c43a1bbbeabfb145b7036",
+    "entrypoint": "beam_app_main"
+  },
+  "catalog": {
+    "capability_badges": [
+      "ERC-8004",
+      "Chain read",
+      "Logs",
+      "Onchain TX",
+      "Typed-data signing",
+      "App storage"
+    ]
+  },
+  "permissions": {
+    "http": [
+      {
+        "url": "https://*"
+      }
+    ],
+    "chains": [
+      {
+        "chain": "*",
+        "operations": [
+          "read",
+          "logs",
+          "send-transaction",
+          "sign-typed-data"
+        ],
+        "contracts": [
+          "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432",
+          "0x8004A818BFB912233c491871b3d84c89A494BD9e"
+        ],
+        "selectors": [
+          "0x1aa3a008",
+          "0xf2c298be",
+          "0x0af28bd3",
+          "0x2d1ef5ae",
+          "0x3fddcf19",
+          "0x6352211e",
+          "0xc87b56dd",
+          "0x00339509"
+        ]
+      }
+    ],
+    "wallet": {
+      "read_balances": false,
+      "propose_transactions": true,
+      "erc20_approval": false,
+      "sign_typed_data": true
+    },
+    "storage": {
+      "app_local": true
+    },
+    "privacy": []
+  },
+  "host_api": {
+    "privacy_reserved": true
+  },
+  "icon": {
+    "url": "https://registry.beam.payy.network/apps/erc8004/1.0.0/icon.svg",
+    "sha256": "sha256:16d48252ec062fb0461d9d78f99c104d0f187b6c81de666beb342e88289839a9",
+    "media_type": "image/svg+xml",
+    "alt": "ERC-8004 app icon"
+  },
+  "signature": {
+    "algorithm": "sha256-dev",
+    "key_id": "payy-dev-2026-05",
+    "value": "sha256:c4e03f2cec7deacdd834d09aa0fc3708540cc261d4748f7abb62db1f7ce5b998"
+  }
+}

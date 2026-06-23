@@ -43,6 +43,7 @@ In another shell:
 export BEAM_APP_REGISTRY_URL=http://127.0.0.1:8787
 export BEAM_HOME="$(mktemp -d)"
 cargo run -p beam-cli --bin beam -- apps install uniswap --dry-run
+cargo run -p beam-cli --bin beam -- apps install erc8004 --dry-run
 ```
 
 Set `BEAM_UNISWAP_PUBLIC_API_KEY` before starting `run-local.py` when testing
@@ -65,11 +66,16 @@ the `payy.network` zone.
 
 App source stays separate from Beam core. Product apps live under
 `beam-apps/apps/<app>` and must not path-depend on `pkg/*` crates or inherit root
-workspace dependencies. The Uniswap app is its own Rust workspace; CI installs
-`wasm32-unknown-unknown`, injects the Payy-managed public Uniswap API key from
-the `BEAM_UNISWAP_PUBLIC_API_KEY` GitHub secret, builds its release WASM,
-verifies the generated registry bundle, and bakes only the signed static bundle
-into the registry image.
+workspace dependencies. The Uniswap and ERC-8004 apps are independent Rust
+workspaces; CI installs `wasm32-unknown-unknown`, injects the Payy-managed public
+Uniswap API key from the `BEAM_UNISWAP_PUBLIC_API_KEY` GitHub secret, builds
+release WASM for every app, verifies the generated registry bundle, and bakes
+only the signed static bundle into the registry image.
+
+ERC-8004 agent identity management ships as the `erc8004` registry app. Beam CLI
+provides only generic app-host capabilities for it: bounded `eth_getLogs`, chain
+calls, invocation-scoped contract overrides, typed-data signing, and approved
+action-plan execution.
 
 Until a shared app SDK crate is published, product apps may vendor app-local host
 ABI structs. Beam CLI remains the generic host/runtime and must not contain

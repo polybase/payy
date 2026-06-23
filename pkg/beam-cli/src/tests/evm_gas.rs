@@ -36,10 +36,13 @@ async fn function_gas_estimation_encodes_call_without_submission() {
     server.abort();
 
     assert_eq!(gas.gas_limit, U256::from(36_000u64));
-    assert_eq!(gas.gas_price, U256::from(1_100_000_000u64));
+    assert_eq!(gas.gas_price_for_display(), U256::from(3_000_000_000u64));
 
     let calls = calls.lock().expect("rpc calls").clone();
-    assert_eq!(rpc_methods(&calls), vec!["eth_estimateGas", "eth_gasPrice"]);
+    assert_eq!(
+        rpc_methods(&calls),
+        vec!["eth_estimateGas", "eth_chainId", "eth_feeHistory"]
+    );
     let estimate = &calls[0]["params"][0];
     assert_eq!(estimate["from"], Value::String(format!("{from:#x}")));
     assert_eq!(estimate["to"], Value::String(format!("{contract:#x}")));

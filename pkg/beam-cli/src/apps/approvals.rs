@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 
 use crate::apps::{
     Error, Result,
-    model::{ActionPlan, ApprovalRecord, ApprovalStatus, ApprovalsState},
+    model::{ActionPlan, ApprovalFeeCap, ApprovalRecord, ApprovalStatus, ApprovalsState},
     store::now,
 };
 
@@ -32,7 +32,11 @@ impl ApprovalStore {
         self.store.get().await.approvals
     }
 
-    pub async fn create(&self, plan: ActionPlan) -> Result<ApprovalRecord> {
+    pub async fn create(
+        &self,
+        plan: ActionPlan,
+        fee_caps: Vec<ApprovalFeeCap>,
+    ) -> Result<ApprovalRecord> {
         let created_at = now();
         let plan_hash = plan_hash(&plan)?;
         let id = format!("apr_{}", &plan_hash["sha256:".len()..18]);
@@ -41,6 +45,7 @@ impl ApprovalStore {
             status: ApprovalStatus::Pending,
             plan,
             plan_hash,
+            fee_caps,
             created_at,
             updated_at: created_at,
         };

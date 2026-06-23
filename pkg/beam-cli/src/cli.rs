@@ -1,4 +1,4 @@
-// lint-long-file-override allow-max-lines=330
+// lint-long-file-override allow-max-lines=300
 mod apps;
 mod chain;
 mod contract;

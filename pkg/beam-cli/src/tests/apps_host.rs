@@ -8,11 +8,12 @@ use crate::{
         format_error_chain,
         host::{
             ChainReadOperation, ChainReadRequest, HostTransaction, chain_read,
-            ensure_chain_read_allowed, ensure_http_allowed, ensure_transaction_allowed,
+            ensure_app_storage_allowed, ensure_chain_read_allowed, ensure_http_allowed,
+            ensure_transaction_allowed,
         },
         model::{
             ActionBinding, ActionPlan, AppPermissions, ApprovalRecord, ApprovalStatus,
-            ChainOperation, ChainPermission, HttpPermission,
+            ChainOperation, ChainPermission, HttpPermission, StoragePermission,
         },
         store::now,
     },
@@ -57,6 +58,7 @@ fn host_transaction_permissions_enforce_selector_and_spender() {
     let transaction = HostTransaction {
         chain: "base".to_string(),
         data: "0x3593564c".to_string(),
+        dynamic_contracts: Vec::new(),
         selector: Some("0x3593564c".to_string()),
         spender: Some("0xspender".to_string()),
         target: "0xrouter".to_string(),
@@ -88,12 +90,16 @@ fn host_chain_read_permissions_enforce_contract_scope() {
         address: None,
         chain: "base".to_string(),
         data: None,
+        dynamic_contracts: Vec::new(),
+        from_block: None,
         operation: ChainReadOperation::Call,
         owner: None,
         selector: Some("0x70a08231".to_string()),
         spender: None,
         target: Some("0xrouter".to_string()),
         token: None,
+        topics: Vec::new(),
+        to_block: None,
         value: None,
     };
 
@@ -130,12 +136,16 @@ async fn host_token_metadata_resolves_native_symbol_without_rpc() {
             address: None,
             chain: "ethereum".to_string(),
             data: None,
+            dynamic_contracts: Vec::new(),
+            from_block: None,
             operation: ChainReadOperation::TokenMetadata,
             owner: None,
             selector: None,
             spender: None,
             target: Some("eth".to_string()),
             token: Some("eth".to_string()),
+            topics: Vec::new(),
+            to_block: None,
             value: None,
         },
     )
@@ -189,6 +199,7 @@ fn host_transaction_permissions_allow_broad_optional_globs() {
     let transaction = HostTransaction {
         chain: "base".to_string(),
         data: "0xdeadbeef".to_string(),
+        dynamic_contracts: Vec::new(),
         selector: Some("0xdeadbeef".to_string()),
         spender: Some("0xspender".to_string()),
         target: "0xany".to_string(),
@@ -197,6 +208,22 @@ fn host_transaction_permissions_allow_broad_optional_globs() {
 
     ensure_transaction_allowed(&permissions, &transaction, ChainOperation::SendTransaction)
         .expect("omitted optional scopes are broad wildcards");
+}
+
+#[test]
+fn host_storage_permissions_require_app_local_scope() {
+    let permissions = AppPermissions {
+        storage: StoragePermission { app_local: true },
+        ..Default::default()
+    };
+    ensure_app_storage_allowed(&permissions).expect("allow declared storage scope");
+
+    let error = ensure_app_storage_allowed(&AppPermissions::default())
+        .expect_err("reject undeclared storage scope");
+    assert!(matches!(
+        error,
+        apps::Error::StoragePermissionDenied { permission } if permission == "app-local"
+    ));
 }
 
 #[test]
@@ -209,6 +236,7 @@ fn approval_integrity_rejects_tampered_plan() {
         status: ApprovalStatus::Pending,
         plan,
         plan_hash,
+        fee_caps: Vec::new(),
         created_at: now(),
         updated_at: now(),
     };
@@ -258,6 +286,7 @@ fn action_plan() -> ActionPlan {
             },
         ],
         constraints: Vec::new(),
+        dynamic_contracts: Vec::new(),
         expires_at: now() + 60,
     }
 }

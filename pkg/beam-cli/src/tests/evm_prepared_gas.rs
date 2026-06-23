@@ -17,13 +17,13 @@ use web3::{
 use super::fixtures::read_rpc_request;
 use crate::{
     abi::parse_function,
-    evm::{FunctionCall, TransactionGas, send_function_with_gas, send_native_with_gas},
+    evm::{FunctionCall, TransactionGasPolicy, send_function_with_gas, send_native_with_gas},
     signer::KeySigner,
     transaction::TransactionExecution,
 };
 
 #[tokio::test]
-async fn native_transfers_with_prepared_gas_skip_reestimation() {
+async fn native_transfers_with_prepared_gas_skip_gas_limit_reestimation() {
     let (rpc_url, calls, server) = spawn_prepared_gas_rpc_server().await;
     let client = Client::try_new(&rpc_url, None).expect("create client");
     let signer = KeySigner::from_slice(&[7u8; 32]).expect("create signer");
@@ -47,6 +47,8 @@ async fn native_transfers_with_prepared_gas_skip_reestimation() {
     assert_eq!(
         rpc_methods(&calls.lock().expect("rpc calls")),
         vec![
+            "eth_chainId",
+            "eth_feeHistory",
             "eth_getTransactionCount",
             "eth_chainId",
             "eth_sendRawTransaction",
@@ -56,7 +58,7 @@ async fn native_transfers_with_prepared_gas_skip_reestimation() {
 }
 
 #[tokio::test]
-async fn function_calls_with_prepared_gas_skip_reestimation() {
+async fn function_calls_with_prepared_gas_skip_gas_limit_reestimation() {
     let (rpc_url, calls, server) = spawn_prepared_gas_rpc_server().await;
     let client = Client::try_new(&rpc_url, None).expect("create client");
     let signer = KeySigner::from_slice(&[7u8; 32]).expect("create signer");
@@ -90,6 +92,8 @@ async fn function_calls_with_prepared_gas_skip_reestimation() {
     assert_eq!(
         rpc_methods(&calls.lock().expect("rpc calls")),
         vec![
+            "eth_chainId",
+            "eth_feeHistory",
             "eth_getTransactionCount",
             "eth_chainId",
             "eth_sendRawTransaction",
@@ -98,10 +102,10 @@ async fn function_calls_with_prepared_gas_skip_reestimation() {
     );
 }
 
-fn prepared_gas() -> TransactionGas {
-    TransactionGas {
-        gas_limit: U256::from(36_000u64),
-        gas_price: U256::from(1_000_000_000u64),
+fn prepared_gas() -> TransactionGasPolicy {
+    TransactionGasPolicy {
+        gas_limit: Some(U256::from(36_000u64)),
+        max_network_fee: Some(U256::from(1_000_000_000_000_000u64)),
     }
 }
 
@@ -154,6 +158,12 @@ fn rpc_response(request: &Value) -> String {
     let result = match request["method"].as_str().expect("rpc method") {
         "eth_getTransactionCount" => serde_json::to_value(U256::zero()).expect("nonce"),
         "eth_chainId" => serde_json::to_value(U256::one()).expect("chain id"),
+        "eth_feeHistory" => json!({
+            "oldestBlock": "0x1",
+            "baseFeePerGas": ["0x3b9aca00", "0x3b9aca00"],
+            "gasUsedRatio": [0.5],
+            "reward": [["0x3b9aca00"]],
+        }),
         "eth_sendRawTransaction" => serde_json::to_value(H256::from_low_u64_be(7)).expect("hash"),
         "eth_getTransactionReceipt" => serde_json::to_value(successful_receipt()).expect("receipt"),
         other => panic!("unexpected rpc method {other}"),

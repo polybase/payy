@@ -1,8 +1,12 @@
 // lint-long-file-override allow-max-lines=400
+mod args;
 mod execution;
+mod fee_caps;
 mod plans;
 mod prompt;
 mod render;
+#[cfg(test)]
+mod tests;
 
 use std::fs;
 
@@ -22,14 +26,16 @@ use crate::{
         store::AppCache,
         validate::ensure_beam_version,
     },
-    cli::{APP_HELP_ARG, AppApprovalAction, AppInstallArgs, AppRemoveArgs, AppRunArgs, AppsAction},
+    cli::{AppApprovalAction, AppInstallArgs, AppRemoveArgs, AppRunArgs, AppsAction},
     error::Result,
     output::CommandOutput,
     runtime::BeamApp,
     table::render_table,
 };
 
+use args::{filtered_app_args, is_help_requested};
 use execution::execute_plan;
+use fee_caps::{approval_fee_caps, approval_fee_caps_for_execution, max_network_fee_arg};
 use plans::{validate_guest_plan, validate_plan_permissions};
 use prompt::approve_interactively;
 use render::{
@@ -54,6 +60,7 @@ pub async fn run(app: &BeamApp, action: AppsAction) -> Result<()> {
 pub async fn run_app(app: &BeamApp, args: AppRunArgs) -> Result<()> {
     let prepare = args.prepare || args.args.iter().any(|arg| arg == "--prepare");
     let no_prompt = args.no_prompt || args.args.iter().any(|arg| arg == "--no-prompt");
+    let max_network_fee = max_network_fee_arg(args.max_network_fee_wei.as_deref(), &args.args)?;
     let command_args = filtered_app_args(&args.args);
     let cache = AppCache::load(&app.paths.root).await?;
     let (installed, manifest) = cache.active_manifest(&args.app).await?;
@@ -106,10 +113,15 @@ pub async fn run_app(app: &BeamApp, args: AppRunArgs) -> Result<()> {
     validate_guest_plan(app, &manifest, &installed, &command_args, &plan).await?;
     validate_plan_permissions(&manifest.permissions, &plan)?;
     let approval_required = plan_requires_approval(&plan);
+    let fee_caps = if approval_required {
+        approval_fee_caps(app, &plan, max_network_fee).await?
+    } else {
+        Vec::new()
+    };
 
     if prepare {
         let approvals = ApprovalStore::load(&app.paths.root).await?;
-        let approval = approvals.create(plan).await?;
+        let approval = approvals.create(plan, fee_caps).await?;
         return render_approval_created(&approval).print(app.output_mode);
     }
 
@@ -117,32 +129,17 @@ pub async fn run_app(app: &BeamApp, args: AppRunArgs) -> Result<()> {
         if no_prompt {
             return Err(AppError::ApprovalRequired.into());
         }
-        approve_interactively(&render::render_plan(&plan))?;
+        approve_interactively(&render::render_plan_with_fee_caps(&plan, &fee_caps))?;
     }
-    execute_plan(app, &plan).await?.print(app.output_mode)
+    execute_plan(app, &plan, &fee_caps)
+        .await?
+        .print(app.output_mode)
 }
 
 fn plan_requires_approval(plan: &ActionPlan) -> bool {
     plan.steps
         .iter()
         .any(|step| step.kind == "erc20-approval" || step.kind == "transaction")
-}
-
-fn filtered_app_args(args: &[String]) -> Vec<String> {
-    args.iter()
-        .filter(|arg| arg.as_str() != "--prepare" && arg.as_str() != "--no-prompt")
-        .map(|arg| {
-            if arg == APP_HELP_ARG {
-                "--help".to_string()
-            } else {
-                arg.clone()
-            }
-        })
-        .collect()
-}
-
-fn is_help_requested(args: &[String]) -> bool {
-    args.iter().any(|arg| arg == "--help" || arg == "-h")
 }
 
 async fn install(app: &BeamApp, args: AppInstallArgs) -> Result<()> {
@@ -310,12 +307,16 @@ async fn approvals(app: &BeamApp, action: AppApprovalAction) -> Result<()> {
         AppApprovalAction::Approve {
             approval_id,
             execute,
+            max_network_fee_wei,
         } => {
             let approval = store.find(&approval_id).await?;
             if execute {
                 ensure_approval_executable(&approval)?;
                 ensure_approval_matches_active(app, &approval).await?;
-                let output = execute_plan(app, &approval.plan).await?;
+                let fee_caps =
+                    approval_fee_caps_for_execution(app, &approval, max_network_fee_wei.as_deref())
+                        .await?;
+                let output = execute_plan(app, &approval.plan, &fee_caps).await?;
                 store.mark_executed(&approval_id).await?;
                 return output.print(app.output_mode);
             }

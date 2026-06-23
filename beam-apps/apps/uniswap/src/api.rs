@@ -27,7 +27,7 @@ pub struct SwapResponse {
 pub struct UniswapTransaction {
     pub data: String,
     pub gas_limit: Option<String>,
-    pub gas_price: Option<String>,
+    pub gas_price_hint: Option<String>,
     pub to: String,
     pub value: String,
 }
@@ -196,7 +196,7 @@ fn parse_transaction(value: &Value) -> Option<UniswapTransaction> {
     Some(UniswapTransaction {
         data: first_string(value, &["data", "calldata", "input"])?,
         gas_limit: first_string(value, &["gasLimit", "gas"]),
-        gas_price: first_string(value, &["gasPrice", "maxFeePerGas"]),
+        gas_price_hint: first_string(value, &["gasPrice", "maxFeePerGas"]),
         to: first_string(value, &["to", "target"])?,
         value: first_string(value, &["value"]).unwrap_or_else(|| "0".to_string()),
     })

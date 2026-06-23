@@ -180,16 +180,15 @@ fn run_swap(invocation: GuestInvocation) -> Result<ActionPlan> {
         raw: swap_value,
     };
     debug(debug_enabled, "swap:transaction:parsed");
-    if swap.transaction.gas_limit.is_none() || swap.transaction.gas_price.is_none() {
+    if swap.transaction.gas_limit.is_none() {
         debug(debug_enabled, "swap:gas:request");
-        let (gas_limit, gas_price) = host::gas(
+        let (gas_limit, _) = host::gas(
             &chain,
             &swap.transaction.to,
             &swap.transaction.data,
             &swap.transaction.value,
         )?;
         swap.transaction.gas_limit = swap.transaction.gas_limit.or(gas_limit);
-        swap.transaction.gas_price = swap.transaction.gas_price.or(Some(gas_price));
         debug(debug_enabled, "swap:gas:response");
     }
     debug(debug_enabled, "swap:simulation:start");

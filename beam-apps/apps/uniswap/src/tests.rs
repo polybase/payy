@@ -220,6 +220,15 @@ fn builds_approval_and_swap_action_plan() {
         Some("swap-request-1")
     );
     assert_eq!(plan.steps[1].metadata["gas_fee"].as_str(), Some("123"));
+    assert_eq!(
+        plan.steps[1].metadata["uniswap_gas_price_hint"].as_str(),
+        Some("1")
+    );
+    assert_eq!(
+        plan.steps[1].metadata["transaction"]["gas_limit"].as_str(),
+        Some("100000")
+    );
+    assert_eq!(plan.steps[1].metadata["transaction"].get("gas_price"), None);
     assert!(
         plan.bindings
             .iter()
@@ -258,7 +267,7 @@ fn transaction(data: &str) -> UniswapTransaction {
     UniswapTransaction {
         data: data.to_string(),
         gas_limit: Some("100000".to_string()),
-        gas_price: Some("1".to_string()),
+        gas_price_hint: Some("1".to_string()),
         to: "0x2222222222222222222222222222222222222222".to_string(),
         value: "0".to_string(),
     }

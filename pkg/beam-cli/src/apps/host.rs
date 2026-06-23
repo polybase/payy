@@ -1,5 +1,5 @@
-// lint-long-file-override allow-max-lines=700
-use std::{fs, net::IpAddr, path::PathBuf, time::Duration};
+// lint-long-file-override allow-max-lines=800
+use std::{net::IpAddr, time::Duration};
 
 use contextful::ResultContextExt;
 use contracts::{Address, U256};
@@ -14,9 +14,13 @@ use web3::types::{Bytes, CallRequest};
 
 use crate::{
     apps::{
-        Error, Result,
-        model::{AppPermissions, ChainOperation},
-        permissions::{ensure_chain_scope, glob_matches},
+        Error, Result, app_storage, chain_logs,
+        model::{AppPermissions, ChainOperation, DynamicContractScope},
+        permissions::{
+            ensure_chain_scope_with_dynamic, glob_matches, normalize_dynamic_contracts,
+            validate_dynamic_contracts,
+        },
+        typed_data,
     },
     evm::{erc20_allowance, erc20_balance, native_balance, simulate_calldata},
     runtime::{BeamApp, ResolvedToken},
@@ -51,6 +55,7 @@ pub enum HostRequest {
     Diagnostic { level: String, message: String },
     HttpFetch(HttpFetchRequest),
     ChainRead(ChainReadRequest),
+    SignTypedData(TypedDataSignRequest),
     SimulateTransaction(HostTransaction),
     SubmitTransaction(HostTransaction),
     PollReceipt { tx_hash: String },
@@ -119,12 +124,20 @@ pub struct ChainReadRequest {
     #[serde(default)]
     pub data: Option<String>,
     #[serde(default)]
+    pub dynamic_contracts: Vec<DynamicContractScope>,
+    #[serde(default)]
+    pub from_block: Option<u64>,
+    #[serde(default)]
     pub owner: Option<String>,
     #[serde(default)]
     pub spender: Option<String>,
     pub target: Option<String>,
     #[serde(default)]
     pub token: Option<String>,
+    #[serde(default)]
+    pub topics: Vec<Option<Vec<String>>>,
+    #[serde(default)]
+    pub to_block: Option<u64>,
     #[serde(default)]
     pub value: Option<String>,
     pub selector: Option<String>,
@@ -138,6 +151,7 @@ pub enum ChainReadOperation {
     Balance,
     Allowance,
     Call,
+    Logs,
     Nonce,
     Gas,
 }
@@ -146,10 +160,33 @@ pub enum ChainReadOperation {
 pub struct HostTransaction {
     pub chain: String,
     pub data: String,
+    #[serde(default)]
+    pub dynamic_contracts: Vec<DynamicContractScope>,
     pub target: String,
     pub value: String,
     pub selector: Option<String>,
     pub spender: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TypedDataSignRequest {
+    pub chain: String,
+    #[serde(default)]
+    pub dynamic_contracts: Vec<DynamicContractScope>,
+    pub domain_separator: String,
+    #[serde(default)]
+    pub fields: Vec<TypedDataDisplayField>,
+    pub primary_type: String,
+    pub struct_hash: String,
+    pub verifying_contract: String,
+    pub wallet: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TypedDataDisplayField {
+    pub name: String,
+    pub kind: String,
+    pub value: String,
 }
 
 pub async fn handle_host_request(
@@ -176,6 +213,7 @@ pub async fn handle_host_request(
         }
         HostRequest::HttpFetch(request) => Ok(json!(fetch_http(permissions, request).await?)),
         HostRequest::ChainRead(request) => chain_read(app, permissions, request).await,
+        HostRequest::SignTypedData(request) => typed_data::sign(app, permissions, request).await,
         HostRequest::SimulateTransaction(transaction) => {
             let (_, client) = app
                 .active_chain_client()
@@ -209,57 +247,28 @@ pub async fn handle_host_request(
             Ok(json!({ "address": format!("{address:#x}") }))
         }
         HostRequest::AppStorageGet { key } => {
-            let path = app_storage_path(app, &metadata.app_id, &key)?;
-            if !path.exists() {
-                return Ok(json!({ "value": null, "exists": false }));
-            }
-            let value = serde_json::from_slice::<Value>(
-                &fs::read(path).context("read beam app storage value")?,
-            )
-            .context("decode beam app storage value")?;
-            Ok(json!({ "value": value, "exists": true }))
+            ensure_app_storage_allowed(permissions)?;
+            app_storage::get(app, &metadata.app_id, &key)
         }
         HostRequest::AppStorageSet { key, value } => {
-            let path = app_storage_path(app, &metadata.app_id, &key)?;
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent).context("create beam app storage directory")?;
-            }
-            fs::write(
-                path,
-                serde_json::to_vec_pretty(&value).context("encode beam app storage value")?,
-            )
-            .context("write beam app storage value")?;
-            Ok(json!({ "written": true }))
+            ensure_app_storage_allowed(permissions)?;
+            app_storage::set(app, &metadata.app_id, &key, value)
         }
         HostRequest::AppStorageRemove { key } => {
-            let path = app_storage_path(app, &metadata.app_id, &key)?;
-            if path.exists() {
-                fs::remove_file(path).context("remove beam app storage value")?;
-            }
-            Ok(json!({ "removed": true }))
+            ensure_app_storage_allowed(permissions)?;
+            app_storage::remove(app, &metadata.app_id, &key)
         }
     }
 }
 
-fn app_storage_path(app: &BeamApp, app_id: &str, key: &str) -> Result<PathBuf> {
-    if key.is_empty()
-        || key.starts_with('.')
-        || !key
-            .chars()
-            .all(|char| char.is_ascii_alphanumeric() || matches!(char, '-' | '_' | '.'))
-    {
-        return Err(Error::InvalidHostRequest {
-            reason: format!("invalid app storage key {key}"),
-        });
+pub fn ensure_app_storage_allowed(permissions: &AppPermissions) -> Result<()> {
+    if permissions.storage.app_local {
+        return Ok(());
     }
 
-    Ok(app
-        .paths
-        .root
-        .join("apps")
-        .join("data")
-        .join(app_id)
-        .join(key))
+    Err(Error::StoragePermissionDenied {
+        permission: "app-local".to_string(),
+    })
 }
 
 pub fn ensure_http_allowed(permissions: &AppPermissions, url: &str) -> Result<Url> {
@@ -349,10 +358,16 @@ pub fn ensure_chain_read_allowed(
     permissions: &AppPermissions,
     request: &ChainReadRequest,
 ) -> Result<()> {
-    ensure_chain_scope(
+    let operation = match request.operation {
+        ChainReadOperation::Logs => ChainOperation::Logs,
+        _ => ChainOperation::Read,
+    };
+    validate_dynamic_contracts(&request.dynamic_contracts, &request.chain)?;
+    ensure_chain_scope_with_dynamic(
         permissions,
+        &normalize_dynamic_contracts(&request.dynamic_contracts),
         &request.chain,
-        ChainOperation::Read,
+        operation,
         request.target.as_deref(),
         request.selector.as_deref(),
         None,
@@ -463,6 +478,13 @@ pub async fn chain_read(
                 .context("execute beam app chain read call")?;
             Ok(json!({ "raw": format!("0x{}", hex::encode(raw.0)) }))
         }
+        ChainReadOperation::Logs => {
+            let (_, client) = app
+                .active_chain_client()
+                .await
+                .context("connect beam app chain client")?;
+            chain_logs::read(&client, &request).await
+        }
         ChainReadOperation::Nonce => {
             let (_, client) = app
                 .active_chain_client()
@@ -524,8 +546,10 @@ pub fn ensure_transaction_allowed(
     transaction: &HostTransaction,
     operation: ChainOperation,
 ) -> Result<()> {
-    ensure_chain_scope(
+    validate_dynamic_contracts(&transaction.dynamic_contracts, &transaction.chain)?;
+    ensure_chain_scope_with_dynamic(
         permissions,
+        &normalize_dynamic_contracts(&transaction.dynamic_contracts),
         &transaction.chain,
         operation,
         Some(&transaction.target),
@@ -674,13 +698,13 @@ fn is_native_token(token: &str, native_symbol: &str) -> bool {
         || token.eq_ignore_ascii_case("0x0000000000000000000000000000000000000000")
 }
 
-fn parse_hex_data(value: &str) -> Result<Vec<u8>> {
+pub(super) fn parse_hex_data(value: &str) -> Result<Vec<u8>> {
     hex::decode(value.strip_prefix("0x").unwrap_or(value)).map_err(|_| Error::InvalidHostRequest {
         reason: format!("invalid hex data {value}"),
     })
 }
 
-fn parse_host_address(field: &str, value: &str) -> Result<Address> {
+pub(super) fn parse_host_address(field: &str, value: &str) -> Result<Address> {
     value.parse().map_err(|_| Error::InvalidHostRequest {
         reason: format!("invalid {field} address {value}"),
     })

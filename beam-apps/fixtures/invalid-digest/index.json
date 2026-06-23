@@ -3,6 +3,27 @@
   "generated_at": "2026-05-26T00:00:00Z",
   "apps": [
     {
+      "id": "erc8004",
+      "name": "ERC-8004",
+      "publisher": "Payy",
+      "description": "Manage ERC-8004 identity registry agents through Beam app permissions, bounded logs, typed-data signing, and action plans.",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "min_beam_version": "0.2.4",
+          "manifest_url": "https://registry.beam.payy.network/apps/erc8004/1.0.0/manifest.json",
+          "manifest_sha256": "sha256:ddbfd3a3e4c03eb65003a2f44c231d85d22e4a2b9de9173b33894202cb2c3c3a",
+          "module_url": "https://registry.beam.payy.network/apps/erc8004/1.0.0/module.wasm",
+          "module_sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "signature": {
+            "algorithm": "sha256-dev",
+            "key_id": "payy-dev-2026-05",
+            "value": "sha256:baca7450d2f0fac5e7110d6bff85f030295b6acd94f6db994d3f16fca91dc062"
+          }
+        }
+      ]
+    },
+    {
       "id": "uniswap",
       "name": "Uniswap",
       "publisher": "Payy",
@@ -12,13 +33,13 @@
           "version": "1.0.2",
           "min_beam_version": "0.2.1",
           "manifest_url": "https://registry.beam.payy.network/apps/uniswap/1.0.2/manifest.json",
-          "manifest_sha256": "sha256:b3bee997c062dbf20de57c4176a010b3578bf4a5e7c8a57017733bd5a95e2b73",
+          "manifest_sha256": "sha256:36c9fc35b9d855622201146244eeb165e97592cbd333296d7e3f1454f37be545",
           "module_url": "https://registry.beam.payy.network/apps/uniswap/1.0.2/module.wasm",
-          "module_sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "module_sha256": "sha256:a5ca0f4124e59390c0c40c64e2792ae04712f5fdb9accf92fdfa76be8a8702d7",
           "signature": {
             "algorithm": "sha256-dev",
             "key_id": "payy-dev-2026-05",
-            "value": "sha256:447860c5bbc66e4f9b418bb2c67155a5c276812828da8c417a20387882fee0dc"
+            "value": "sha256:29febe94eebd4d2f004cb67449b6c03b7c6c8c41767ecec78e7997adb25536eb"
           }
         }
       ]
@@ -27,6 +48,6 @@
   "signature": {
     "algorithm": "sha256-dev",
     "key_id": "payy-dev-2026-05",
-    "value": "sha256:1d37a1f8f1729015d06f67214042aed05298a44e21bc07c63c266cb19e3f421d"
+    "value": "sha256:325441bbd9c9183309488eee5df775327e36015e356ab793efb9202ebcd1a595"
   }
 }

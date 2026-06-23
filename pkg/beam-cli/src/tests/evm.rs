@@ -1,4 +1,4 @@
-// lint-long-file-override allow-max-lines=300
+// lint-long-file-override allow-max-lines=400
 use std::{
     future::pending,
     sync::{Arc, Mutex},
@@ -103,7 +103,8 @@ async fn native_transfers_estimate_gas_before_submission() {
         methods,
         vec![
             "eth_estimateGas",
-            "eth_gasPrice",
+            "eth_chainId",
+            "eth_feeHistory",
             "eth_getTransactionCount",
             "eth_chainId",
             "eth_sendRawTransaction",
@@ -163,22 +164,23 @@ async fn native_transfers_return_pending_hash_when_wait_is_cancelled() {
     let calls = calls.lock().expect("rpc calls").clone();
     let methods = rpc_methods(&calls);
     assert_eq!(
-        &methods[..5],
+        &methods[..6],
         &[
             "eth_estimateGas",
-            "eth_gasPrice",
+            "eth_chainId",
+            "eth_feeHistory",
             "eth_getTransactionCount",
             "eth_chainId",
             "eth_sendRawTransaction",
         ]
     );
-    if methods.len() == 7 {
+    if methods.len() == 8 {
         assert_eq!(
-            &methods[5..],
+            &methods[6..],
             &["eth_getTransactionReceipt", "eth_getTransactionByHash"]
         );
     } else {
-        assert_eq!(methods.len(), 5);
+        assert_eq!(methods.len(), 6);
     }
 }
 
@@ -269,6 +271,12 @@ fn rpc_response(request: &Value, scenario: RpcScenario) -> String {
         "eth_gasPrice" => serde_json::to_value(U256::from(1_000_000_000u64)).expect("gas price"),
         "eth_getTransactionCount" => serde_json::to_value(U256::zero()).expect("nonce"),
         "eth_chainId" => serde_json::to_value(U256::one()).expect("chain id"),
+        "eth_feeHistory" => json!({
+            "oldestBlock": "0x1",
+            "baseFeePerGas": ["0x3b9aca00", "0x3b9aca00"],
+            "gasUsedRatio": [0.5],
+            "reward": [["0x3b9aca00"]],
+        }),
         "eth_sendRawTransaction" => serde_json::to_value(H256::from_low_u64_be(7)).expect("hash"),
         "eth_getTransactionReceipt" => match scenario {
             RpcScenario::Confirmed => {

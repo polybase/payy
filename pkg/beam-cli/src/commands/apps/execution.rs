@@ -5,11 +5,14 @@ use serde_json::{Value, json};
 use crate::{
     apps::{
         Error as AppError,
-        model::{ActionPlan, ActionStep},
+        model::{ActionPlan, ActionStep, ApprovalFeeCap},
     },
     commands::signing::prompt_active_signer,
     error::{Error, Result},
-    evm::{CalldataTransaction, TransactionGas, erc20_allowance, send_calldata_with_gas},
+    evm::{
+        CalldataTransaction, TransactionGasPolicy, erc20_allowance, send_calldata_with_fee_report,
+        transaction_fee_json,
+    },
     output::{
         CommandOutput, confirmed_transaction_message, dropped_transaction_message,
         pending_transaction_message, with_loading_handle,
@@ -19,16 +22,29 @@ use crate::{
     transaction::{TransactionExecution, loading_message},
 };
 
-pub async fn execute_plan(app: &BeamApp, plan: &ActionPlan) -> Result<CommandOutput> {
+pub async fn execute_plan(
+    app: &BeamApp,
+    plan: &ActionPlan,
+    fee_caps: &[ApprovalFeeCap],
+) -> Result<CommandOutput> {
+    let signer = prompt_active_signer(app).await?;
+    execute_plan_with_signer(app, plan, fee_caps, &signer).await
+}
+
+pub(crate) async fn execute_plan_with_signer<S: Signer>(
+    app: &BeamApp,
+    plan: &ActionPlan,
+    fee_caps: &[ApprovalFeeCap],
+    signer: &S,
+) -> Result<CommandOutput> {
     let executable = plan.steps.iter().any(|step| transaction(step).is_some());
     if !executable {
         return Ok(render_simulated_execution(plan));
     }
 
     let (chain, client) = app.active_chain_client().await?;
-    let signer = prompt_active_signer(app).await?;
     let mut outputs = Vec::new();
-    for step in &plan.steps {
+    for (step_index, step) in plan.steps.iter().enumerate() {
         let Some(transaction) = transaction(step) else {
             continue;
         };
@@ -38,6 +54,7 @@ pub async fn execute_plan(app: &BeamApp, plan: &ActionPlan) -> Result<CommandOut
                 "state": "skipped",
                 "status": null,
                 "summary": format!("Skipped {}; allowance already sufficient", step.summary),
+                "fee": null,
                 "tx_hash": null,
             }));
             continue;
@@ -45,15 +62,15 @@ pub async fn execute_plan(app: &BeamApp, plan: &ActionPlan) -> Result<CommandOut
         let to = parse_address(transaction.to()?)?;
         let data = parse_hex_data(transaction.data()?)?;
         let value = parse_u256(transaction.value().unwrap_or("0"))?;
-        let gas = parse_gas(&transaction)?;
+        let gas = parse_gas_policy(step_index, &transaction, fee_caps)?;
         let action = step.summary.clone();
-        let execution = with_loading_handle(
+        let report = with_loading_handle(
             app.output_mode,
             format!("Sending {action} and waiting for confirmation..."),
             |loading| async {
-                send_calldata_with_gas(
+                send_calldata_with_fee_report(
                     &client,
-                    &signer,
+                    signer,
                     CalldataTransaction {
                         data,
                         gas,
@@ -67,8 +84,12 @@ pub async fn execute_plan(app: &BeamApp, plan: &ActionPlan) -> Result<CommandOut
             },
         )
         .await?;
-        let approval_ready = approval_step_ready(step, &execution);
-        outputs.push(step_output(step, execution));
+        let approval_ready = approval_step_ready(step, &report.execution);
+        outputs.push(step_output(
+            step,
+            report.execution,
+            transaction_fee_json(&report.gas),
+        ));
         if step.kind == "erc20-approval" && !approval_ready {
             break;
         }
@@ -120,10 +141,11 @@ fn render_execution_summary(plan: &ActionPlan, outputs: &[Value]) -> String {
     lines.join("\n")
 }
 
-fn step_output(step: &ActionStep, execution: TransactionExecution) -> Value {
+fn step_output(step: &ActionStep, execution: TransactionExecution, fee: Value) -> Value {
     match execution {
         TransactionExecution::Confirmed(outcome) => json!({
             "block_number": outcome.block_number,
+            "fee": fee,
             "state": "confirmed",
             "status": outcome.status,
             "summary": confirmed_transaction_message(&step.summary, &outcome.tx_hash, outcome.block_number),
@@ -131,6 +153,7 @@ fn step_output(step: &ActionStep, execution: TransactionExecution) -> Value {
         }),
         TransactionExecution::Pending(pending) => json!({
             "block_number": pending.block_number,
+            "fee": fee,
             "state": "pending",
             "status": null,
             "summary": pending_transaction_message(&step.summary, &pending.tx_hash, pending.block_number),
@@ -138,6 +161,7 @@ fn step_output(step: &ActionStep, execution: TransactionExecution) -> Value {
         }),
         TransactionExecution::Dropped(dropped) => json!({
             "block_number": dropped.block_number,
+            "fee": fee,
             "state": "dropped",
             "status": null,
             "summary": dropped_transaction_message(&step.summary, &dropped.tx_hash, dropped.block_number),
@@ -203,10 +227,6 @@ impl TransactionValue<'_> {
         self.optional_string("gas_limit")
     }
 
-    fn gas_price(&self) -> Option<&str> {
-        self.optional_string("gas_price")
-    }
-
     fn to(&self) -> Result<&str> {
         self.string("to")
     }
@@ -228,14 +248,19 @@ impl TransactionValue<'_> {
     }
 }
 
-fn parse_gas(transaction: &TransactionValue<'_>) -> Result<Option<TransactionGas>> {
-    match (transaction.gas_limit(), transaction.gas_price()) {
-        (Some(gas_limit), Some(gas_price)) => Ok(Some(TransactionGas {
-            gas_limit: parse_u256(gas_limit)?,
-            gas_price: parse_u256(gas_price)?,
-        })),
-        _ => Ok(None),
-    }
+fn parse_gas_policy(
+    step_index: usize,
+    transaction: &TransactionValue<'_>,
+    fee_caps: &[ApprovalFeeCap],
+) -> Result<Option<TransactionGasPolicy>> {
+    let fee_cap = fee_caps
+        .iter()
+        .find(|fee_cap| fee_cap.step_index == step_index)
+        .ok_or(AppError::ApprovalFeeCapMissing { step_index })?;
+    Ok(Some(TransactionGasPolicy {
+        gas_limit: transaction.gas_limit().map(parse_u256).transpose()?,
+        max_network_fee: Some(parse_u256(&fee_cap.approved_max_total_fee_wei)?),
+    }))
 }
 
 fn parse_hex_data(value: &str) -> Result<Vec<u8>> {
@@ -248,7 +273,5 @@ fn parse_u256(value: &str) -> Result<contracts::U256> {
     if let Some(value) = value.strip_prefix("0x") {
         return Ok(contracts::U256::from_str_radix(value, 16).context("parse hex u256")?);
     }
-    Ok(value
-        .parse::<contracts::U256>()
-        .context("parse decimal u256")?)
+    Ok(contracts::U256::from_dec_str(value).context("parse decimal u256")?)
 }

@@ -4,7 +4,7 @@ use super::fixtures::{test_app, test_app_with_output};
 use crate::{
     apps::{
         Error,
-        model::{AppManifest, InstalledApp, RegistryIndex},
+        model::{AppManifest, InstalledApp, RegistryIndex, RegistryVersion},
         runtime::{AppRuntime, validate_wasm_module},
         store::{AppCache, now},
     },
@@ -26,8 +26,7 @@ const WASM_WITHOUT_COMMAND_ALLOC: &[u8] = b"\0asm\x01\0\0\0\
 #[test]
 fn app_runtime_requires_declared_entrypoint() {
     let bundle = repo_root().join("beam-apps/fixtures/valid");
-    let index = read_json::<RegistryIndex>(&bundle.join("index.json"));
-    let version = &index.apps[0].versions[0];
+    let version = uniswap_fixture_version(&bundle);
     let path = artifact_path(&bundle, &version.module_url);
 
     validate_wasm_module("uniswap", "beam_app_main", &path).expect("valid app wasm");
@@ -54,8 +53,7 @@ async fn app_command_help_skips_stale_wasm_validation() {
     let (_temp_dir, app) =
         test_app_with_output(OutputMode::Quiet, InvocationOverrides::default()).await;
     let bundle = repo_root().join("beam-apps/fixtures/valid");
-    let index = read_json::<RegistryIndex>(&bundle.join("index.json"));
-    let version = &index.apps[0].versions[0];
+    let version = uniswap_fixture_version(&bundle);
     let manifest_path = artifact_path(&bundle, &version.manifest_url);
     let manifest_bytes = std::fs::read(&manifest_path).expect("read manifest");
     let manifest = read_json::<AppManifest>(&manifest_path);
@@ -80,6 +78,7 @@ async fn app_command_help_skips_stale_wasm_validation() {
             app: "uniswap".to_string(),
             prepare: false,
             no_prompt: false,
+            max_network_fee_wei: None,
             args: vec!["swap".to_string(), "--help".to_string()],
         },
     )
@@ -92,8 +91,7 @@ async fn app_run_checks_installed_manifest_minimum_version_before_wasm() {
     let (_temp_dir, app) =
         test_app_with_output(OutputMode::Quiet, InvocationOverrides::default()).await;
     let bundle = repo_root().join("beam-apps/fixtures/valid");
-    let index = read_json::<RegistryIndex>(&bundle.join("index.json"));
-    let version = &index.apps[0].versions[0];
+    let version = uniswap_fixture_version(&bundle);
     let manifest_path = artifact_path(&bundle, &version.manifest_url);
     let mut manifest = read_json::<AppManifest>(&manifest_path);
     manifest.min_beam_version = "999.0.0".to_string();
@@ -119,6 +117,7 @@ async fn app_run_checks_installed_manifest_minimum_version_before_wasm() {
             app: "uniswap".to_string(),
             prepare: false,
             no_prompt: false,
+            max_network_fee_wei: None,
             args: vec!["unknown".to_string()],
         },
     )
@@ -141,14 +140,13 @@ async fn app_runtime_invokes_guest_and_returns_structured_errors() {
     })
     .await;
     let bundle = repo_root().join("beam-apps/fixtures/valid");
-    let index = read_json::<RegistryIndex>(&bundle.join("index.json"));
-    let version = &index.apps[0].versions[0];
+    let version = uniswap_fixture_version(&bundle);
     let manifest_path = artifact_path(&bundle, &version.manifest_url);
     let module_path = artifact_path(&bundle, &version.module_url);
     let manifest = read_json(&manifest_path);
     let installed = InstalledApp {
         active_version: version.version.clone(),
-        id: index.apps[0].id.clone(),
+        id: "uniswap".to_string(),
         installed_at: now(),
         manifest_sha256: version.manifest_sha256.clone(),
         module_sha256: version.module_sha256.clone(),
@@ -170,6 +168,17 @@ async fn app_runtime_invokes_guest_and_returns_structured_errors() {
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+fn uniswap_fixture_version(bundle: &Path) -> RegistryVersion {
+    let index = read_json::<RegistryIndex>(&bundle.join("index.json"));
+    index
+        .apps
+        .iter()
+        .find(|app| app.id == "uniswap")
+        .expect("find uniswap fixture")
+        .versions[0]
+        .clone()
 }
 
 fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> T {

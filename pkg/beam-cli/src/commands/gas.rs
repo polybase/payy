@@ -1,4 +1,4 @@
-// lint-long-file-override allow-max-lines=300
+// lint-long-file-override allow-max-lines=400
 use serde_json::{Value, json};
 use web3::ethabi::StateMutability;
 
@@ -8,8 +8,8 @@ use crate::{
     commands::call::{parse_transaction_value, resolve_address_args},
     error::Result,
     evm::{
-        FunctionCall, TransactionGas, erc20_decimals, estimate_function_gas, estimate_native_gas,
-        format_units, parse_units,
+        EvmFeeEstimate, EvmFeeMode, FunctionCall, TransactionGas, erc20_decimals,
+        estimate_function_gas, estimate_native_gas, format_units, parse_units,
     },
     human_output::sanitize_control_chars,
     output::{CommandOutput, with_loading},
@@ -254,10 +254,27 @@ fn render_gas_output(config: GasOutputConfig<'_>) -> CommandOutput {
         "chain": config.chain_key,
         "estimated_fee": fee_display,
         "estimated_fee_wei": fee.to_string(),
+        "fee_mode": fee_mode_label(&config.gas.fee),
         "gas_limit": config.gas.gas_limit.to_string(),
-        "gas_price": config.gas.gas_price.to_string(),
+        "max_fee_per_gas": config.gas.gas_price_for_display().to_string(),
         "native_symbol": config.native_symbol,
     });
+    if let Some(output) = value.as_object_mut() {
+        match config.gas.fee {
+            EvmFeeEstimate::Legacy { gas_price } => {
+                output.insert("gas_price".to_string(), json!(gas_price.to_string()));
+            }
+            EvmFeeEstimate::Eip1559 {
+                max_priority_fee_per_gas,
+                ..
+            } => {
+                output.insert(
+                    "max_priority_fee_per_gas".to_string(),
+                    json!(max_priority_fee_per_gas.to_string()),
+                );
+            }
+        }
+    }
 
     if let Some(output) = value.as_object_mut()
         && let Some(extra) = config.extra.as_object()
@@ -267,24 +284,33 @@ fn render_gas_output(config: GasOutputConfig<'_>) -> CommandOutput {
 
     CommandOutput::new(
         format!(
-            "{}\nEstimated fee: {} {} ({} wei)\nGas limit: {}\nGas price: {} wei",
+            "{}\nEstimated fee: {} {} ({} wei)\nGas limit: {}\nFee mode: {}\nMax fee per gas: {} wei",
             config.default_summary,
             fee_display,
             config.native_symbol,
             fee,
             config.gas.gas_limit,
-            config.gas.gas_price,
+            fee_mode_label(&config.gas.fee),
+            config.gas.gas_price_for_display(),
         ),
         value,
     )
     .compact(fee_display.clone())
     .markdown(format!(
-        "- Chain: `{}`\n- Estimated fee: `{}` `{}` (`{}` wei)\n- Gas limit: `{}`\n- Gas price: `{}` wei",
+        "- Chain: `{}`\n- Estimated fee: `{}` `{}` (`{}` wei)\n- Gas limit: `{}`\n- Fee mode: `{}`\n- Max fee per gas: `{}` wei",
         config.chain_key,
         fee_display,
         config.native_symbol,
         fee,
         config.gas.gas_limit,
-        config.gas.gas_price,
+        fee_mode_label(&config.gas.fee),
+        config.gas.gas_price_for_display(),
     ))
+}
+
+fn fee_mode_label(fee: &EvmFeeEstimate) -> &'static str {
+    match fee.mode() {
+        EvmFeeMode::Legacy => "legacy",
+        EvmFeeMode::Eip1559 => "eip1559",
+    }
 }
