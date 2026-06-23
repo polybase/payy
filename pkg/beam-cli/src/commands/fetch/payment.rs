@@ -16,7 +16,7 @@ use crate::{
     commands::signing::prompt_active_signer,
     error::{Error, Result},
     evm::{
-        FunctionCall, TransactionGas, format_units, parse_units, send_function_with_gas,
+        FunctionCall, TransactionGasPolicy, format_units, parse_units, send_function_with_gas,
         send_native_with_gas,
     },
     human_output::sanitize_control_chars,
@@ -226,10 +226,10 @@ impl PreparedPayment {
         Ok(())
     }
 
-    fn transaction_gas(&self) -> TransactionGas {
-        TransactionGas {
-            gas_limit: self.gas.gas_limit,
-            gas_price: self.gas.gas_price,
+    fn transaction_gas(&self) -> TransactionGasPolicy {
+        TransactionGasPolicy {
+            gas_limit: Some(self.gas.gas_limit),
+            max_network_fee: Some(self.gas.fee),
         }
     }
 

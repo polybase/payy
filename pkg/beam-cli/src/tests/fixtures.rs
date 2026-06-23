@@ -15,7 +15,7 @@ pub(super) async fn test_app(overrides: InvocationOverrides) -> (TempDir, BeamAp
     test_app_with_output(OutputMode::Default, overrides).await
 }
 
-pub(super) async fn test_app_with_output(
+pub(crate) async fn test_app_with_output(
     output_mode: OutputMode,
     overrides: InvocationOverrides,
 ) -> (TempDir, BeamApp) {
@@ -68,7 +68,7 @@ async fn serve_chain_id_connection(mut stream: TcpStream, chain_id: u64) {
         .expect("write rpc response");
 }
 
-pub(super) async fn read_rpc_request(stream: &mut TcpStream) -> Value {
+pub(crate) async fn read_rpc_request(stream: &mut TcpStream) -> Value {
     let mut buffer = Vec::new();
     let body_offset = loop {
         let mut chunk = [0u8; 1024];

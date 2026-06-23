@@ -1,4 +1,4 @@
-// lint-long-file-override allow-max-lines=300
+// lint-long-file-override allow-max-lines=400
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -167,9 +167,11 @@ pub struct ChainPermission {
 #[serde(rename_all = "kebab-case")]
 pub enum ChainOperation {
     Read,
+    Logs,
     Simulate,
     SendTransaction,
     Erc20Approval,
+    SignTypedData,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -180,6 +182,8 @@ pub struct WalletPermissions {
     pub propose_transactions: bool,
     #[serde(default)]
     pub erc20_approval: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub sign_typed_data: bool,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -229,6 +233,10 @@ pub struct AppLock {
     pub installed_at: u64,
 }
 
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ActionPlan {
     pub app_id: String,
@@ -244,7 +252,17 @@ pub struct ActionPlan {
     pub bindings: Vec<ActionBinding>,
     #[serde(default)]
     pub constraints: Vec<String>,
+    #[serde(default)]
+    pub dynamic_contracts: Vec<DynamicContractScope>,
     pub expires_at: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DynamicContractScope {
+    pub chain: String,
+    pub contract: String,
+    #[serde(default)]
+    pub reason: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -271,8 +289,21 @@ pub struct ApprovalRecord {
     pub status: ApprovalStatus,
     pub plan: ActionPlan,
     pub plan_hash: String,
+    #[serde(default)]
+    pub fee_caps: Vec<ApprovalFeeCap>,
     pub created_at: u64,
     pub updated_at: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ApprovalFeeCap {
+    pub step_index: usize,
+    pub approved_gas_limit: String,
+    pub approved_max_fee_per_gas: String,
+    pub approved_max_total_fee_wei: String,
+    pub fee_mode: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approved_max_priority_fee_per_gas: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]

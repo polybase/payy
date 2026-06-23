@@ -81,11 +81,12 @@ async fn send_native_retries_transient_estimate_gas_failures() {
     assert_eq!(method_count(&state, "eth_estimateGas"), 2);
     assert_eq!(method_count(&state, "eth_sendRawTransaction"), 1);
     assert_eq!(
-        rpc_methods(&state)[..6],
+        rpc_methods(&state)[..7],
         [
             "eth_estimateGas",
             "eth_estimateGas",
-            "eth_gasPrice",
+            "eth_chainId",
+            "eth_feeHistory",
             "eth_getTransactionCount",
             "eth_chainId",
             "eth_sendRawTransaction",
@@ -123,10 +124,11 @@ async fn send_native_retries_transient_raw_submission_failures() {
     assert_eq!(method_count(&state, "eth_estimateGas"), 1);
     assert_eq!(method_count(&state, "eth_sendRawTransaction"), 2);
     assert_eq!(
-        rpc_methods(&state)[..7],
+        rpc_methods(&state)[..8],
         [
             "eth_estimateGas",
-            "eth_gasPrice",
+            "eth_chainId",
+            "eth_feeHistory",
             "eth_getTransactionCount",
             "eth_chainId",
             "eth_sendRawTransaction",
@@ -221,6 +223,12 @@ fn rpc_response(request: &Value, mode: RetryRpcMode) -> String {
         (RetryRpcMode::ConfirmedTransfer, "eth_gasPrice") => {
             serde_json::to_value(U256::from(1_000_000_000u64)).expect("gas price")
         }
+        (RetryRpcMode::ConfirmedTransfer, "eth_feeHistory") => json!({
+            "oldestBlock": "0x1",
+            "baseFeePerGas": ["0x3b9aca00", "0x3b9aca00"],
+            "gasUsedRatio": [0.5],
+            "reward": [["0x3b9aca00"]],
+        }),
         (RetryRpcMode::ConfirmedTransfer, "eth_getTransactionCount") => {
             serde_json::to_value(U256::zero()).expect("nonce")
         }

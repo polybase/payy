@@ -56,6 +56,7 @@ fn manifest() -> AppManifest {
                 read_balances: true,
                 propose_transactions: false,
                 erc20_approval: false,
+                sign_typed_data: false,
             },
             storage: StoragePermission { app_local: true },
             privacy: Vec::new(),

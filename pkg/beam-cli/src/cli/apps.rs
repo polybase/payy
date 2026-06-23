@@ -48,6 +48,8 @@ pub struct AppRunArgs {
     pub prepare: bool,
     #[arg(long, default_value_t = false)]
     pub no_prompt: bool,
+    #[arg(long)]
+    pub max_network_fee_wei: Option<String>,
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub args: Vec<String>,
 }
@@ -63,6 +65,8 @@ pub enum AppApprovalAction {
         approval_id: String,
         #[arg(long, default_value_t = false)]
         execute: bool,
+        #[arg(long)]
+        max_network_fee_wei: Option<String>,
     },
     /// Reject an app approval continuation
     Reject { approval_id: String },

@@ -42,6 +42,10 @@ pub(super) fn host_request_summary(request: &HostRequest) -> String {
             optional_value(&request.target),
             optional_value(&request.selector)
         ),
+        HostRequest::SignTypedData(request) => format!(
+            "sign-typed-data chain={} verifying_contract={} primary_type={}",
+            request.chain, request.verifying_contract, request.primary_type
+        ),
         HostRequest::SimulateTransaction(transaction) => format!(
             "simulate-transaction chain={} target={} selector={} spender={}",
             transaction.chain,

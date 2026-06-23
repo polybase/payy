@@ -229,6 +229,7 @@ digests before caching app artifacts under `~/.beam/apps`.
 Common commands:
 
 ```bash
+beam apps install erc8004
 beam apps install uniswap
 beam apps list
 beam apps info uniswap
@@ -253,14 +254,28 @@ beam x uniswap --help
 beam x uniswap swap --help
 beam --chain base --from alice x uniswap swap USDC ETH 100 --prepare
 beam apps run uniswap swap USDC ETH 100 --chain base --from alice --prepare
+beam --chain base --from alice x erc8004 support
+beam --chain base --from alice x erc8004 register --uri https://agent.example/agent.json
+beam --chain base --from alice x erc8004 set-wallet 1 alice
 ```
 
 Product app business logic lives outside Beam CLI in `beam-apps/apps/<app>`.
 Beam CLI owns the generic registry, cache, WASM validation, permission checks,
-host ABI, approval records, and execution of approved action plans. The Uniswap
-app is built into the registry as WASM and `beam x uniswap swap ...` runs through
-the generic guest command path; Beam CLI no longer contains a Uniswap-specific
-built-in planner.
+host ABI, approval records, and execution of approved action plans. Product apps
+such as Uniswap and ERC-8004 are built into the registry as WASM and run through
+the generic guest command path; Beam CLI does not contain product-specific
+built-in planners.
+
+ERC-8004 agent identity management is provided by the `erc8004` app rather than
+a native `beam agents` command. Default identity registry addresses are declared
+in the app manifest. Custom registry addresses can be persisted with:
+
+```bash
+beam x erc8004 config set --identity-registry <address>
+```
+
+Per-command registry overrides use `--identity-registry <address>` and are
+validated as invocation-scoped contract permissions in the app host.
 
 The Uniswap app will use Beam-mediated HTTPS requests to the Uniswap Trading
 API. Release registry builds inject the Payy-managed public Trading API key into
@@ -287,6 +302,20 @@ beam --chain base --from alice x <app> <command> --prepare --format json
 beam apps approvals show <approval-id>
 beam apps approvals approve <approval-id> --execute
 ```
+
+Beam prices EVM app transactions at approval and execution time. Apps may
+propose transaction calldata, value, target, and gas-limit hints, but app
+`gas_price`, `maxFeePerGas`, or similar fee fields are informational only and
+are not used as the final signed transaction price. On EIP-1559 chains Beam
+prefers type-2 transactions; legacy `gas_price` is a fallback for chains that do
+not expose EIP-1559 fee history.
+
+Approval prompts and approval JSON include the maximum approved network fee per
+transaction step. Pass `--max-network-fee-wei <wei>` to `beam x <app> ...` or
+`beam apps run <app> ...` to set a hard per-step network-fee cap; if omitted,
+Beam stores a default cap based on the prepared estimate. Execution re-estimates
+fees before signing and fails closed if current network fees exceed the approved
+cap.
 
 Uniswap token arguments can be configured token labels, `native`, native chain
 symbols, or EVM token addresses. Swap options include `--min-receive`,

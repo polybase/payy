@@ -81,6 +81,12 @@ pub enum Error {
     #[error("[beam-cli/apps] app requested blocked approval spender: {spender}")]
     SpenderPermissionDenied { spender: String },
 
+    #[error("[beam-cli/apps] app requested blocked wallet permission: {permission}")]
+    WalletPermissionDenied { permission: String },
+
+    #[error("[beam-cli/apps] app requested blocked storage permission: {permission}")]
+    StoragePermissionDenied { permission: String },
+
     #[error("[beam-cli/apps] app requested blocked http url: {url}")]
     HttpPermissionDenied { url: String },
 
@@ -119,6 +125,14 @@ pub enum Error {
 
     #[error("[beam-cli/apps] approval plan changed: {approval_id}")]
     ApprovalPlanChanged { approval_id: String },
+
+    #[error(
+        "[beam-cli/apps] approval fee cap missing for executable step {step_index}; reapprove the app action"
+    )]
+    ApprovalFeeCapMissing { step_index: usize },
+
+    #[error("[beam-cli/apps] approval needs fresh fee caps before execution: {approval_id}")]
+    ApprovalNeedsFeeCaps { approval_id: String },
 
     #[error(
         "[beam-cli/apps] approval execution context changed for {approval_id}: {field} expected {expected}, got {actual}"

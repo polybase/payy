@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 use crate::{
     apps::model::{
         ActionPlan, AppCommand, AppCommandExample, AppCommandParameter, AppManifest,
-        AppPermissions, ApprovalRecord,
+        AppPermissions, ApprovalFeeCap, ApprovalRecord,
     },
     output::CommandOutput,
 };
@@ -62,10 +62,11 @@ pub(super) fn render_permissions(permissions: &AppPermissions) -> String {
     }
     lines.push("Wallet actions:".to_string());
     lines.push(format!(
-        "  - balances: {}\n  - transaction proposals: {}\n  - erc20 approvals: {}",
+        "  - balances: {}\n  - transaction proposals: {}\n  - erc20 approvals: {}\n  - typed-data signing: {}",
         permissions.wallet.read_balances,
         permissions.wallet.propose_transactions,
-        permissions.wallet.erc20_approval
+        permissions.wallet.erc20_approval,
+        permissions.wallet.sign_typed_data
     ));
     lines.push(format!(
         "Storage:\n  - app-local: {}",
@@ -168,14 +169,33 @@ fn push_examples(lines: &mut Vec<String>, examples: &[AppCommandExample]) {
     }
 }
 
-pub(super) fn render_plan(plan: &ActionPlan) -> String {
+pub(super) fn render_plan_with_fee_caps(plan: &ActionPlan, fee_caps: &[ApprovalFeeCap]) -> String {
     let mut lines = vec![
         format!("App: {} {}", plan.app_id, plan.app_version),
         format!("Chain: {}", plan.chain),
         "Action:".to_string(),
     ];
-    for step in &plan.steps {
+    for (step_index, step) in plan.steps.iter().enumerate() {
         lines.push(format!("  - {}", step.summary));
+        if let Some(fee_cap) = fee_caps
+            .iter()
+            .find(|fee_cap| fee_cap.step_index == step_index)
+        {
+            lines.push(format!(
+                "    Max network fee: {} wei",
+                fee_cap.approved_max_total_fee_wei
+            ));
+            lines.push(format!(
+                "    Approved gas limit: {}",
+                fee_cap.approved_gas_limit
+            ));
+        }
+    }
+    if !plan.dynamic_contracts.is_empty() {
+        lines.push("Invocation-scoped contracts:".to_string());
+        for scope in &plan.dynamic_contracts {
+            lines.push(format!("  - {} on {}", scope.contract, scope.chain));
+        }
     }
     lines.push(format!("Expires at: {}", plan.expires_at));
     lines.join("\n")
@@ -187,7 +207,7 @@ pub(super) fn render_approval(record: &ApprovalRecord) -> String {
         record.id,
         record.status,
         record.plan_hash,
-        render_plan(&record.plan)
+        render_plan_with_fee_caps(&record.plan, &record.fee_caps)
     )
 }
 

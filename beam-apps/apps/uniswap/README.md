@@ -42,12 +42,17 @@ beam x uniswap swap USDC ETH 100 --chain base --from alice
 ```
 
 Beam shows the quote, any required approval, and the swap as a single plan. You
-approve the final plan before Beam signs or submits anything.
+approve the final plan before Beam signs or submits anything. Beam owns final
+transaction pricing: the app may pass a route-specific gas-limit estimate, but
+Uniswap API fee values are treated only as route metadata and Beam selects the
+signed network fee within the approved cap.
 
 ## Options
 
 - `--min-receive <amount>` sets the minimum acceptable output amount.
-- `--max-gas <wei>` rejects the plan if estimated gas exceeds the limit.
+- `--max-gas <wei>` rejects the plan if estimated gas limit exceeds the limit.
+  It is not a max network-fee cap; use Beam's `--max-network-fee-wei <wei>` on
+  the app command to cap the per-step network fee.
 - `--slippage-bps <bps>` sets max slippage in basis points.
 - `--recipient <wallet-or-address>` sends output to another wallet, ENS name, or
   EVM address.
@@ -83,6 +88,10 @@ beam x uniswap swap USDC ETH 100 --chain base --from alice --prepare --format js
 beam apps approvals show <approval-id>
 beam apps approvals approve <approval-id> --execute
 ```
+
+Prepared approval JSON includes Beam-owned network-fee caps for each executable
+step. Old approvals created before fee caps existed require fresh approval
+before execution.
 
 `--no-prompt` fails closed for wallet-affecting swaps unless the command is
 preparing a continuation or executing an already-approved continuation.

@@ -3,6 +3,48 @@
   "generated_at": "2026-05-26T00:00:00Z",
   "apps": [
     {
+      "id": "erc8004",
+      "display_name": "ERC-8004",
+      "publisher": "Payy",
+      "description": "Manage ERC-8004 identity registry agents through Beam app permissions, bounded logs, typed-data signing, and action plans.",
+      "latest_version": "1.0.0",
+      "min_beam_version": "0.2.4",
+      "detail_url": "https://registry.beam.payy.network/catalog/apps/erc8004.json",
+      "install_command": "beam apps install erc8004",
+      "pinned_install_command": "beam apps install erc8004 --version 1.0.0",
+      "supported_chains": [
+        {
+          "id": "*",
+          "label": "Any EVM chain",
+          "testnet": false,
+          "operations": [
+            "read",
+            "logs",
+            "send-transaction",
+            "sign-typed-data"
+          ]
+        }
+      ],
+      "capability_badges": [
+        "ERC-8004",
+        "Chain read",
+        "Logs",
+        "Onchain TX",
+        "Typed-data signing",
+        "App storage"
+      ],
+      "version": {
+        "version": "1.0.0",
+        "min_beam_version": "0.2.4"
+      },
+      "icon": {
+        "url": "https://registry.beam.payy.network/apps/erc8004/1.0.0/icon.svg",
+        "sha256": "sha256:16d48252ec062fb0461d9d78f99c104d0f187b6c81de666beb342e88289839a9",
+        "media_type": "image/svg+xml",
+        "alt": "ERC-8004 app icon"
+      }
+    },
+    {
       "id": "uniswap",
       "display_name": "Uniswap",
       "publisher": "Payy",
@@ -104,6 +146,6 @@
   "signature": {
     "algorithm": "sha256-dev",
     "key_id": "payy-dev-2026-05",
-    "value": "sha256:066b1321d86de07e799ba77ac8a531d7a14c258b5ff79cb6e7f352a6cf8ab5d7"
+    "value": "sha256:f2ea0c84b76eea041e7289cc81adfcaaaffdb0e996b4c475c1622deb457c9c28"
   }
 }

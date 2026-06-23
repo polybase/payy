@@ -1,0 +1,466 @@
+{
+  "format_version": 1,
+  "id": "erc8004",
+  "display_name": "ERC-8004",
+  "version": "1.0.0",
+  "publisher": "Payy",
+  "description": "Manage ERC-8004 identity registry agents through Beam app permissions, bounded logs, typed-data signing, and action plans.",
+  "min_beam_version": "0.2.4",
+  "wasm": {
+    "sha256": "sha256:5a67ac5972280c99dd5738eec7bdc57a6beecf90902c43a1bbbeabfb145b7036",
+    "entrypoint": "beam_app_main"
+  },
+  "catalog": {
+    "capability_badges": [
+      "ERC-8004",
+      "Chain read",
+      "Logs",
+      "Onchain TX",
+      "Typed-data signing",
+      "App storage"
+    ]
+  },
+  "commands": [
+    {
+      "name": "support",
+      "about": "Show the active chain ERC-8004 registry configuration",
+      "usage": "support",
+      "sensitive_args": [],
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "docs": {
+        "summary": "Show ERC-8004 support for the active chain.",
+        "invocation": "beam x erc8004 support",
+        "arguments": [],
+        "options": [],
+        "examples": [
+          {
+            "title": "Show support",
+            "command": "beam x erc8004 support --chain base",
+            "description": "Print the Base ERC-8004 registry addresses."
+          }
+        ],
+        "output_notes": [
+          "Includes the identity registry and whether it is default or overridden."
+        ]
+      }
+    },
+    {
+      "name": "config",
+      "about": "Show or set ERC-8004 registry overrides",
+      "usage": "config show | config set --identity-registry <address> [--reputation-registry <address>]",
+      "sensitive_args": [],
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "docs": {
+        "summary": "Show or persist registry overrides for the active chain.",
+        "invocation": "beam x erc8004 config show | config set --identity-registry <address> [--reputation-registry <address>]",
+        "arguments": [],
+        "options": [
+          {
+            "name": "--identity-registry",
+            "value_name": "address",
+            "kind": "address",
+            "required": false,
+            "sensitive": false,
+            "description": "Identity registry override for the active chain."
+          },
+          {
+            "name": "--reputation-registry",
+            "value_name": "address",
+            "kind": "address",
+            "required": false,
+            "sensitive": false,
+            "description": "Optional reputation registry override stored for future versions."
+          }
+        ],
+        "examples": [
+          {
+            "title": "Set override",
+            "command": "beam x erc8004 config set --identity-registry 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432",
+            "description": "Persist an identity registry address for the active chain."
+          }
+        ],
+        "output_notes": [
+          "Registry overrides are stored in app-local Beam storage."
+        ]
+      }
+    },
+    {
+      "name": "register",
+      "about": "Prepare an ERC-8004 agent registration",
+      "usage": "register [--uri <uri>|--empty-uri] [--identity-registry <address>]",
+      "sensitive_args": [],
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "docs": {
+        "summary": "Prepare a transaction that registers an ERC-8004 agent.",
+        "invocation": "beam x erc8004 register [--uri <uri>|--empty-uri] [--identity-registry <address>]",
+        "arguments": [],
+        "options": [
+          {
+            "name": "--uri",
+            "value_name": "uri",
+            "kind": "string",
+            "required": false,
+            "sensitive": false,
+            "description": "HTTPS, IPFS, or data URI for the agent metadata."
+          },
+          {
+            "name": "--empty-uri",
+            "kind": "flag",
+            "required": false,
+            "default": "false",
+            "sensitive": false,
+            "description": "Register without an agent URI."
+          },
+          {
+            "name": "--identity-registry",
+            "value_name": "address",
+            "kind": "address",
+            "required": false,
+            "sensitive": false,
+            "description": "Invocation-scoped identity registry override."
+          }
+        ],
+        "examples": [
+          {
+            "title": "Register",
+            "command": "beam x erc8004 register --uri https://agent.example/agent.json",
+            "description": "Prepare and approve a registration transaction."
+          }
+        ],
+        "output_notes": [
+          "Returns an action plan that Beam approves and executes."
+        ]
+      }
+    },
+    {
+      "name": "show",
+      "about": "Read an ERC-8004 agent",
+      "usage": "show <agent-id> [--fetch-uri] [--identity-registry <address>]",
+      "sensitive_args": [],
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "docs": {
+        "summary": "Read owner, URI, and agent wallet for an ERC-8004 agent.",
+        "invocation": "beam x erc8004 show <agent-id> [--fetch-uri] [--identity-registry <address>]",
+        "arguments": [
+          {
+            "name": "agent-id",
+            "kind": "integer",
+            "required": true,
+            "sensitive": false,
+            "description": "ERC-8004 token ID."
+          }
+        ],
+        "options": [
+          {
+            "name": "--fetch-uri",
+            "kind": "flag",
+            "required": false,
+            "default": "false",
+            "sensitive": false,
+            "description": "Fetch HTTPS agent metadata through Beam's safe HTTP host."
+          },
+          {
+            "name": "--identity-registry",
+            "value_name": "address",
+            "kind": "address",
+            "required": false,
+            "sensitive": false,
+            "description": "Invocation-scoped identity registry override."
+          }
+        ],
+        "examples": [
+          {
+            "title": "Show agent",
+            "command": "beam x erc8004 show 1 --fetch-uri",
+            "description": "Read an agent and fetch HTTPS metadata if available."
+          }
+        ],
+        "output_notes": [
+          "Non-HTTPS URIs are not fetched."
+        ]
+      }
+    },
+    {
+      "name": "list",
+      "about": "List ERC-8004 agents connected to a wallet",
+      "usage": "list [--wallet <wallet>] [--connection owner|agent-wallet|both] [--from-block <n>] [--to-block <n>] [--identity-registry <address>]",
+      "sensitive_args": [],
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "docs": {
+        "summary": "List ERC-8004 registrations using bounded log reads.",
+        "invocation": "beam x erc8004 list [--wallet <wallet>] [--connection owner|agent-wallet|both] [--from-block <n>] [--to-block <n>] [--identity-registry <address>]",
+        "arguments": [],
+        "options": [
+          {
+            "name": "--wallet",
+            "value_name": "wallet",
+            "kind": "string",
+            "required": false,
+            "sensitive": false,
+            "description": "Beam wallet name, ENS name, or EVM address; defaults to the active wallet."
+          },
+          {
+            "name": "--connection",
+            "value_name": "mode",
+            "kind": "enum",
+            "required": false,
+            "default": "owner",
+            "sensitive": false,
+            "description": "Filter by owner, agent wallet, or both."
+          },
+          {
+            "name": "--from-block",
+            "value_name": "number",
+            "kind": "integer",
+            "required": false,
+            "sensitive": false,
+            "description": "Start block. Defaults to a bounded recent host window."
+          },
+          {
+            "name": "--to-block",
+            "value_name": "number",
+            "kind": "integer",
+            "required": false,
+            "sensitive": false,
+            "description": "End block. Defaults to latest."
+          }
+        ],
+        "examples": [
+          {
+            "title": "List owned agents",
+            "command": "beam x erc8004 list --wallet alice --from-block 1000000",
+            "description": "List agents registered by alice in a bounded block range."
+          }
+        ],
+        "output_notes": [
+          "The host caps log ranges and response size."
+        ]
+      }
+    },
+    {
+      "name": "set-uri",
+      "about": "Prepare an ERC-8004 agent URI update",
+      "usage": "set-uri <agent-id> <uri> [--identity-registry <address>]",
+      "sensitive_args": [],
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "docs": {
+        "summary": "Prepare a transaction that updates an agent URI.",
+        "invocation": "beam x erc8004 set-uri <agent-id> <uri> [--identity-registry <address>]",
+        "arguments": [
+          {
+            "name": "agent-id",
+            "kind": "integer",
+            "required": true,
+            "sensitive": false,
+            "description": "ERC-8004 token ID."
+          },
+          {
+            "name": "uri",
+            "kind": "string",
+            "required": true,
+            "sensitive": false,
+            "description": "New HTTPS, IPFS, or data URI."
+          }
+        ],
+        "options": [
+          {
+            "name": "--identity-registry",
+            "value_name": "address",
+            "kind": "address",
+            "required": false,
+            "sensitive": false,
+            "description": "Invocation-scoped identity registry override."
+          }
+        ],
+        "examples": [
+          {
+            "title": "Update URI",
+            "command": "beam x erc8004 set-uri 1 https://agent.example/new.json",
+            "description": "Prepare and approve an agent URI update."
+          }
+        ],
+        "output_notes": [
+          "Returns an action plan."
+        ]
+      }
+    },
+    {
+      "name": "set-wallet",
+      "about": "Prepare an ERC-8004 agent wallet update",
+      "usage": "set-wallet <agent-id> <wallet> [--deadline-seconds <seconds>] [--identity-registry <address>]",
+      "sensitive_args": [],
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "docs": {
+        "summary": "Request a typed-data signature from the target wallet and prepare the wallet update transaction.",
+        "invocation": "beam x erc8004 set-wallet <agent-id> <wallet> [--deadline-seconds <seconds>] [--identity-registry <address>]",
+        "arguments": [
+          {
+            "name": "agent-id",
+            "kind": "integer",
+            "required": true,
+            "sensitive": false,
+            "description": "ERC-8004 token ID."
+          },
+          {
+            "name": "wallet",
+            "kind": "string",
+            "required": true,
+            "sensitive": false,
+            "description": "Beam wallet name or stored EVM address selector that signs the update."
+          }
+        ],
+        "options": [
+          {
+            "name": "--deadline-seconds",
+            "value_name": "seconds",
+            "kind": "integer",
+            "required": false,
+            "default": "300",
+            "sensitive": false,
+            "description": "Signature validity window, capped at 300 seconds."
+          },
+          {
+            "name": "--identity-registry",
+            "value_name": "address",
+            "kind": "address",
+            "required": false,
+            "sensitive": false,
+            "description": "Invocation-scoped identity registry override."
+          }
+        ],
+        "examples": [
+          {
+            "title": "Set named wallet",
+            "command": "beam x erc8004 set-wallet 1 alice",
+            "description": "Resolve alice from Beam wallets, request its typed-data signature, then prepare the registry update."
+          }
+        ],
+        "output_notes": [
+          "The app never receives raw private keys."
+        ]
+      }
+    },
+    {
+      "name": "unset-wallet",
+      "about": "Prepare clearing an ERC-8004 agent wallet",
+      "usage": "unset-wallet <agent-id> [--identity-registry <address>]",
+      "sensitive_args": [],
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "docs": {
+        "summary": "Prepare a transaction that clears an agent wallet.",
+        "invocation": "beam x erc8004 unset-wallet <agent-id> [--identity-registry <address>]",
+        "arguments": [
+          {
+            "name": "agent-id",
+            "kind": "integer",
+            "required": true,
+            "sensitive": false,
+            "description": "ERC-8004 token ID."
+          }
+        ],
+        "options": [
+          {
+            "name": "--identity-registry",
+            "value_name": "address",
+            "kind": "address",
+            "required": false,
+            "sensitive": false,
+            "description": "Invocation-scoped identity registry override."
+          }
+        ],
+        "examples": [
+          {
+            "title": "Unset wallet",
+            "command": "beam x erc8004 unset-wallet 1",
+            "description": "Prepare and approve clearing the agent wallet."
+          }
+        ],
+        "output_notes": [
+          "Returns an action plan."
+        ]
+      }
+    }
+  ],
+  "permissions": {
+    "http": [
+      {
+        "url": "https://*"
+      }
+    ],
+    "chains": [
+      {
+        "chain": "base",
+        "operations": [
+          "read"
+        ],
+        "selectors": [
+          "not-a-selector"
+        ]
+      }
+    ],
+    "wallet": {
+      "read_balances": false,
+      "propose_transactions": true,
+      "erc20_approval": false,
+      "sign_typed_data": true
+    },
+    "storage": {
+      "app_local": true
+    },
+    "privacy": []
+  },
+  "host_api": {
+    "privacy_reserved": true
+  },
+  "icon": {
+    "url": "https://registry.beam.payy.network/apps/erc8004/1.0.0/icon.svg",
+    "sha256": "sha256:16d48252ec062fb0461d9d78f99c104d0f187b6c81de666beb342e88289839a9",
+    "media_type": "image/svg+xml",
+    "alt": "ERC-8004 app icon"
+  },
+  "signature": {
+    "algorithm": "sha256-dev",
+    "key_id": "payy-dev-2026-05",
+    "value": "sha256:a0b37dca027eccfcfbbe37d7210bf657bd1e2e9918ab8e1d1a722d09facaae46"
+  }
+}

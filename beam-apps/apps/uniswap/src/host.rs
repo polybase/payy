@@ -207,8 +207,8 @@ struct StorageGetResponse {
 }
 
 pub fn ensure_host_abi(invocation: &GuestInvocation) -> Result<()> {
-    if invocation.host_api_version != HOST_API_VERSION
-        || invocation.metadata.host_api_version != HOST_API_VERSION
+    if invocation.host_api_version < HOST_API_VERSION
+        || invocation.metadata.host_api_version < HOST_API_VERSION
     {
         return Err(Error::InvalidHostResponse {
             reason: format!(

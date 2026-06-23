@@ -158,6 +158,9 @@ fn swap_metadata(input: &SwapPlanInput, transaction: &UniswapTransaction) -> Val
     if let Some(gas_fee) = raw_string(&input.swap.raw, "gasFee") {
         metadata["gas_fee"] = json!(gas_fee);
     }
+    if let Some(gas_price_hint) = &transaction.gas_price_hint {
+        metadata["uniswap_gas_price_hint"] = json!(gas_price_hint);
+    }
 
     metadata
 }
@@ -207,7 +210,6 @@ fn transaction_json(transaction: &UniswapTransaction) -> Value {
     json!({
         "data": transaction.data,
         "gas_limit": transaction.gas_limit,
-        "gas_price": transaction.gas_price,
         "to": transaction.to,
         "value": transaction.value,
     })
