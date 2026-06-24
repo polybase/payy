@@ -70,6 +70,7 @@ pub(crate) fn merge_overrides(
     InvocationOverrides {
         chain: new.chain.clone().or(base.chain.clone()),
         from: new.from.clone().or(base.from.clone()),
+        profile: new.profile.clone().or(base.profile.clone()),
         rpc,
     }
 }
@@ -150,6 +151,7 @@ fn is_cli_subcommand_invocation(command: &str, args: &[String]) -> bool {
                     | "export-recovery-phrase"
                     | "import-recovery-phrase"
                     | "list"
+                    | "change-password"
                     | "rename"
                     | "address"
                     | "use"

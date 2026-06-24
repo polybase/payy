@@ -16,6 +16,7 @@ pub(crate) mod interactive_parse;
 pub(crate) mod interactive_state;
 mod interactive_suggestion;
 pub mod privacy;
+pub mod profiles;
 pub mod rpc;
 pub(crate) mod signing;
 pub(crate) mod token_report;
@@ -25,6 +26,8 @@ pub mod txn;
 pub mod update;
 pub mod util;
 pub mod wallet;
+pub(crate) mod wallet_default;
+pub(crate) mod wallet_password;
 pub(crate) mod wallet_private_key;
 pub(crate) mod wallet_recovery;
 pub(crate) mod wallet_secret;
@@ -39,6 +42,7 @@ pub async fn run(app: &BeamApp, command: Command) -> Result<()> {
         Command::Rpc { action } => rpc::run(app, action).await,
         Command::Tokens { action } => tokens::run(app, action).await,
         Command::Apps { action } => apps::run(app, action).await,
+        Command::Profiles { action } => profiles::run(app, action).await,
         Command::X(args) => apps::run_app(app, args).await,
         Command::Privacy { action } => privacy::run(app, action).await,
         Command::Balance(args) => balance::run(app, args).await,
@@ -54,6 +58,7 @@ pub async fn run(app: &BeamApp, command: Command) -> Result<()> {
         Command::Update => {
             update::run_update(&app.overrides, app.output_mode, app.color_mode).await
         }
+        Command::ProfileDaemon(_) => Ok(()),
         Command::RefreshUpdateStatus => Ok(()),
     }
 }

@@ -1,14 +1,16 @@
 // lint-long-file-override allow-max-lines=300
-use contextful::ResultContextExt;
+mod tx_metadata;
+
 use serde_json::{Value, json};
 
 use crate::{
     apps::{
         Error as AppError,
+        approvals::plan_hash,
         model::{ActionPlan, ActionStep, ApprovalFeeCap},
     },
-    commands::signing::prompt_active_signer,
-    error::{Error, Result},
+    commands::signing::{active_signer_for_intent, active_signing_address},
+    error::Result,
     evm::{
         CalldataTransaction, TransactionGasPolicy, erc20_allowance, send_calldata_with_fee_report,
         transaction_fee_json,
@@ -17,21 +19,38 @@ use crate::{
         CommandOutput, confirmed_transaction_message, dropped_transaction_message,
         pending_transaction_message, with_loading_handle,
     },
+    profiles::model::{ActionGrantBinding, ActionGrantStep, AppActionIntent, PublicSigningIntent},
     runtime::{BeamApp, parse_address},
     signer::Signer,
     transaction::{TransactionExecution, loading_message},
 };
+
+use self::tx_metadata::{TransactionValue, parse_hex_data, parse_u256, transaction};
 
 pub async fn execute_plan(
     app: &BeamApp,
     plan: &ActionPlan,
     fee_caps: &[ApprovalFeeCap],
 ) -> Result<CommandOutput> {
-    let signer = prompt_active_signer(app).await?;
-    execute_plan_with_signer(app, plan, fee_caps, &signer).await
+    execute_plan_with_approval(app, plan, fee_caps, None).await
 }
 
-pub(crate) async fn execute_plan_with_signer<S: Signer>(
+pub async fn execute_plan_with_approval(
+    app: &BeamApp,
+    plan: &ActionPlan,
+    fee_caps: &[ApprovalFeeCap],
+    approval_id: Option<String>,
+) -> Result<CommandOutput> {
+    let wallet = active_signing_address(app).await?;
+    let signer = active_signer_for_intent(
+        app,
+        PublicSigningIntent::AppActionPlan(app_intent(plan, format!("{wallet:#x}"), approval_id)?),
+    )
+    .await?;
+    execute_plan_with_signer(app, plan, fee_caps, signer.as_ref()).await
+}
+
+pub(crate) async fn execute_plan_with_signer<S: Signer + ?Sized>(
     app: &BeamApp,
     plan: &ActionPlan,
     fee_caps: &[ApprovalFeeCap],
@@ -105,6 +124,47 @@ pub(crate) async fn execute_plan_with_signer<S: Signer>(
             "steps": outputs,
         }),
     ))
+}
+
+fn app_intent(
+    plan: &ActionPlan,
+    wallet: String,
+    approval_id: Option<String>,
+) -> Result<AppActionIntent> {
+    Ok(AppActionIntent {
+        app_id: plan.app_id.clone(),
+        app_version: plan.app_version.clone(),
+        registry_url: None,
+        manifest_digest: plan.manifest_sha256.clone(),
+        module_digest: plan.wasm_sha256.clone(),
+        command: plan.command.clone(),
+        wallet,
+        chain: plan.chain.clone(),
+        plan_hash: plan_hash(plan)?,
+        expires_at: plan.expires_at,
+        bindings: plan
+            .bindings
+            .iter()
+            .map(|binding| ActionGrantBinding {
+                key: binding.key.clone(),
+                value: binding.value.clone(),
+            })
+            .collect(),
+        constraints: plan.constraints.clone(),
+        steps: plan
+            .steps
+            .iter()
+            .map(|step| ActionGrantStep {
+                kind: step.kind.clone(),
+                target: step.target.clone(),
+                selector: step.selector.clone(),
+                spender: step.spender.clone(),
+                value: step.value.clone(),
+                metadata: step.metadata.clone(),
+            })
+            .collect(),
+        approval_id,
+    })
 }
 
 fn approval_step_ready(step: &ActionStep, execution: &TransactionExecution) -> bool {
@@ -209,45 +269,6 @@ async fn should_skip_approval(
     Ok(allowance >= required)
 }
 
-fn transaction(step: &ActionStep) -> Option<TransactionValue<'_>> {
-    step.metadata
-        .get("transaction")
-        .and_then(Value::as_object)
-        .map(TransactionValue)
-}
-
-struct TransactionValue<'a>(&'a serde_json::Map<String, Value>);
-
-impl TransactionValue<'_> {
-    fn data(&self) -> Result<&str> {
-        self.string("data")
-    }
-
-    fn gas_limit(&self) -> Option<&str> {
-        self.optional_string("gas_limit")
-    }
-
-    fn to(&self) -> Result<&str> {
-        self.string("to")
-    }
-
-    fn value(&self) -> Option<&str> {
-        self.optional_string("value")
-    }
-
-    fn string(&self, key: &str) -> Result<&str> {
-        self.optional_string(key).ok_or_else(|| {
-            Error::App(AppError::InvalidHostRequest {
-                reason: format!("transaction missing {key}"),
-            })
-        })
-    }
-
-    fn optional_string(&self, key: &str) -> Option<&str> {
-        self.0.get(key).and_then(Value::as_str)
-    }
-}
-
 fn parse_gas_policy(
     step_index: usize,
     transaction: &TransactionValue<'_>,
@@ -261,17 +282,4 @@ fn parse_gas_policy(
         gas_limit: transaction.gas_limit().map(parse_u256).transpose()?,
         max_network_fee: Some(parse_u256(&fee_cap.approved_max_total_fee_wei)?),
     }))
-}
-
-fn parse_hex_data(value: &str) -> Result<Vec<u8>> {
-    hex::decode(value.strip_prefix("0x").unwrap_or(value)).map_err(|_| Error::InvalidHexData {
-        value: value.to_string(),
-    })
-}
-
-fn parse_u256(value: &str) -> Result<contracts::U256> {
-    if let Some(value) = value.strip_prefix("0x") {
-        return Ok(contracts::U256::from_str_radix(value, 16).context("parse hex u256")?);
-    }
-    Ok(contracts::U256::from_dec_str(value).context("parse decimal u256")?)
 }

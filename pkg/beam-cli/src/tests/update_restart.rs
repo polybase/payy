@@ -11,6 +11,7 @@ fn invocation_overrides(chain: Option<&str>, from: Option<&str>) -> InvocationOv
     InvocationOverrides {
         chain: chain.map(ToOwned::to_owned),
         from: from.map(ToOwned::to_owned),
+        profile: None,
         rpc: None,
     }
 }

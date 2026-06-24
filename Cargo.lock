@@ -1924,7 +1924,7 @@ checksum = "0e050f626429857a27ddccb31e0aca21356bfa709c04041aefddac081a8f068a"
 
 [[package]]
 name = "beam-cli"
-version = "0.2.4"
+version = "0.3.0"
 dependencies = [
  "argon2",
  "async-trait",
@@ -1941,6 +1941,7 @@ dependencies = [
  "hex",
  "insta",
  "json-store",
+ "libc",
  "mockito",
  "num-bigint",
  "payy-evm-client",

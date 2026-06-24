@@ -26,6 +26,8 @@ pub enum WalletAction {
     },
     /// List stored wallets
     List,
+    /// Change a stored wallet's encryption password
+    ChangePassword { wallet: Option<String> },
     /// Rename a stored wallet
     Rename { name: String, new_name: String },
     /// Derive an address from a private key

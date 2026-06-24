@@ -2,7 +2,7 @@
 use contextful::{FromContextful, InternalError};
 use contracts::U256;
 
-use crate::apps::Error as AppError;
+use crate::{apps::Error as AppError, profiles::Error as ProfileError};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -216,6 +216,9 @@ pub enum Error {
     #[error("[beam-cli] app error")]
     App(#[source] AppError),
 
+    #[error("[beam-cli] profile error")]
+    Profile(#[source] ProfileError),
+
     #[error("[beam-cli] invalid rpc url: {value}")]
     InvalidRpcUrl { value: String },
 
@@ -392,5 +395,11 @@ pub enum Error {
 impl From<AppError> for Error {
     fn from(err: AppError) -> Self {
         Self::App(err)
+    }
+}
+
+impl From<ProfileError> for Error {
+    fn from(err: ProfileError) -> Self {
+        Self::Profile(err)
     }
 }

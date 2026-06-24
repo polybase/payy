@@ -28,6 +28,7 @@ use crate::{
 pub struct InvocationOverrides {
     pub chain: Option<String>,
     pub from: Option<String>,
+    pub profile: Option<String>,
     pub rpc: Option<String>,
 }
 

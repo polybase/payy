@@ -153,14 +153,14 @@ async fn available_update_scans_past_non_beam_release_pages() {
     ]);
     let page_2 = json!([
         {
-            "tag_name": "beam-v0.3.0",
+            "tag_name": "beam-v1000.0.0",
             "draft": false,
             "prerelease": false,
             "assets": [
                 {
                     "name": asset_name,
                     "digest": format!("sha256:{}", "a".repeat(64)),
-                    "browser_download_url": "https://example.invalid/beam-v0.3.0"
+                    "browser_download_url": "https://example.invalid/beam-v1000.0.0"
                 }
             ]
         }
@@ -199,7 +199,7 @@ async fn available_update_scans_past_non_beam_release_pages() {
         .await
         .expect("load update info");
 
-    assert_eq!(update.expect("beam release").tag_name, "beam-v0.3.0");
+    assert_eq!(update.expect("beam release").tag_name, "beam-v1000.0.0");
 }
 
 #[tokio::test]
@@ -228,6 +228,7 @@ async fn run_cli_update_skips_corrupted_local_state_bootstrap() {
             rpc: None,
             from: None,
             chain: None,
+            profile: None,
             output: OutputMode::Quiet,
             color: ColorMode::Never,
             no_update_check: false,

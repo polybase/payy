@@ -99,12 +99,25 @@ copybara() {
     java -Duser.home="$COPYBARA_AUTH_DIR" -jar "$COPYBARA_JAR" migrate "$copybara_config" "$@"
 }
 
+copybara_allow_noop() {
+  local status
+  status=0
+
+  copybara "$@" || status=$?
+  if [[ "$status" == "4" ]]; then
+    log "Copybara reported a no-op migration; treating it as successful."
+    return 0
+  fi
+
+  return "$status"
+}
+
 trap cleanup EXIT
 
 rm -rf "$snapshot_dir_host"
 mkdir -p "$snapshot_dir_host"
 
-copybara snapshot "$COPYBARA_SOURCE_REF" --ignore-noop --folder-dir "$snapshot_dir_host"
+copybara_allow_noop snapshot "$COPYBARA_SOURCE_REF" --ignore-noop --folder-dir "$snapshot_dir_host"
 
 prepare_lockfile
 
@@ -122,4 +135,4 @@ if [[ "$COPYBARA_INIT_HISTORY" == "1" ]]; then
   push_args+=(--init-history)
 fi
 
-copybara "${push_args[@]}"
+copybara_allow_noop "${push_args[@]}"

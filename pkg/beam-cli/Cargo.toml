@@ -1,6 +1,6 @@
 [package]
 name = "beam-cli"
-version = "0.2.4"
+version = "0.3.0"
 edition = "2024"
 publish = false
 
@@ -23,6 +23,7 @@ eth-util = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 json-store = { workspace = true }
+libc = { workspace = true }
 num-bigint = { workspace = true }
 payy-evm-client = { workspace = true }
 rand = { workspace = true }
