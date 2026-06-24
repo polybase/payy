@@ -7,8 +7,26 @@ use rand::RngCore;
 use crate::{
     cli::PrivateKeySourceArgs,
     error::{Error, Result},
-    keystore::prompt_private_key,
+    keystore::{prompt_private_key, wallet_address},
+    output::CommandOutput,
+    runtime::BeamApp,
 };
+
+pub(crate) async fn show_address(
+    app: &BeamApp,
+    private_key_source: &PrivateKeySourceArgs,
+) -> Result<()> {
+    let secret_key = load_secret_key(private_key_source)?;
+    let address = format!("{:#x}", wallet_address(&secret_key)?);
+    CommandOutput::new(
+        address.clone(),
+        serde_json::json!({
+            "address": address,
+        }),
+    )
+    .compact(address)
+    .print(app.output_mode)
+}
 
 pub(crate) fn load_secret_key(private_key_source: &PrivateKeySourceArgs) -> Result<Vec<u8>> {
     let private_key = read_private_key(private_key_source)?;

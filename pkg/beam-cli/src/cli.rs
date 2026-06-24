@@ -6,6 +6,7 @@ mod fetch;
 mod gas;
 mod normalize;
 mod privacy;
+mod profiles;
 mod wallet;
 
 pub mod util;
@@ -21,6 +22,7 @@ pub use fetch::FetchArgs;
 pub use gas::*;
 pub(crate) use normalize::normalize_cli_args;
 pub use privacy::*;
+pub use profiles::*;
 use util::UtilAction;
 pub use wallet::*;
 
@@ -38,6 +40,9 @@ pub struct Cli {
 
     #[arg(long, global = true)]
     pub chain: Option<String>,
+
+    #[arg(long, global = true)]
+    pub profile: Option<String>,
 
     #[arg(long = "format", global = true, value_enum, default_value_t = OutputMode::Default)]
     pub output: OutputMode,
@@ -89,6 +94,11 @@ pub enum Command {
         #[command(subcommand)]
         action: AppsAction,
     },
+    /// Manage delegated signing profiles
+    Profiles {
+        #[command(subcommand)]
+        action: ProfilesAction,
+    },
     /// Run a Beam app
     X(AppRunArgs),
     /// Work with private balances and transfers
@@ -129,6 +139,8 @@ pub enum Command {
     Fetch(FetchArgs),
     /// Check for beam updates
     Update,
+    #[command(name = "__profile-daemon", hide = true)]
+    ProfileDaemon(ProfileDaemonArgs),
     #[command(name = "__refresh-update-status", hide = true)]
     RefreshUpdateStatus,
 }
@@ -231,6 +243,7 @@ impl Cli {
         InvocationOverrides {
             chain: self.chain.clone(),
             from: self.from.clone(),
+            profile: self.profile.clone(),
             rpc: self.rpc.clone(),
         }
     }

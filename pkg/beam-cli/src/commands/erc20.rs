@@ -1,21 +1,23 @@
 // lint-long-file-override allow-max-lines=300
-use serde_json::{Value, json};
+mod token_output;
+
+use serde_json::json;
 use web3::ethabi::StateMutability;
 
 use crate::{
     abi::parse_function,
     cli::Erc20Action,
-    commands::signing::prompt_active_signer,
+    commands::signing::{active_signer_for_intent, active_signing_address},
     error::{Error, Result},
     evm::{FunctionCall, erc20_balance, erc20_decimals, format_units, parse_units, send_function},
     human_output::sanitize_control_chars,
-    output::{
-        CommandOutput, OutputMode, confirmed_transaction_message, dropped_transaction_message,
-        pending_transaction_message, with_loading, with_loading_handle,
-    },
+    output::{CommandOutput, with_loading, with_loading_handle},
+    profiles::model::{ApprovalIntent, PublicSigningIntent, TokenTransferIntent},
     runtime::BeamApp,
-    transaction::{TransactionExecution, loading_message},
+    transaction::loading_message,
 };
+
+use self::token_output::{TokenWriteOutputConfig, print_token_write_output};
 
 pub async fn run(app: &BeamApp, action: Erc20Action) -> Result<()> {
     match action {
@@ -110,7 +112,18 @@ async fn transfer(app: &BeamApp, token: &str, to: &str, amount: &str) -> Result<
         }
     };
     let amount_value = parse_units(amount, usize::from(decimals))?;
-    let signer = prompt_active_signer(app).await?;
+    let wallet = active_signing_address(app).await?;
+    let signer = active_signer_for_intent(
+        app,
+        PublicSigningIntent::Erc20Transfer(TokenTransferIntent {
+            wallet: format!("{wallet:#x}"),
+            chain: chain.entry.key.clone(),
+            token: format!("{:#x}", token.address),
+            recipient: format!("{to:#x}"),
+            amount: amount_value.to_string(),
+        }),
+    )
+    .await?;
     let function = parse_function("transfer(address,uint256)", StateMutability::NonPayable)?;
     let action = format!("transfer of {amount} {token_label} to {to:#x}");
     let execution = with_loading_handle(
@@ -119,7 +132,7 @@ async fn transfer(app: &BeamApp, token: &str, to: &str, amount: &str) -> Result<
         |loading| async move {
             send_function(
                 &client,
-                &signer,
+                signer.as_ref(),
                 FunctionCall {
                     args: &[format!("{to:#x}"), amount_value.to_string()],
                     contract: token.address,
@@ -172,7 +185,18 @@ async fn approve(app: &BeamApp, token: &str, spender: &str, amount: &str) -> Res
         }
     };
     let amount_value = parse_units(amount, usize::from(decimals))?;
-    let signer = prompt_active_signer(app).await?;
+    let wallet = active_signing_address(app).await?;
+    let signer = active_signer_for_intent(
+        app,
+        PublicSigningIntent::Erc20Approval(ApprovalIntent {
+            wallet: format!("{wallet:#x}"),
+            chain: chain.entry.key.clone(),
+            token: format!("{:#x}", token.address),
+            spender: format!("{spender:#x}"),
+            amount: amount_value.to_string(),
+        }),
+    )
+    .await?;
     let function = parse_function("approve(address,uint256)", StateMutability::NonPayable)?;
     let action = format!("approval of {amount} {token_label} for {spender:#x}");
     let execution = with_loading_handle(
@@ -181,7 +205,7 @@ async fn approve(app: &BeamApp, token: &str, spender: &str, amount: &str) -> Res
         |loading| async move {
             send_function(
                 &client,
-                &signer,
+                signer.as_ref(),
                 FunctionCall {
                     args: &[format!("{spender:#x}"), amount_value.to_string()],
                     contract: token.address,
@@ -217,77 +241,4 @@ async fn approve(app: &BeamApp, token: &str, spender: &str, amount: &str) -> Res
             token_label: token.label.clone(),
         },
     )
-}
-
-struct TokenWriteOutputConfig {
-    amount: String,
-    chain_key: String,
-    confirmed_summary: String,
-    dropped_summary: String,
-    pending_summary: String,
-    target_key: &'static str,
-    target_value: String,
-    token_address: String,
-    token_label: String,
-}
-
-fn print_token_write_output(
-    output_mode: OutputMode,
-    execution: TransactionExecution,
-    config: TokenWriteOutputConfig,
-) -> Result<()> {
-    let (default, state, block_number, status, tx_hash) = match execution {
-        TransactionExecution::Confirmed(outcome) => (
-            confirmed_transaction_message(
-                config.confirmed_summary,
-                &outcome.tx_hash,
-                outcome.block_number,
-            ),
-            "confirmed",
-            outcome.block_number,
-            outcome.status,
-            outcome.tx_hash,
-        ),
-        TransactionExecution::Pending(pending) => (
-            pending_transaction_message(
-                config.pending_summary,
-                &pending.tx_hash,
-                pending.block_number,
-            ),
-            "pending",
-            pending.block_number,
-            None,
-            pending.tx_hash,
-        ),
-        TransactionExecution::Dropped(dropped) => (
-            dropped_transaction_message(
-                config.dropped_summary,
-                &dropped.tx_hash,
-                dropped.block_number,
-            ),
-            "dropped",
-            dropped.block_number,
-            None,
-            dropped.tx_hash,
-        ),
-    };
-
-    let mut value = json!({
-        "amount": config.amount,
-        "block_number": block_number,
-        "chain": config.chain_key,
-        "state": state,
-        "status": status,
-        "token": config.token_label,
-        "token_address": config.token_address,
-        "tx_hash": tx_hash.clone(),
-    });
-    value.as_object_mut().expect("token write output").insert(
-        config.target_key.to_string(),
-        Value::String(config.target_value),
-    );
-
-    CommandOutput::new(default, value)
-        .compact(tx_hash)
-        .print(output_mode)
 }

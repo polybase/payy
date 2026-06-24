@@ -1,17 +1,19 @@
+// lint-long-file-override allow-max-lines=300
 use contracts::U256;
 use serde_json::json;
 use web3::ethabi::{Function, ParamType, StateMutability};
 
 use crate::{
-    abi::parse_function,
+    abi::{encode_input, parse_function},
     cli::{CallArgs, SendArgs},
-    commands::signing::prompt_active_signer,
+    commands::signing::{active_signer_for_intent, active_signing_address},
     error::Result,
     evm::{FunctionCall, call_function, parse_units, send_function},
     output::{
         CommandOutput, confirmed_transaction_message, dropped_transaction_message,
         pending_transaction_message, with_loading, with_loading_handle,
     },
+    profiles::model::{ContractIntent, PublicSigningIntent},
     runtime::{BeamApp, parse_address},
     transaction::{TransactionExecution, loading_message},
 };
@@ -56,7 +58,20 @@ pub async fn run_write(app: &BeamApp, args: SendArgs) -> Result<()> {
     let contract = parse_address(&args.call.contract)?;
     let function = parse_function(&args.call.function_sig, StateMutability::NonPayable)?;
     let call_args = resolve_address_args(app, &function, &args.call.args).await?;
-    let signer = prompt_active_signer(app).await?;
+    let data = encode_input(&function, &call_args)?;
+    let selector = format!("0x{}", hex::encode(data.get(..4).unwrap_or(&[])));
+    let wallet = active_signing_address(app).await?;
+    let signer = active_signer_for_intent(
+        app,
+        PublicSigningIntent::ContractTransaction(ContractIntent {
+            wallet: format!("{wallet:#x}"),
+            chain: chain.entry.key.clone(),
+            target: format!("{contract:#x}"),
+            selector,
+            native_value: value.to_string(),
+        }),
+    )
+    .await?;
     let action = if value.is_zero() {
         format!("transaction to {contract:#x}")
     } else {
@@ -68,7 +83,7 @@ pub async fn run_write(app: &BeamApp, args: SendArgs) -> Result<()> {
         |loading| async move {
             send_function(
                 &client,
-                &signer,
+                signer.as_ref(),
                 FunctionCall {
                     args: &call_args,
                     contract,

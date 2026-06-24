@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use contextful::ResultContextExt;
+use contextful::{ErrorContextExt, ResultContextExt};
 use contracts::Client;
 use tokio::time::{MissedTickBehavior, interval};
 use web3::types::{H256, TransactionParameters};
@@ -70,7 +70,7 @@ pub async fn submit_and_wait<S, F, C>(
     cancel: C,
 ) -> Result<TransactionExecution>
 where
-    S: Signer,
+    S: Signer + ?Sized,
     F: FnMut(TransactionStatusUpdate),
     C: Future,
 {
@@ -78,10 +78,10 @@ where
         .sign_transaction(client.client(), transaction)
         .await?;
     let tx_hash = format!("{:#x}", signed.transaction_hash);
-    client
-        .send_raw_transaction(signed.raw_transaction)
-        .await
-        .context("submit beam transaction")?;
+    if let Err(err) = client.send_raw_transaction(signed.raw_transaction).await {
+        signer.rollback_last_signature().await?;
+        return Err(err.context("submit beam transaction").into());
+    }
 
     on_status(TransactionStatusUpdate::Submitted {
         tx_hash: tx_hash.clone(),

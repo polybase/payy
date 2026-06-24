@@ -29,6 +29,15 @@ services:
       # allowlisted Origin header (curl smokes included). The hostname is the
       # dstack gateway name for this CVM: <app-id>-<port>.<gateway-domain>.
       PAYY_AUTH_PUBLIC_ORIGIN: https://3964805fd025d1d17e4bf900849d6eadf892ab0f-8787.dstack-pha-prod9.phala.network
+      # Confirmed Postmark sender signature. This address is non-secret and is
+      # safe in the attested compose text.
+      PAYY_AUTH_POSTMARK_FROM: auth@polybase.xyz
+      # The server token is a secret: it is configured as an encrypted dstack env
+      # var in the Phala dashboard (like the DSTACK_DOCKER_* pull credentials) and
+      # referenced here by name, so the value never appears in this attested
+      # compose text. Required whenever PAYY_AUTH_POSTMARK_FROM is set, or the bin
+      # fails closed at startup.
+      PAYY_AUTH_POSTMARK_SERVER_TOKEN: ${PAYY_AUTH_POSTMARK_SERVER_TOKEN}
       # EVM eth_sendTransaction broadcast endpoints, one entry per chain the
       # deployment can send on. The Alchemy URLs embed the same kind of
       # publicly-shipped API key the app bundle already ships to browsers, so
@@ -46,10 +55,10 @@ services:
         {"app_id": "app-local", "caip2": "eip155:10", "endpoint_id": "optimism-mainnet", "base_url": "https://opt-mainnet.g.alchemy.com/v2/tM35lzH9DscymagwCy2GQ"},
         {"app_id": "app-local", "caip2": "eip155:43114", "endpoint_id": "avalanche-c-chain", "base_url": "https://avax-mainnet.g.alchemy.com/v2/tM35lzH9DscymagwCy2GQ"}
         ]
-      # Smoke-box only: re-exposes plaintext login codes at
-      # GET /_local/passwordless/emails, which the public profile hides by
-      # default. Remove as soon as real email delivery lands or this CVM
-      # serves anyone but us.
+      # Smoke-box only: the dev inbox intentionally coexists with real Postmark
+      # delivery via the recording transport, so smokes can still read
+      # GET /_local/passwordless/emails. It exposes plaintext login codes; keep
+      # it off anywhere this CVM serves anyone but us.
       PAYY_AUTH_DEV_INBOX: "1"
     restart: unless-stopped
 

@@ -2,13 +2,14 @@ use serde_json::json;
 
 use crate::{
     cli::TransferArgs,
-    commands::signing::prompt_active_signer,
+    commands::signing::{active_signer_for_intent, active_signing_address},
     error::Result,
     evm::{parse_units, send_native},
     output::{
         CommandOutput, confirmed_transaction_message, dropped_transaction_message,
         pending_transaction_message, with_loading_handle,
     },
+    profiles::model::{PublicSigningIntent, TransferIntent},
     runtime::BeamApp,
     transaction::{TransactionExecution, loading_message},
 };
@@ -17,7 +18,18 @@ pub async fn run(app: &BeamApp, args: TransferArgs) -> Result<()> {
     let (chain, client) = app.active_chain_client().await?;
     let to = app.resolve_wallet_or_address(&args.to).await?;
     let amount = parse_units(&args.amount, 18)?;
-    let signer = prompt_active_signer(app).await?;
+    let wallet = active_signing_address(app).await?;
+    let signer = active_signer_for_intent(
+        app,
+        PublicSigningIntent::NativeTransfer(TransferIntent {
+            wallet: format!("{wallet:#x}"),
+            chain: chain.entry.key.clone(),
+            recipient: format!("{to:#x}"),
+            amount: amount.to_string(),
+            asset: "native".to_string(),
+        }),
+    )
+    .await?;
     let action = format!(
         "transfer of {} {} to {to:#x}",
         args.amount, chain.entry.native_symbol
@@ -28,7 +40,7 @@ pub async fn run(app: &BeamApp, args: TransferArgs) -> Result<()> {
         |loading| async move {
             send_native(
                 &client,
-                &signer,
+                signer.as_ref(),
                 to,
                 amount,
                 move |update| loading.set_message(loading_message(&action, &update)),

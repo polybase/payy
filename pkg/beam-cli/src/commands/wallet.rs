@@ -3,8 +3,8 @@ use contextful::ResultContextExt;
 use serde_json::json;
 
 use super::{
-    wallet_private_key, wallet_recovery,
-    wallet_secret::{generate_secret_key, load_secret_key},
+    wallet_default, wallet_password, wallet_private_key, wallet_recovery,
+    wallet_secret::{self, generate_secret_key, load_secret_key},
 };
 #[cfg(test)]
 use crate::keystore::validate_new_password;
@@ -48,11 +48,14 @@ pub async fn run(app: &BeamApp, action: WalletAction) -> Result<()> {
             .await
         }
         WalletAction::List => list_wallets(app).await,
+        WalletAction::ChangePassword { wallet } => {
+            wallet_password::change_wallet_password(app, wallet.as_deref()).await
+        }
         WalletAction::Rename { name, new_name } => rename_wallet(app, &name, &new_name).await,
         WalletAction::Address { private_key_source } => {
-            show_address(app, &private_key_source).await
+            wallet_secret::show_address(app, &private_key_source).await
         }
-        WalletAction::Use { name } => use_wallet(app, &name).await,
+        WalletAction::Use { name } => wallet_default::use_wallet(app, &name).await,
     }
 }
 
@@ -126,14 +129,6 @@ async fn list_wallets(app: &BeamApp) -> Result<()> {
         .print(app.output_mode)
 }
 
-async fn show_address(app: &BeamApp, private_key_source: &PrivateKeySourceArgs) -> Result<()> {
-    let secret_key = load_secret_key(private_key_source)?;
-    let address = format!("{:#x}", wallet_address(&secret_key)?);
-    CommandOutput::new(address.clone(), json!({ "address": address }))
-        .compact(address)
-        .print(app.output_mode)
-}
-
 pub(crate) async fn rename_wallet(app: &BeamApp, name: &str, new_name: &str) -> Result<()> {
     let wallet = app.resolve_wallet(name).await?;
     let address = wallet.address.clone();
@@ -186,27 +181,6 @@ pub(crate) async fn rename_wallet(app: &BeamApp, name: &str, new_name: &str) -> 
         }),
     )
     .compact(format!("{new_name} {address}"))
-    .print(app.output_mode)
-}
-
-async fn use_wallet(app: &BeamApp, name: &str) -> Result<()> {
-    let wallet = app.resolve_wallet(name).await?;
-    let name = wallet.name.clone();
-
-    app.config_store
-        .update(|config| config.default_wallet = Some(name.clone()))
-        .await
-        .context("persist beam default wallet")?;
-
-    let name = sanitize_control_chars(&name);
-    CommandOutput::new(
-        format!("Default wallet set to {name} ({})", wallet.address),
-        json!({
-            "address": wallet.address,
-            "name": wallet.name,
-        }),
-    )
-    .compact(name)
     .print(app.output_mode)
 }
 

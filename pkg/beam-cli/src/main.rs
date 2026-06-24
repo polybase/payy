@@ -15,6 +15,7 @@ mod known_tokens;
 mod output;
 mod privacy;
 mod privacy_config;
+mod profiles;
 mod prompts;
 mod recovery_phrase;
 mod runtime;
@@ -68,13 +69,21 @@ async fn run_cli_with_paths(cli: Cli, paths: Option<BeamPaths>) -> Result<()> {
         rpc,
         from,
         chain,
+        profile,
         output,
         color,
         no_update_check,
     } = cli;
-    let overrides = runtime::InvocationOverrides { chain, from, rpc };
+    let profile = profile.or_else(|| std::env::var("BEAM_PROFILE").ok());
+    let overrides = runtime::InvocationOverrides {
+        chain,
+        from,
+        profile,
+        rpc,
+    };
     let command = match command {
         Some(Command::Util { action }) => return commands::util::run(output, action),
+        Some(Command::ProfileDaemon(args)) => return profiles::daemon::run(args).await,
         // Self-update must remain available even when local Beam state is corrupted.
         Some(Command::Update) => {
             return commands::update::run_update(&overrides, output, color).await;

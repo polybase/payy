@@ -19,6 +19,10 @@ pub trait Signer: Send + Sync {
         client: &Web3<Http>,
         transaction: TransactionParameters,
     ) -> Result<SignedTransaction>;
+
+    async fn rollback_last_signature(&self) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[derive(Clone)]

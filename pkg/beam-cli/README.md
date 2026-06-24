@@ -330,6 +330,107 @@ path; confirmed receipts include the reported transaction status.
 is preparing a continuation. Removing an app keeps app-local data by default;
 pass `--purge-data` to delete `~/.beam/apps/data/<app>` as well.
 
+## Profiles
+
+Beam profiles delegate bounded public signing authority to an agent without
+giving that agent the wallet password or raw private key. A profile is bound to
+one stored wallet, has explicit command/app grants, and can be unlocked into a
+short-lived local daemon session. The daemon holds the decrypted key only in
+memory and checks profile policy immediately before signing the final
+transaction.
+
+Profile lifecycle commands:
+
+```bash
+beam profiles create agent --from alice
+beam profiles list
+beam profiles show agent
+beam profiles revoke agent <grant-id>
+beam profiles ledger agent
+beam profiles remove agent
+```
+
+Creating, modifying, removing, and unlocking a profile prompts for the wallet
+password. Profiles require a non-empty wallet password so profile integrity
+cannot be keyed from an empty secret. Use `beam wallets change-password [wallet]`
+to set a password on an existing empty-password wallet before creating a
+profile.
+
+Grant direct public signing commands:
+
+```bash
+beam profiles grant agent command native-transfer \
+  --chain base \
+  --recipient 0x1111111111111111111111111111111111111111 \
+  --max-native 10000000000000000 \
+  --max-gas 50000 \
+  --budget 100000000000000000
+
+beam profiles grant agent command erc20-transfer \
+  --chain base \
+  --token 0x833589fcd6edb6e08f4c7c32d4f71b54bda02913 \
+  --recipient 0x1111111111111111111111111111111111111111 \
+  --max-token 1000000 \
+  --budget 10000000
+
+beam profiles grant agent command erc20-approval \
+  --chain base \
+  --token 0x833589fcd6edb6e08f4c7c32d4f71b54bda02913 \
+  --spender 0x2222222222222222222222222222222222222222 \
+  --max-token 1000000
+
+beam profiles grant agent command contract-transaction \
+  --chain base \
+  --target 0x3333333333333333333333333333333333333333 \
+  --selector 0xa9059cbb \
+  --max-native 0
+```
+
+Amounts and budgets are base-unit integers. Durations use seconds by default
+and also accept `s`, `m`, `h`, and `d` suffixes.
+
+Grant app action plans from an existing approval continuation or a saved action
+plan JSON file:
+
+```bash
+beam --chain base --from alice x uniswap swap USDC ETH 100 --prepare --format json
+beam profiles grant agent app uniswap --approval-id <approval-id> --budget 10000000
+beam profiles grant agent app uniswap --plan-json ./plan.json
+```
+
+App profile grants bind the app identity, active artifact digests, command,
+wallet, chain, action-plan hash, bindings, constraints, step metadata, and plan
+expiry. An app update or changed action plan requires a new grant.
+
+Unlock a profile for agent use:
+
+```bash
+beam profiles unlock agent --ttl 1h --print-env
+export BEAM_PROFILE='agent'
+export BEAM_PROFILE_TOKEN='...'
+```
+
+Subsequent commands can select the profile with `--profile`:
+
+```bash
+beam --profile agent --chain base transfer 0x1111111111111111111111111111111111111111 0.001
+beam --profile agent --chain base erc20 transfer USDC 0x1111111111111111111111111111111111111111 1
+beam --profile agent --chain base x uniswap swap USDC ETH 100 --no-prompt
+beam profiles sessions
+beam profiles lock agent
+```
+
+If a selected profile is missing, expired, locked, or does not match the final
+transaction, Beam fails closed instead of prompting for the password. Wallet,
+profile, chain/RPC, token, app install/update/remove, and privacy management
+commands are not authorized by profile sessions.
+
+Profiles v1 cover public EVM signing only: native transfers, ERC20 transfers,
+ERC20 approvals, public contract transactions, public fetch payments, and
+public Beam app action plans. Privacy actions continue to prompt or fail closed
+under profiles v1. Future privacy profile capabilities must keep privacy key
+derivation, note access, proof generation, and spend authorization inside Beam.
+
 ## Privacy
 
 Beam privacy support is configured per chain. Built-in Payy privacy-capable chains include a
@@ -381,6 +482,7 @@ beam wallets export-private-key [wallet]
 beam wallets export-recovery-phrase [wallet]
 beam wallets import-recovery-phrase [--name <name>] [--expected-address <address>] [--phrase-stdin | --phrase-fd <fd>]
 beam wallets list
+beam wallets change-password [wallet]
 beam wallets rename <name|address|ens> <new-name>
 beam wallets address [--private-key-stdin | --private-key-fd <fd>]
 beam wallets use <name|address|ens>
@@ -418,6 +520,9 @@ Notes:
 - `beam wallets create` prompts for a wallet name when you omit `[name]`, suggesting the next available `wallet-N` alias and accepting it when you press Enter.
 - `beam wallets import` uses a verified ENS reverse record as the default wallet name when one resolves back to the imported address; otherwise it falls back to the next `wallet-N` alias.
 - The CLI prompts for a password when creating/importing a wallet. Press Enter at the password prompt to create a wallet with no password; whitespace-only passwords are rejected.
+- `beam wallets change-password [wallet]` re-encrypts the selected wallet after prompting for the
+  current password and a new password. Press Enter at the current password prompt for wallets that
+  were created with no password.
 - Beam trims surrounding whitespace and sanitizes terminal control characters in wallet names, rejecting aliases that become empty after normalization.
 - Commands that need signing prompt for the keystore password again before decrypting.
 - `beam privacy address` uses the same password prompt and keystore integrity checks before
@@ -439,6 +544,7 @@ beam --format compact wallets export-private-key alice
 beam wallets import --private-key-fd 3 --name alice 3< ~/.config/beam/private-key.txt
 beam wallets address --private-key-fd 3 3< ~/.config/beam/private-key.txt
 beam wallets export-recovery-phrase alice
+beam wallets change-password alice
 beam wallets import-recovery-phrase --name alice
 beam wallets import-recovery-phrase --expected-address 0x1111111111111111111111111111111111111111 --name alice
 pass show beam/alice/recovery-phrase | beam wallets import-recovery-phrase --phrase-stdin --name alice

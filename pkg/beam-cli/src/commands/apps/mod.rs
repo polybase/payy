@@ -1,4 +1,4 @@
-// lint-long-file-override allow-max-lines=400
+// lint-long-file-override allow-max-lines=500
 mod args;
 mod execution;
 mod fee_caps;
@@ -34,7 +34,7 @@ use crate::{
 };
 
 use args::{filtered_app_args, is_help_requested};
-use execution::execute_plan;
+use execution::{execute_plan, execute_plan_with_approval};
 use fee_caps::{approval_fee_caps, approval_fee_caps_for_execution, max_network_fee_arg};
 use plans::{validate_guest_plan, validate_plan_permissions};
 use prompt::approve_interactively;
@@ -126,10 +126,12 @@ pub async fn run_app(app: &BeamApp, args: AppRunArgs) -> Result<()> {
     }
 
     if approval_required {
-        if no_prompt {
+        if no_prompt && app.overrides.profile.is_none() {
             return Err(AppError::ApprovalRequired.into());
         }
-        approve_interactively(&render::render_plan_with_fee_caps(&plan, &fee_caps))?;
+        if !no_prompt {
+            approve_interactively(&render::render_plan_with_fee_caps(&plan, &fee_caps))?;
+        }
     }
     execute_plan(app, &plan, &fee_caps)
         .await?
@@ -316,7 +318,13 @@ async fn approvals(app: &BeamApp, action: AppApprovalAction) -> Result<()> {
                 let fee_caps =
                     approval_fee_caps_for_execution(app, &approval, max_network_fee_wei.as_deref())
                         .await?;
-                let output = execute_plan(app, &approval.plan, &fee_caps).await?;
+                let output = execute_plan_with_approval(
+                    app,
+                    &approval.plan,
+                    &fee_caps,
+                    Some(approval_id.clone()),
+                )
+                .await?;
                 store.mark_executed(&approval_id).await?;
                 return output.print(app.output_mode);
             }

@@ -156,7 +156,7 @@ pub async fn call_function(
     })
 }
 
-pub async fn send_native<S: Signer>(
+pub async fn send_native<S: Signer + ?Sized>(
     client: &Client,
     signer: &S,
     to: Address,
@@ -167,7 +167,7 @@ pub async fn send_native<S: Signer>(
     send_native_with_gas(client, signer, to, amount, None, on_status, cancel).await
 }
 
-pub async fn send_native_with_gas<S: Signer>(
+pub async fn send_native_with_gas<S: Signer + ?Sized>(
     client: &Client,
     signer: &S,
     to: Address,
@@ -181,7 +181,7 @@ pub async fn send_native_with_gas<S: Signer>(
     submit_transaction(client, signer, tx, on_status, cancel).await
 }
 
-pub async fn send_function<S: Signer>(
+pub async fn send_function<S: Signer + ?Sized>(
     client: &Client,
     signer: &S,
     call: FunctionCall<'_>,
@@ -191,7 +191,7 @@ pub async fn send_function<S: Signer>(
     send_function_with_gas(client, signer, call, None, on_status, cancel).await
 }
 
-pub async fn send_function_with_gas<S: Signer>(
+pub async fn send_function_with_gas<S: Signer + ?Sized>(
     client: &Client,
     signer: &S,
     call: FunctionCall<'_>,
@@ -212,7 +212,7 @@ pub async fn send_function_with_gas<S: Signer>(
     submit_transaction(client, signer, tx, on_status, cancel).await
 }
 
-pub async fn send_calldata_with_fee_report<S: Signer>(
+pub async fn send_calldata_with_fee_report<S: Signer + ?Sized>(
     client: &Client,
     signer: &S,
     transaction: CalldataTransaction,
@@ -332,7 +332,7 @@ pub fn transaction_fee_json(gas: &TransactionGas) -> serde_json::Value {
     }
 }
 
-async fn submit_transaction<S: Signer>(
+async fn submit_transaction<S: Signer + ?Sized>(
     client: &Client,
     signer: &S,
     transaction: TransactionParameters,

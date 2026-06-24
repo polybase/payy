@@ -74,6 +74,7 @@ time-interface = { path = "./pkg/time-interface" }
 time-system = { path = "./pkg/time-system" }
 email-interface = { path = "./pkg/email-interface" }
 email-memory = { path = "./pkg/email-memory" }
+email-postmark = { path = "./pkg/email-postmark" }
 evm-json-rpc-interface = { path = "./pkg/evm-json-rpc-interface" }
 evm-json-rpc-reqwest = { path = "./pkg/evm-json-rpc-reqwest" }
 serde_yaml = { path = "./pkg/serde_yaml" }
@@ -199,6 +200,8 @@ noir-abi-inputs-macro = { path = "./pkg/noir-abi-inputs-macro" }
 bungee-interface = { path = "./pkg/bungee-interface" }
 bungee-client-http = { path = "./pkg/bungee-client-http" }
 bungee = { path = "./pkg/bungee" }
+postmark-interface = { path = "./pkg/postmark-interface" }
+postmark-client-http = { path = "./pkg/postmark-client-http" }
 slack-client-interface = { path = "./pkg/slack-client-interface" }
 slack-client-http = { path = "./pkg/slack-client-http" }
 swap-pricer-price-cache = { path = "./pkg/swap-pricer-price-cache" }
@@ -340,6 +343,7 @@ insta = { version = "1", features = ["json"] }
 itertools = "0.14.0"
 jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 lazy_static = "1.5"
+libc = "0.2"
 libp2p = { version = "0.51", default-features = false, features = [
   "ping",
   "request-response",

@@ -1,35 +1,28 @@
 // lint-long-file-override allow-max-lines=300
 mod approval;
 mod chain_match;
+mod execute;
 mod prepare;
 mod private;
 mod resolve;
 mod selection;
 
 use contracts::{Address, Client, U256};
-use serde_json::{Value, json};
-use web3::ethabi::StateMutability;
+use serde_json::Value;
 
 use crate::{
-    abi::parse_function,
     chains::BeamChains,
-    commands::signing::prompt_active_signer,
     error::{Error, Result},
-    evm::{
-        FunctionCall, TransactionGasPolicy, format_units, parse_units, send_function_with_gas,
-        send_native_with_gas,
-    },
+    evm::{TransactionGasPolicy, format_units, parse_units},
     human_output::sanitize_control_chars,
-    output::with_loading_handle,
     privacy_config::PrivacyProfile,
-    runtime::BeamApp,
-    transaction::{TransactionExecution, loading_message},
 };
 
 #[cfg(test)]
 pub(crate) use self::approval::approve_payment_with;
 pub(crate) use self::{
     approval::approve_payment,
+    execute::execute_payment,
     prepare::{prepare_mpp_payment, prepare_x402_payment},
 };
 
@@ -101,101 +94,6 @@ impl PaymentChain {
     }
 }
 
-pub(crate) async fn execute_payment(
-    app: &BeamApp,
-    payment: &PreparedPayment,
-) -> Result<ExecutedPayment> {
-    if payment.private_recipient.is_some() {
-        return private::execute_private_payment(app, payment).await;
-    }
-
-    let signer = prompt_active_signer(app).await?;
-    let action = format!(
-        "payment of {} {} to {:#x}",
-        payment.amount_display, payment.asset.label, payment.recipient
-    );
-    let client = payment.client.clone();
-    let recipient = payment.recipient;
-    let amount = payment.amount;
-    let gas = payment.transaction_gas();
-
-    let execution = with_loading_handle(
-        app.output_mode,
-        format!("Sending {action} and waiting for confirmation..."),
-        |loading| async move {
-            match payment.asset.kind.clone() {
-                PaymentAssetKind::Native => {
-                    send_native_with_gas(
-                        &client,
-                        &signer,
-                        recipient,
-                        amount,
-                        Some(gas),
-                        move |update| loading.set_message(loading_message(&action, &update)),
-                        tokio::signal::ctrl_c(),
-                    )
-                    .await
-                }
-                PaymentAssetKind::Erc20(token) => {
-                    let function =
-                        parse_function("transfer(address,uint256)", StateMutability::NonPayable)?;
-                    let args = vec![format!("{recipient:#x}"), amount.to_string()];
-
-                    send_function_with_gas(
-                        &client,
-                        &signer,
-                        FunctionCall {
-                            args: &args,
-                            contract: token,
-                            function: &function,
-                            value: U256::zero(),
-                        },
-                        Some(gas),
-                        move |update| loading.set_message(loading_message(&action, &update)),
-                        tokio::signal::ctrl_c(),
-                    )
-                    .await
-                }
-            }
-        },
-    )
-    .await?;
-
-    let tx_hash = match execution {
-        TransactionExecution::Confirmed(outcome) => outcome.tx_hash,
-        TransactionExecution::Pending(pending) => {
-            return Err(Error::FetchPaymentUnconfirmed {
-                tx_hash: pending.tx_hash,
-            });
-        }
-        TransactionExecution::Dropped(dropped) => {
-            return Err(Error::FetchPaymentUnconfirmed {
-                tx_hash: dropped.tx_hash,
-            });
-        }
-    };
-
-    Ok(ExecutedPayment {
-        accepted: payment.accepted.clone(),
-        network: payment.network.clone(),
-        proof: json!({
-            "amount": payment.amount.to_string(),
-            "asset": payment.asset_id,
-            "chainId": payment.chain.chain_id,
-            "from": format!("{:#x}", payment.payer),
-            "kind": "beam-evm-transfer",
-            "network": payment.network,
-            "to": format!("{:#x}", payment.recipient),
-            "txHash": tx_hash,
-        }),
-        scheme: payment.scheme.clone(),
-        source: Some(format!(
-            "did:pkh:eip155:{}:{:#x}",
-            payment.chain.chain_id, payment.payer
-        )),
-    })
-}
-
 impl PreparedPayment {
     pub(crate) fn ensure_max_fee_allows(&self, max_fee: &str) -> Result<()> {
         let gas_threshold = parse_units(max_fee, 18)?;
@@ -226,7 +124,7 @@ impl PreparedPayment {
         Ok(())
     }
 
-    fn transaction_gas(&self) -> TransactionGasPolicy {
+    pub(super) fn transaction_gas(&self) -> TransactionGasPolicy {
         TransactionGasPolicy {
             gas_limit: Some(self.gas.gas_limit),
             max_network_fee: Some(self.gas.fee),
