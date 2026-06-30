@@ -8,10 +8,10 @@ mod response;
 pub use error::TransportError;
 pub use response::{Response, ResponseHeaders};
 
-/// Typed calque trait for the upstream Bungee REST API.
-#[unimock::unimock(api = BungeeApiMock)]
+/// Typed calque trait for the upstream Bungee v1 REST API.
+#[unimock::unimock(api = BungeeV1ApiMock)]
 #[async_trait]
-pub trait BungeeApi: Send + Sync + 'static {
+pub trait BungeeV1Api: Send + Sync + 'static {
     /// Call `GET /api/v1/bungee/quote`.
     async fn get_api_v1_bungee_quote(
         &self,
@@ -39,4 +39,30 @@ pub trait BungeeApi: Send + Sync + 'static {
         headers: Option<endpoints::status::Headers>,
         query: Option<endpoints::status::Query>,
     ) -> Result<Response<endpoints::status::ResponseEnum>, TransportError>;
+}
+
+/// Typed calque trait for the Socket Swap v3 REST API.
+#[unimock::unimock(api = SocketSwapV3ApiMock)]
+#[async_trait]
+pub trait SocketSwapV3Api: Send + Sync + 'static {
+    /// Call `GET /v3/swap/quote`.
+    async fn get_v3_swap_quote(
+        &self,
+        headers: Option<endpoints::socket_swap_quote::Headers>,
+        query: Option<endpoints::socket_swap_quote::Query>,
+    ) -> Result<Response<endpoints::socket_swap_quote::ResponseEnum>, TransportError>;
+
+    /// Call `GET /v3/swap/tokens/list`.
+    async fn get_v3_swap_tokens_list(
+        &self,
+        headers: Option<endpoints::socket_swap_tokens_list::Headers>,
+        query: Option<endpoints::socket_swap_tokens_list::Query>,
+    ) -> Result<Response<endpoints::socket_swap_tokens_list::ResponseEnum>, TransportError>;
+
+    /// Call `GET /v3/swap/status`.
+    async fn get_v3_swap_status(
+        &self,
+        headers: Option<endpoints::socket_swap_status::Headers>,
+        query: Option<endpoints::socket_swap_status::Query>,
+    ) -> Result<Response<endpoints::socket_swap_status::ResponseEnum>, TransportError>;
 }
