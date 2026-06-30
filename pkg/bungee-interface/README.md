@@ -11,8 +11,8 @@ the Bungee integration:
   public request / response types, and the wire-stable client error enum used by
   Guild and wallet clients.
 - `bungee_interface::api` contains the upstream REST API calque, including the
-  `BungeeApi` trait, transport error surface, response wrapper, and per-endpoint
-  DTOs.
+  `BungeeV1Api` and `SocketSwapV3Api` traits, transport error surface, response
+  wrapper, and per-endpoint DTOs.
 
 ## Stack Layout
 
@@ -21,7 +21,8 @@ The shipped Bungee integration is split across three crates:
 - `bungee-interface` is the leaf crate that owns the shared domain contract and
   upstream API calque.
 - `bungee-client-http` depends only on `bungee-interface` and implements
-  `bungee_interface::api::BungeeApi` with reqwest transport.
+  `bungee_interface::api::BungeeV1Api` and
+  `bungee_interface::api::SocketSwapV3Api` with reqwest transport.
 - `bungee` depends only on `bungee-interface` and implements
   `bungee_interface::client::BungeeClient` with quote-selection and response
   normalization logic.
@@ -38,6 +39,10 @@ The `client` module is the durable Guild and wallet-facing contract. Snapshot
 tests in this crate cover request / response encoding and the public error
 payloads so schema drift is caught before it reaches downstream clients that
 roll out independently.
+
+The only additive quote-output field introduced for Socket Swap v3 is optional
+`min_output_amount`. It defaults to `None` when old persisted rows or old Guild
+responses omit it.
 
 ## Testing
 

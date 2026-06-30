@@ -98,6 +98,7 @@ fn quote_input_round_trips_as_json() {
 fn quote_output_round_trips_as_json() {
     let output = GetQuoteOutput {
         output_amount: U256::from(456u64),
+        min_output_amount: Some(U256::from(400u64)),
         tx_to: sample_address(5),
         tx_value: U256::from(789u64),
         tx_data: vec![0xde, 0xad, 0xbe, 0xef],
@@ -111,6 +112,24 @@ fn quote_output_round_trips_as_json() {
     let decoded =
         serde_json::from_value::<GetQuoteOutput>(value).expect("deserialize quote output");
     assert_eq!(decoded, output);
+}
+
+#[test]
+fn quote_output_deserializes_without_min_output_amount() {
+    let value = json!({
+        "output_amount": "0x1c8",
+        "tx_to": sample_address(5),
+        "tx_value": "0x315",
+        "tx_data": "0xdeadbeef",
+        "approval_spender": sample_address(6),
+        "approval_amount": "0x3e7",
+        "quote_id": "qid-1",
+        "request_hash": "rh-1"
+    });
+    let decoded =
+        serde_json::from_value::<GetQuoteOutput>(value).expect("deserialize legacy quote output");
+
+    assert_eq!(decoded.min_output_amount, None);
 }
 
 #[test]

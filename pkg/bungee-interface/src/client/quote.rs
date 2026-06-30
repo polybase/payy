@@ -26,6 +26,9 @@ pub struct GetQuoteInput {
 pub struct GetQuoteOutput {
     /// Expected output amount.
     pub output_amount: U256,
+    /// Guaranteed minimum output amount.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_output_amount: Option<U256>,
     /// Inbox transaction target.
     pub tx_to: Address,
     /// Inbox transaction value in wei.

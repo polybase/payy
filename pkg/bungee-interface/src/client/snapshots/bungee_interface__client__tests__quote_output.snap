@@ -5,6 +5,7 @@ expression: value
 {
   "approval_amount": "0x3e7",
   "approval_spender": "0x0000000000000000000000000000000000000006",
+  "min_output_amount": "0x190",
   "output_amount": "0x1c8",
   "quote_id": "qid-1",
   "request_hash": "rh-1",

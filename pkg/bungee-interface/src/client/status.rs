@@ -54,16 +54,22 @@ impl StatusIdentifier {
 }
 
 /// Input payload for checking the status of a submitted bridge.
+///
+/// `tx_hash` (the source-chain submit tx) is the identifier used by the **v3** and
+/// **v3+compat** backends (sent as `srcTxHash`) and is also a valid v1 identifier.
+/// `request_hash`/`id` are **v1-mode-only** legacy identifiers: the v3/v3+compat status
+/// path resolves by `tx_hash` only and ignores them.
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct GetStatusInput {
-    /// Request hash returned by Bungee.
+    /// Request hash / quote id (v1-mode identifier; not used by v3/v3+compat).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_hash: Option<String>,
-    /// Manual route source chain transaction hash.
+    /// Source-chain submit transaction hash. The identifier for v3/v3+compat (as
+    /// `srcTxHash`) and a valid v1 identifier.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tx_hash: Option<String>,
-    /// Alternate identifier accepted by the public API.
+    /// Alternate v1-mode identifier (not used by v3/v3+compat).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
 }
